@@ -8,6 +8,7 @@ import NamedEntityTest from './components/NamedEntityTest.vue'
 import './assets/main.css'
 import './assets/common.css'
 import SkillManager from './data/skillManager.js'
+import { initAnimationDispatcher } from './data/animationDispatcher.js'
 
 // 创建路由
 const routes = [
@@ -27,6 +28,9 @@ const app = createApp(App)
 
 // 使用路由
 app.use(router)
+
+// 初始化动画调度器（一次）
+initAnimationDispatcher({ stepMs: 300 });
 
 // 加载所有技能
 SkillManager.loadAllSkills().then(skillManager => {

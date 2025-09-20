@@ -16,7 +16,6 @@
 </template>
 
 <script>
-import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
 import BarPoint from './BarPoint.vue';
 
@@ -63,7 +62,7 @@ export default {
   },
   methods: {
     onSkillCardHoverStart(skill) {
-      if(skill.canUse(gameState.player)) {
+      if(skill.canUse(this.player)) {
         this.highlightedManaCost = skill.manaCost;
       }
     },

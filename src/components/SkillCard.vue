@@ -37,7 +37,6 @@
 import ColoredText from './ColoredText.vue';
 import { getSkillTierLabel } from '../utils/tierUtils.js';
 import eventBus from '../eventBus.js';
-import gameState from '../data/gameState.js';
 
 export default {
   name: 'SkillCard',
@@ -48,6 +47,11 @@ export default {
     skill: {
       type: Object,
       required: true
+    },
+    player: {
+      type: Object,
+      required: false,
+      default: null
     },
     disabled: {
       type: Boolean,
@@ -64,7 +68,14 @@ export default {
   },
   computed: {
     skillDescription() {
-      return this.skill.getDescription();
+      // 动态根据玩家/技能当前状态生成描述
+      if (this.player && typeof this.skill?.regenerateDescription === 'function') {
+        return this.skill.regenerateDescription(this.player);
+      }
+      if (typeof this.skill?.getDescription === 'function') {
+        return this.skill.getDescription();
+      }
+      return this.skill?.description || '';
     },
     skillNameColor() {
       if(this.skill.power < 0) {
@@ -77,27 +88,13 @@ export default {
     }
   },
   mounted() {
-    if(!this.previewMode) {
-      // 初始化时注册事件监听器
-      this.onUpdateSkillDescription();
-      eventBus.on('update-skill-descriptions', this.onUpdateSkillDescription);
-    }
+    // 不再监听update-skill-descriptions事件，改由computed自动更新
   },
   beforeUnmount() {
-    // 组件卸载时移除事件监听器
-    if(!this.previewMode) {
-      eventBus.off('update-skill-descriptions', this.onUpdateSkillDescription);
-    }
+    // 无事件需要移除
   },
   methods: {
     getSkillTierLabel,
-    onUpdateSkillDescription() {
-      // 监听update-skill-descriptions事件
-      if(this.skill) {
-        this.skill.description = 
-          this.skill.regenerateDescription(gameState.player);
-      }
-    },
     onClick(event) {
       if (!this.disabled) {
         // 播放技能激活动画
@@ -108,12 +105,12 @@ export default {
     },
     
     onMouseEnter() {
-      // 发射鼠标进入事件
+      if (this.previewMode) return;
       eventBus.emit('skill-card-hover-start', this.skill);
     },
     
     onMouseLeave() {
-      // 发射鼠标离开事件
+      if (this.previewMode) return;
       eventBus.emit('skill-card-hover-end');
     },
     // 播放技能激活动画

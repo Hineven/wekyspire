@@ -49,19 +49,14 @@ export function launchAttack (attacker, target, damage) {
   // 检查目标是否死亡
   if (target.hp <= 0) {
     addDeathLog(`${target.name} 被击败了！`);
-    // 发射事件，用于结算死亡
-    eventBus.emit('unit-dead-event', target);
+    // 移除面向前端的事件通知（统一用状态触发动画）
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
 
   // 发射攻击完成事件，用于结算攻击特效等
   processAttackFinishEffects(attacker, target, hpDamage, passThoughDamage);
   
-  // 结算完成，发射受伤事件，用于通知UI播放动画、dialogue播放等
-  eventBus.emit('unit-hurt', {target: target, passThoughDamage: passThoughDamage, hpDamage: hpDamage});
-
-  // 更新技能描述（因为玩家状态可能已改变）
-  eventBus.emit('update-skill-descriptions');
+  // 移除 unit-hurt 与 update-skill-descriptions 事件（统一前端由状态变化驱动）
   
   return {dead: false, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
 }
@@ -99,11 +94,7 @@ export function dealDamage (source, target, damage, penetrateDefense = false) {
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
   
-  // 结算完成，发射受伤事件，用于通知UI播放动画、dialogue播放等
-  eventBus.emit('unit-hurt', {target: target, passThoughDamage: passThoughDamage, hpDamage: hpDamage});
-
-  // 更新技能描述（因为玩家状态可能已改变）
-  eventBus.emit('update-skill-descriptions');
+  // 移除 unit-hurt 与 update-skill-descriptions 事件（统一前端由状态变化驱动）
   
   return {dead: false, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
 }
@@ -116,13 +107,10 @@ export function gainShield (caster, target, shield) {
   } else {
     addHealLog(`${target.name}从${caster.name}获得了${shield}点护盾！`);
   }
-  // 发送事件通知UI更新
-  eventBus.emit('unit-shield-change', {target: target, deltaShield: shield});
-  // 更新技能描述（因为玩家状态可能已改变）
-  eventBus.emit('update-skill-descriptions');
+  // 移除事件通知，改由状态变化驱动UI
 }
 
-// 手动更新所有技能描述
+// 手动更新所有技能描述（保留函数但不再通过事件触发）
 export function updateSkillDescriptions() {
-  eventBus.emit('update-skill-descriptions');
+  // no-op: SkillCard将通过watchers基于状态自动更新描述
 }

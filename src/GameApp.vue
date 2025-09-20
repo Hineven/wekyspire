@@ -3,6 +3,7 @@
     <!-- 开始游戏界面 -->
     <StartScreen 
       v-if="gameState.gameStage === 'start'"
+      :game-state="gameState"
     />
     
     <!-- 战斗界面 -->
@@ -10,12 +11,14 @@
       v-if="gameState.gameStage === 'battle'"
       :player="gameState.player"
       :enemy="gameState.enemy"
-      :battle-logs="gameState.battleLogs"
       :is-control-disabled="gameState.controlDisableCount > 0"
+      :is-player-turn="!gameState.isEnemyTurn"
+      :level="gameState.battleCount"
     />
     <!-- 休整界面 -->
     <RestScreen 
       v-if="gameState.gameStage === 'rest'"
+      :game-state="gameState"
     />
 
     <!-- 结束界面 -->
@@ -60,7 +63,7 @@ import SkillManager from './data/skillManager.js'
 
 import eventBus from './eventBus.js'
 import * as dialogues from './data/dialogues.js'
-import { gameState, resetGameState } from './data/gameState.js';
+import { displayGameState as gameState, backendGameState, resetAllGameStates } from './data/gameState.js';
 import { startBattle } from './data/battle.js'
 
 export default {
@@ -88,56 +91,53 @@ export default {
     }
   },
   mounted() {
-    // 初始化玩家效果管理器
-    // 玩家初始化已在Player类的构造函数中完成
     this.eventBus = eventBus;
-    // 监听add-battle-log
-    this.eventBus.on('add-battle-log', (value) => {
-        // 兼容旧的字符串格式和新的对象格式
-        if (typeof value === 'string') {
-            gameState.battleLogs.push(value);
-        } else {
-            gameState.battleLogs.push(value);
-        }
-    });
-    // 注册对话对事件总线的监听
+    // 不再在App层维护战斗日志，交由BattleScreen本地管理
+    // 注册对话监听
     dialogues.registerListeners(eventBus);
-    // 监听start-game
+    dialogues.setIsRemiPresent(gameState.isRemiPresent);
+
     this.eventBus.on('start-game', () => {
         this.startGame();
     });
     },
   beforeUnmount() {
     if(this.eventBus) {
-      this.eventBus.off('add-battle-log');
       this.eventBus.off('start-game');
       dialogues.unregisterListeners(eventBus);
     }
   },
+  watch: {
+    // 当显示层的故事模式开关变化时，同步给对话系统
+    'gameState.isRemiPresent'(val) {
+      dialogues.setIsRemiPresent(val);
+    }
+  },
   methods: {
-    
     startGame() {
       // 触发开场事件
       eventBus.emit('before-game-start');
       
-      // 为玩家添加初始技能到技能槽
+      // 为玩家添加初始技能到技能槽（写入后端状态）
       const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
-      gameState.player.skillSlots[0] = initialSkill1;
       const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
-      gameState.player.skillSlots[1] = initialSkill2;
       const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
-      gameState.player.skillSlots[2] = initialSkill3;
       const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
-      gameState.player.skillSlots[3] = initialSkill4;
-      
-      gameState.gameStage = 'battle';
 
-      // 开始第一场战斗
+      // 以一次性替换数组的方式写入，减少深度watch触发次数
+      const slots = backendGameState.player.skillSlots.slice();
+      slots[0] = initialSkill1;
+      slots[1] = initialSkill2;
+      slots[2] = initialSkill3;
+      slots[3] = initialSkill4;
+      backendGameState.player.skillSlots = slots;
+
+      // 开始第一场战斗（写入后端状态）
       startBattle();
     },
     restartGame() {
-      // 重置游戏状态
-      resetGameState();
+      // 重置两份游戏状态
+      resetAllGameStates();
 
     },
   }

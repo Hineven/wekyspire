@@ -57,11 +57,16 @@
 
 <script>
 
-import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
 
 export default {
   name: 'StartScreen',
+  props: {
+    gameState: {
+      type: Object,
+      required: true
+    }
+  },
   data() {
     return {
       showChangelog: false,
@@ -84,7 +89,7 @@ export default {
               title: '改进',
               items: [
                 '修复敌人坚固不起作用的问题',
-                '改善卡牌平衡'
+                '改善卡片平衡'
               ]
             },
             {
@@ -102,6 +107,8 @@ export default {
   watch: {
     isRemiPresent(newVal, oldVal) {
       if(newVal !== oldVal) {
+        // 同步到显示层状态（允许修改对象prop的子字段）
+        this.gameState.isRemiPresent = newVal;
         if(newVal === true) {
           // Play intro music
           eventBus.emit('play-sound', {
@@ -152,7 +159,7 @@ export default {
         });
         return false;
       }
-      gameState.isRemiPresent = this.isRemiPresent;
+      // isRemiPresent 已在watch中同步到显示状态
       if(this.isRemiPresent) {
         this.isGameStarting = true;
         
@@ -184,7 +191,7 @@ export default {
     },
     
     /**
-     * 发射雪花粒子特效
+     * 触发雪花粒子特效
      */
     spawnSnowParticles() {
       
@@ -222,7 +229,7 @@ export default {
         });
       }
       
-      // 发射粒子
+      // 触发粒子
       eventBus.emit('spawn-particles', snowParticles);
     }
   }

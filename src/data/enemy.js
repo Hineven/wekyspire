@@ -53,7 +53,7 @@ class Enemy {
   //  latency: 操作间隔，默认为800ms,
   //  promise: 敌人自定义行动延时和异步操作，如果非空，则会被上层应用等待，默认为null
   // }
-  act(player, battleLogs) {
+  act(player) {
     // 子类需要实现具体逻辑
     return {
       endTurn: true,

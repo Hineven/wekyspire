@@ -20,7 +20,7 @@
 
     <!-- 战斗日志面板 -->
     <BattleLogPanel 
-      :logs="battleLogs" 
+      :logs="logs"
       :enemy="enemy"
     />
     
@@ -32,6 +32,7 @@
           v-for="(skill, index) in player.frontierSkills.filter(skill => skill !== null)" 
           :key="skill.uniqueID"
           :skill="skill"
+          :player="player"
           :disabled="!canUseSkill(skill) || !isPlayerTurn || isControlDisabled"
           :player-mana="player.mana"
           @skill-card-clicked="onSkillCardClicked"
@@ -49,11 +50,8 @@ import BattleLogPanel from './BattleLogPanel.vue';
 import EnemyStatusPanel from './EnemyStatusPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import SkillCard from './SkillCard.vue';
-import effectDescriptions from '../data/effectDescription.js';
 import { useSkill, endPlayerTurn, dropSkill } from '../data/battle.js';
-import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
-import { Transition } from 'vue';
 
 export default {
   name: 'BattleScreen',
@@ -64,123 +62,79 @@ export default {
     SkillCard
   },
   props: {
-    player: {
-      type: Object,
-      required: true
-    },
-    enemy: {
-      type: Object,
-      required: true
-    },
-    battleLogs: {
-      type: Array,
-      default: () => []
-    },
-    isControlDisabled: {
-      type: Boolean,
-      default: false
-    }
+    player: { type: Object, required: true },
+    enemy: { type: Object, required: true },
+    isControlDisabled: { type: Boolean, default: false },
+    isPlayerTurn: { type: Boolean, default: true },
+    level: { type: Number, default: 1 }
   },
   data() {
     return {
-      // 用于控制效果描述浮动窗口
-      tooltip: {
-        show: false,
-        x: 0,
-        y: 0,
-        name: '',
-        text: '',
-        color: '#000'
-      }
+      logs: []
     };
   },
+  mounted() {
+    eventBus.on('add-battle-log', this.onAddBattleLog);
+    eventBus.on('clear-battle-log', this.onClearBattleLog);
+  },
+  beforeUnmount() {
+    eventBus.off('add-battle-log', this.onAddBattleLog);
+    eventBus.off('clear-battle-log', this.onClearBattleLog);
+  },
   computed: {
-    isPlayerTurn() {
-      return gameState.isPlayerTurn;
-    },
-    level() {
-      return gameState.battleCount;
-    },
     canDropSkill() {
       return (this.isPlayerTurn && !this.isControlDisabled && this.player.remainingActionPoints > 0);
     }
   },
   methods: {
-
-    canUseSkill(skill) {
-      return skill && skill.canUse(gameState.player) && skill.usesLeft !== 0;
+    onAddBattleLog(value) {
+      // 兼容字符串与对象格式
+      this.logs.push(value);
     },
-
+    onClearBattleLog() {
+      this.logs = [];
+    },
+    canUseSkill(skill) {
+      return skill && skill.canUse(this.player) && skill.usesLeft !== 0;
+    },
     onSkillCardClicked(skill, event) {
       if(this.canUseSkill(skill)) {
-        // 记录技能消耗的魏启和行动点
         const manaCost = skill.manaCost;
         const actionPointCost = skill.actionPointCost;
-        
-        // 获取鼠标点击位置
         const mouseX = event.clientX;
         const mouseY = event.clientY;
-        
-        // 使用技能
         useSkill(skill);
-        
-        // 生成粒子效果
         this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },
-
     onEndTurnButtonClicked() {
       endPlayerTurn();
     },
-
     onDropSkillButtonClicked() {
       dropSkill();
     },
-    
-    /**
-     * 生成粒子效果
-     * @param {number} manaCost - 魏启消耗
-     * @param {number} actionPointCost - 行动点消耗
-     * @param {number} mouseX - 鼠标X坐标
-     * @param {number} mouseY - 鼠标Y坐标
-     */
     generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY) {
-      // 生成粒子数组
       const particles = [];
-      
-      // 生成魏启消耗的蓝色粒子
       if (manaCost > 0) {
         for (let i = 0; i < 2 + manaCost * 8; i++) {
           particles.push({
-            x: mouseX,
-            y: mouseY,
-            vx: (Math.random() - 0.5) * 100, // 随机水平速度
-            vy: (Math.random() - 0.5) * 100 - 50, // 随机垂直速度，向上偏移
-            color: '#2196f3', // 蓝色
-            life: 2000, // 生命周期2秒
-            gravity: 400, // 重力
-            size: 3 + Math.random() * 2 // 随机大小
+            x: mouseX, y: mouseY,
+            vx: (Math.random() - 0.5) * 100,
+            vy: (Math.random() - 0.5) * 100 - 50,
+            color: '#2196f3', life: 2000, gravity: 400, size: 3 + Math.random() * 2
           });
         }
       }
-      
-      // 生成行动点消耗的黄色粒子
       if (actionPointCost > 0) {
         for (let i = 0; i < 2 + actionPointCost * 8; i++) {
           particles.push({
-            x: mouseX,
-            y: mouseY,
-            vx: (Math.random() - 0.5) * 100, // 随机水平速度
-            vy: (Math.random() - 0.5) * 100 - 50, // 随机垂直速度，向上偏移
-            color: '#FFD700', // 黄色
-            life: 2000, // 生命周期2秒
-            gravity: 400, // 重力
-            size: 3 + Math.random() * 2 // 随机大小
+            x: mouseX, y: mouseY,
+            vx: (Math.random() - 0.5) * 100,
+            vy: (Math.random() - 0.5) * 100 - 50,
+            color: '#FFD700', life: 2000, gravity: 400, size: 3 + Math.random() * 2
           });
         }
       }
-      
-      // 发射粒子生成事件
       eventBus.emit('spawn-particles', particles);
     }
   }
