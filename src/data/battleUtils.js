@@ -2,7 +2,7 @@
 
 import eventBus from '../eventBus.js';
 import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects } from './effectProcessor.js';
-import { addBattleLog, addDamageLog, addDeathLog, addEffectLog, addHealLog } from './battleLogUtils.js';
+import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
 
 // 任意攻击的结算逻辑（由skill、enemy和effect结算调用）
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
@@ -14,16 +14,15 @@ export function launchAttack (attacker, target, damage) {
     finalDamage = processPostAttackEffects(attacker, target, damage);
   }
   // 处理受到攻击时的效果
-  console.log(target.name, finalDamage);
   finalDamage = processAttackTakenEffects(target, finalDamage);
-  console.log(target.name, finalDamage);
   // 处理受到伤害时的效果
   finalDamage = processDamageTakenEffects(target, finalDamage);
   // 固定防御减免
   finalDamage = Math.max(finalDamage - target.defense, 0);
   const passThoughDamage = finalDamage;
   let hpDamage = 0;
-  
+
+
   if (finalDamage > 0) {
     // 优先伤害护盾（如果有）
     const shieldDamage = Math.min(target.shield, finalDamage);
@@ -125,4 +124,47 @@ export function gainShield (caster, target, shield) {
 // 手动更新所有技能描述
 export function updateSkillDescriptions() {
   eventBus.emit('update-skill-descriptions');
+}
+
+// 统一的效果添加入口
+export function addEffect(target, effectName, stacks = 1) {
+  if (stacks === 0) return;
+  const previousStacks = target.effects[effectName] || 0;
+
+  if (target.effects[effectName]) {
+    target.effects[effectName] += stacks;
+  } else {
+    target.effects[effectName] = stacks;
+  }
+
+  const currStacks = target.effects[effectName] || 0;
+
+  // 触发效果变化事件（统一payload键名）
+  eventBus.emit('effect-change', {
+    target: target,
+    effectName: effectName,
+    deltaStacks: stacks,
+    currStacks: currStacks,
+    previousStacks: previousStacks
+  });
+
+  // 如果需要，这里可以追加日志/描述更新
+  // eventBus.emit('update-skill-descriptions');
+}
+
+// 统一的效果移除入口
+export function removeEffect(target, effectName, stacks = 1) {
+  addEffect(target, effectName, -stacks);
+}
+
+// 统一的治疗入口
+export function applyHeal(target, heal) {
+  if (heal > 0) {
+    target.hp += heal;
+    if (target.hp > target.maxHp) target.hp = target.maxHp;
+    // 如需日志，可在此处添加，但为避免重复日志，保持静默
+    // addHealLog(`${target.name}恢复了${heal}点生命！`);
+  }
+  // 更新技能描述（因为玩家状态可能已改变）
+  // eventBus.emit('update-skill-descriptions');
 }
