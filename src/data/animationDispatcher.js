@@ -22,14 +22,6 @@ function isWritableProperty(target, key) {
   return true;
 }
 
-function safeSet(target, key, value) {
-  try {
-    target[key] = value;
-  } catch (e) {
-    // ignore
-  }
-}
-
 // 应用后端快照到显示层（保持引用，逐层赋值）
 function applySnapshotToDisplay(src, dst) {
   for (const key of Object.keys(src)) {
@@ -38,15 +30,19 @@ function applySnapshotToDisplay(src, dst) {
     if (typeof srcVal === 'function') continue;
     const dstVal = dst[key];
     if (Array.isArray(srcVal)) {
-      safeSet(dst, key, srcVal.slice());
+      if (!Array.isArray(dstVal) || srcVal.length !== dstVal.length || srcVal.some((v, i) => v !== dstVal[i])) {
+        dst[key] = srcVal.slice();
+      }
     } else if (srcVal && typeof srcVal === 'object') {
       if (!dstVal || typeof dstVal !== 'object') {
-        safeSet(dst, key, srcVal);
+        dst[key] = srcVal;
       } else {
         applySnapshotToDisplay(srcVal, dstVal);
       }
     } else {
-      safeSet(dst, key, srcVal);
+      if (dst[key] !== srcVal) {
+        dst[key] = srcVal;
+      }
     }
   }
 }
@@ -101,10 +97,10 @@ function handleUIAction(item) {
   const { name, payload } = item;
   switch (name) {
     case 'lockControl':
-      safeSet(displayGameState, 'controlDisableCount', (displayGameState.controlDisableCount || 0) + 1);
+      displayGameState.controlDisableCount = (displayGameState.controlDisableCount || 0) + 1;
       break;
     case 'unlockControl':
-      safeSet(displayGameState, 'controlDisableCount', Math.max(0, (displayGameState.controlDisableCount || 0) - 1));
+      displayGameState.controlDisableCount = Math.max(0, (displayGameState.controlDisableCount || 0) - 1);
       break;
     case 'spawnParticles':
       eventBus.emit('spawn-particles', payload?.particles || payload || []);
