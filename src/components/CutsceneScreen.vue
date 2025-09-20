@@ -12,7 +12,6 @@
 
 <script>
 import eventBus from '../eventBus.js';
-import { gameState } from '../data/gameState.js';
 
 export default {
   name: 'CutsceneScreen',
@@ -71,8 +70,8 @@ export default {
       }, 1000);
     });
     
-    // 监听游戏阶段变化
-    this.previousStage = gameState.gameStage;
+    // 监听游戏阶段变化（如需）
+    this.previousStage = this.gameState.gameStage;
   },
   beforeUnmount() {
     // 移除事件监听

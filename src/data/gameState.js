@@ -1,4 +1,4 @@
-// gameState.js - 游戏状态管理
+// gameState.js - 游戏状态管理（前后端分离）
 
 import { reactive } from 'vue';
 import { Player } from './player.js';
@@ -6,79 +6,74 @@ import SkillManager from './skillManager.js';
 import AbilityManager from './abilityManager.js';
 import ItemManager from './itemManager.js';
 
-// 创建响应式游戏状态对象
-export const gameState = reactive({
-  // 游戏阶段: 'start', 'battle', 'rest', 'end'
-  gameStage: 'start',
-  
-  // 是否开启了瑞米进行游戏
-  isRemiPresent: false,
+// 工厂方法：创建一个“干净”的游戏状态对象（非响应式）
+export function createGameState() {
+  return {
+    // 游戏阶段: 'start', 'battle', 'rest', 'end'
+    gameStage: 'start',
 
-  // 游戏结果状态
-  isVictory: false,
-  
-  // 回合控制
-  isEnemyTurn: false,
+    // 是否开启了瑞米进行游戏
+    isRemiPresent: false,
 
-  get isPlayerTurn() {
-    return !this.isEnemyTurn;
-  },
-  
-  // 控制是否冻结玩家的控制面板，防止玩家操作
-  controlDisableCount: 0,
-  
-  // 玩家数据
-  player: reactive(new Player()),
-  
-  // 敌人数据
-  enemy: {
-    // 初始为空，因为敌人数据在战斗开始时才会被设置（Enemy类）
-  },
-  
-  // 战斗日志
-  battleLogs: [],
-  
-  // 奖励数据
-  rewards: {
-    breakthrough: false,
-    money: 0,
-    skills: [],
-    abilities: []
-  },
-  
-  // 当前商店内商品
-  shopItems: [],
+    // 游戏结果状态
+    isVictory: false,
 
-  // 战斗场次数
-  battleCount: 0
-});
+    // 回合控制
+    isEnemyTurn: false,
 
-// 重置游戏状态
-export function resetGameState() {
-  gameState.gameStage = 'start';
-  gameState.isVictory = false;
-  gameState.isEnemyTurn = false;
-  gameState.controlDisableCount = 0;
-  gameState.battleLogs = [];
-  gameState.rewards = {
-    money: 0,
-    skill: false,
-    ability: false
+    get isPlayerTurn() {
+      return !this.isEnemyTurn;
+    },
+
+    // 冻结玩家的控制面板计数
+    controlDisableCount: 0,
+
+    // 玩家数据
+    player: new Player(),
+
+    // 敌人数据（在战斗开始时赋值）
+    enemy: {},
+
+    // 奖励数据
+    rewards: {
+      breakthrough: false,
+      money: 0,
+      skills: [],
+      abilities: []
+    },
+
+    // 当前商店内商品
+    shopItems: [],
+
+    // 战斗场次数
+    battleCount: 0
   };
-  gameState.skillRewardClaimed = false;
-  gameState.abilityRewardClaimed = false;
-  gameState.battleCount = 0;
-  gameState.isAbilityRewardVisible = false;
-  gameState.abilityRewards = [];
-  gameState.isSkillRewardVisible = false;
-  gameState.skillRewards = [];
-  gameState.isSkillSlotSelectionVisible = false;
-  gameState.selectedSkillForSlot = null;
-  
-  // 重置玩家状态 - 创建一个新的Player实例并重新赋值
-  const newPlayer = new Player();
-  Object.assign(gameState.player, newPlayer);
-  gameState.player.skillManager = SkillManager.getInstance();
 }
 
-export default gameState;
+// 分别创建“显示层状态”和“后端状态”，二者结构一致，但相互独立
+export const displayGameState = reactive(createGameState());
+export const backendGameState = reactive(createGameState());
+
+// 重置显示层状态
+export function resetDisplayGameState() {
+  const fresh = createGameState();
+  // 保持玩家对象响应式：用 Object.assign 同步字段
+  Object.assign(displayGameState, fresh);
+  Object.assign(displayGameState.player, fresh.player);
+  // 重新连接管理器（如有需要）
+  displayGameState.player.skillManager = SkillManager.getInstance();
+}
+
+// 重置后端状态
+export function resetBackendGameState() {
+  const fresh = createGameState();
+  Object.assign(backendGameState, fresh);
+  Object.assign(backendGameState.player, fresh.player);
+  backendGameState.player.skillManager = SkillManager.getInstance();
+}
+
+// 同时重置两份状态
+export function resetAllGameStates() {
+  resetDisplayGameState();
+  resetBackendGameState();
+}

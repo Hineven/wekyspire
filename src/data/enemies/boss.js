@@ -1,5 +1,6 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
+import { addEnemyActionLog } from '../battleLogUtils.js';
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
@@ -25,14 +26,14 @@ export class MEFM3 extends Enemy {
     if (!this.prepared) {
       this.prepared = true;
       this.addEffect('高燃弹药', 1);
-      battleLogs.push(`${this.name} 完成了弹药装载，要来了！`);
+      addEnemyActionLog(`${this.name} 完成了弹药装载，要来了！`);
       return Promise.resolve();
     }
     
     // 检查是否达到生命值阈值
     if (!this.hpThresholdReached && this.hp < this.maxHp * 0.5) {
       this.hpThresholdReached = true;
-      battleLogs.push(`${this.name} 承受了太多伤害，陷入了故障状态！`);
+      addEnemyActionLog(`${this.name} 承受了太多伤害，陷入了故障状态！`);
       this.addEffect('眩晕', 1);
       return Promise.resolve();
     }
@@ -41,7 +42,7 @@ export class MEFM3 extends Enemy {
     const actions = [
       () => {
         return new Promise((resolve) => {
-          battleLogs.push(`${this.name} 使用射流机枪扫射！`);
+          addEnemyActionLog(`${this.name} 使用射流机枪扫射！`);
           const times = 2 + (this.effects['机枪升温'] || 0);
           const damage = 1 + this.attack;
           // 逐个执行攻击，并在每次攻击之间添加延时
@@ -63,7 +64,7 @@ export class MEFM3 extends Enemy {
       () => {
         if(Math.random() < 0.5) {
           return new Promise((resolve) => {
-            battleLogs.push(`${this.name} 使用射流机枪连续射击！`);
+            addEnemyActionLog(`${this.name} 使用射流机枪连续射击！`);
             const times = 2 + (this.effects['机枪升温'] || 0);
             const damage = 1 + this.attack;
             // 逐个执行攻击，并在每次攻击之间添加延时
@@ -83,7 +84,7 @@ export class MEFM3 extends Enemy {
           });
         } else {
           return new Promise((resolve) => {
-            battleLogs.push(`${this.name} 的钩爪抓住了你，你的防御变得薄弱。`);
+            addEnemyActionLog(`${this.name} 的钩爪抓住了你，你的防御变得薄弱。`);
             player.addEffect('坚固', -2);
             setTimeout(() =>{resolve();}, 1000);
           });
@@ -91,10 +92,10 @@ export class MEFM3 extends Enemy {
       },
       () => {
         return new Promise((resolve) => {
-          battleLogs.push(`${this.name} 启动能量耦合，泄露的魏启在空气中扭曲，它周遭的温度又升高了。`);
+          addEnemyActionLog(`${this.name} 启动能量耦合，泄露的魏启在空气中扭曲，它周遭的温度又升高了。`);
           this.addEffect('机枪升温', 1);
           const X = () => {
-            battleLogs.push(`${this.name} 完成了装甲强化。`);
+            addEnemyActionLog(`${this.name} 完成了装甲强化。`);
             this.addEffect('格挡', 2);
             resolve();
           };

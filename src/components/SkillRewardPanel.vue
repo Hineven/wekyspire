@@ -18,9 +18,6 @@
 
 <script>
 import SkillCard from './SkillCard.vue';
-import eventBus from '../eventBus';
-import gameState from '../data/gameState';
-
 export default {
   name: 'SkillRewardPanel',
   components: {

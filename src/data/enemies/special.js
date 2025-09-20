@@ -1,5 +1,6 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
+import { addEnemyActionLog } from '../battleLogUtils.js';
 
 // 雪狼 精英敌人
 export class BigWolf extends Enemy {
@@ -20,7 +21,7 @@ export class BigWolf extends Enemy {
         this.actRounds += 1;
         // 在第二回合为玩家增加虚弱效果
         if (this.actRounds === 2) {
-            battleLogs.push(`${this.name} 发出一生怒吼，你双股战战几欲跌倒！`);
+            addEnemyActionLog(`${this.name} 发出一生怒吼，你双股战战几欲跌倒！`);
             this.addEffect('虚弱', 2);
             return Promise.resolve();
         }
@@ -29,7 +30,7 @@ export class BigWolf extends Enemy {
         const actions = [
             () => {
                 return new Promise((resolve) => {
-                    battleLogs.push(`${this.name} 冲撞攻击！`);
+                    addEnemyActionLog(`${this.name} 冲撞攻击！`);
                     const damage = 1 + this.attack;
                     launchAttack(this, player, damage);
                     resolve();
@@ -37,7 +38,7 @@ export class BigWolf extends Enemy {
             },
             () => {
                 return new Promise((resolve) => {
-                    battleLogs.push(`${this.name} 连续撕咬。`);
+                    addEnemyActionLog(`${this.name} 连续撕咬。`);
                     const times = 2 + ((Math.random() > 0.5) ? 1 : 0);
                     const damage = 1 + this.attack / 2;
                     // 逐个执行攻击，并在每次攻击之间添加延时

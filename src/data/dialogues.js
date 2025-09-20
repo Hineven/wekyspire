@@ -1,18 +1,22 @@
 // dialogues.js - 对话事件管理
 import eventBus from '../eventBus.js';
-import gameState from './gameState.js';
 import { getPlayerTierFromTierIndex } from './player.js';
+
+let isRemiPresent = false;
+export function setIsRemiPresent(flag) {
+  isRemiPresent = !!flag;
+}
 
 // 开场对话序列
 const openingDialog = [
   {
     character: '瑞米',
-    text: '你好呀，小/named{灵御}。',
+    text: '你好啊，小/named{灵御}。',
     avatar: new URL('../assets/remi.png', import.meta.url).href
   },
   {
     character: '瑞米',
-    text: '我负责接引你，看到你的/named{技能}了吗？快打败那只史莱姆练练手吧！',
+    text: '我负责接引你，看到你的/named{技能}了么？快打败那只史莱姆练练手吧！',
     avatar: new URL('../assets/remi.png', import.meta.url).href
   }
 ];
@@ -22,7 +26,7 @@ const randomEvents = [
   [
     {
       character: '瑞米',
-      text: '你好呀，小灵御，我又来拉！',
+      text: '你好啊，小灵御，我又来拉！',
       avatar: new URL('../assets/remi.png', import.meta.url).href
     },
     {
@@ -34,7 +38,7 @@ const randomEvents = [
   [
     {
       character: '瑞米',
-      text: '你好呀，小灵御，我又来拉！',
+      text: '你好啊，小灵御，我又来拉！',
       avatar: new URL('../assets/remi.png', import.meta.url).href
     },
     {
@@ -83,7 +87,7 @@ function getEventAfterBattle(battleCount, player, enemy, isVictory) {
     const bossEventIndex = Math.floor(Math.random() * postBossBattleEvents.length);
     return postBossBattleEvents[bossEventIndex];
   }
-  // 否然，随机触发事件（5%）
+  // 否则，随机触发事件（5%）
   const u = Math.random();
   if(u < 0.05) {
     // 普通随机事件
@@ -177,7 +181,7 @@ function getEventBeforeBattle(battleCount, player, enemy) {
     ];
   }
   
-  // 否然，随机触发事件（5%）
+  // 否则，随机触发事件（5%）
   const u = Math.random();
   if(u < 0.05) {
     // 普通随机事件
@@ -198,17 +202,12 @@ function getTierUpgradedDialog(player) {
       },
       {
         character: '瑞米',
-        text: '你可能注意到了，现在你的/named{等阶}已经是普通灵御了。',
+        text: '你可能注意到了，现在你的/named{等级}已经是普通灵御了。',
         avatar: new URL('../assets/remi.png', import.meta.url).href
       },
       {
         character: '瑞米',
-        text: '通过突破，你可以提升你的灵御等阶，而灵御等阶级则是获得更多更强大技能的前提条件。',
-        avatar: new URL('../assets/remi.png', import.meta.url).href
-      },
-      {
-        character: '瑞米',
-        text: '你现在获得了1点/named{魏启}储量，以此，你能够学习和发动/red{非常强大}的，以/named{灵能}促动的技能！',
+        text: '通过突破，你可以提升你的灵御等级，而灵御等级则是获得更多更强大技能的前提条件。',
         avatar: new URL('../assets/remi.png', import.meta.url).href
       },
       {
@@ -266,13 +265,13 @@ function getSkillUseDialog(player, skill, result) {
 }
 
 
-// 初始化函数，在游戏开始时调用一次，注册eventBus监听
+// 初始化函数，在游戏开始时调用一次，注意eventBus监听
 function registerListeners() {
   // 注册事件监听
   eventBus.on('before-battle', (params) => {
     const {battleCount, player, enemy} = params;
     const sequence = getEventBeforeBattle(battleCount, player, enemy);
-    if(sequence && gameState.isRemiPresent) {
+    if(sequence && isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
@@ -280,14 +279,14 @@ function registerListeners() {
   eventBus.on('after-battle', (params) => {
     const {battleCount, player, enemy, isVictory} = params;
     const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
-    if(sequence && gameState.isRemiPresent) {
+    if(sequence && isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
   });
   eventBus.on('before-game-start', () => {
     const openingDialog = getOpeningDialog();
-    if(openingDialog && gameState.isRemiPresent) {
+    if(openingDialog && isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', openingDialog);
     }
@@ -296,7 +295,7 @@ function registerListeners() {
   // 监听玩家获得技能事件
   eventBus.on('player-claim-skill', (params) => {
     // 检查是否已经触发过教程
-    if (!playerLearnedMultiUseSkill && gameState.isRemiPresent) {
+    if (!playerLearnedMultiUseSkill && isRemiPresent) {
       const { skill } = params;
       // 检查技能是否是可多次充能的（maxUses > 1 或者是无限的）
       if ((skill.maxUses !== undefined && skill.maxUses > 1) || skill.isInfiniteUse) {
@@ -316,7 +315,7 @@ function registerListeners() {
   eventBus.on('player-tier-upgraded', (player) => {
     // 触发升级对话
     const sequence = getTierUpgradedDialog(player);
-    if (sequence && gameState.isRemiPresent) {
+    if (sequence && isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
@@ -326,7 +325,7 @@ function registerListeners() {
   eventBus.on('after-skill-use', (params) => {
     const {player, skill, result} = params;
     const sequence = getSkillUseDialog(player, skill, result);
-    if(sequence && gameState.isRemiPresent) {
+    if(sequence && isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
