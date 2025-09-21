@@ -1,5 +1,5 @@
 import SkillManager from './skillManager.js'
-import eventBus from '../eventBus.js'
+import backendEventBus from '../backendEventBus.js'
 import Unit from './unit.js'
 
 export function getNextPlayerTier(playerTier) {
@@ -21,7 +21,7 @@ export function upgradePlayerTier (player) {
     }
     player.hp = player.maxHp;
     player.mana = player.maxMana;
-    eventBus.emit('player-tier-upgraded', player);
+    backendEventBus.emit('player-tier-upgraded', player);
     return true;
   }
   return false;

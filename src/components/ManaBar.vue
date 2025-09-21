@@ -16,7 +16,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 import BarPoint from './BarPoint.vue';
 
 export default {
@@ -52,13 +52,13 @@ export default {
   },
   mounted() {
     // 监听技能悬停事件
-    eventBus.on('skill-card-hover-start', this.onSkillCardHoverStart);
-    eventBus.on('skill-card-hover-end', this.onSkillCardHoverEnd);
+    frontendEventBus.on('skill-card-hover-start', this.onSkillCardHoverStart);
+    frontendEventBus.on('skill-card-hover-end', this.onSkillCardHoverEnd);
   },
   beforeUnmount() {
     // 移除事件监听器
-    eventBus.off('skill-card-hover-start', this.onSkillCardHoverStart);
-    eventBus.off('skill-card-hover-end', this.onSkillCardHoverEnd);
+    frontendEventBus.off('skill-card-hover-start', this.onSkillCardHoverStart);
+    frontendEventBus.off('skill-card-hover-end', this.onSkillCardHoverEnd);
   },
   methods: {
     onSkillCardHoverStart(skill) {

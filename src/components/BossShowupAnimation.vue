@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'BossShowupAnimation',
@@ -16,12 +16,12 @@ export default {
     };
   },
   mounted() {
-    eventBus.on('play-boss-showup-animation', (bossClass, bossCoverImageUrl) => {
+    frontendEventBus.on('play-boss-showup-animation', (bossClass, bossCoverImageUrl) => {
       this.playAnimation(bossClass, bossCoverImageUrl);
     });
   },
   beforeUnmount() {
-    eventBus.off('play-boss-showup-animation');
+    frontendEventBus.off('play-boss-showup-animation', this.onAnimationEnd);
   },
   methods: {
     playAnimation(bossClass, bossCoverImageUrl) {

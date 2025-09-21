@@ -51,7 +51,7 @@ import EnemyStatusPanel from './EnemyStatusPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import SkillCard from './SkillCard.vue';
 import { useSkill, endPlayerTurn, dropSkill } from '../data/battle.js';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'BattleScreen',
@@ -74,12 +74,12 @@ export default {
     };
   },
   mounted() {
-    eventBus.on('add-battle-log', this.onAddBattleLog);
-    eventBus.on('clear-battle-log', this.onClearBattleLog);
+    frontendEventBus.on('add-battle-log', this.onAddBattleLog);
+    frontendEventBus.on('clear-battle-log', this.onClearBattleLog);
   },
   beforeUnmount() {
-    eventBus.off('add-battle-log', this.onAddBattleLog);
-    eventBus.off('clear-battle-log', this.onClearBattleLog);
+    frontendEventBus.off('add-battle-log', this.onAddBattleLog);
+    frontendEventBus.off('clear-battle-log', this.onClearBattleLog);
   },
   computed: {
     canDropSkill() {
@@ -135,7 +135,7 @@ export default {
           });
         }
       }
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   }
 };

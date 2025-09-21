@@ -119,7 +119,7 @@ import { Player } from '../data/player.js';
 import EnemyFactory from '../data/enemyFactory.js';
 import SkillManager from '../data/skillManager.js';
 import { startBattle } from '../data/battle.js';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'ArenaDebugScreen',
@@ -212,7 +212,7 @@ export default {
     
     // 关闭调试页面
     closeDebugScreen() {
-      eventBus.emit('close-arena-debug');
+      frontendEventBus.emit('close-arena-debug');
     },
     
     // 应用技能到技能槽

@@ -2,7 +2,6 @@
 // 将GameApp中所有触发类别的effect的生效和判定逻辑迁移至此文件
 
 import effectDescriptions from '../data/effectDescription.js';
-import eventBus from '../eventBus.js';
 import { dealDamage } from './battleUtils.js';
 import { addEffectLog, addBattleLog } from './battleLogUtils.js';
 

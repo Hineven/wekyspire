@@ -61,7 +61,7 @@ import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
 import SkillManager from './data/skillManager.js'
 
-import eventBus from './eventBus.js'
+import frontendEventBus from './frontendEventBus.js'
 import * as dialogues from './data/dialogues.js'
 import { displayGameState as gameState, backendGameState, resetAllGameStates } from './data/gameState.js';
 import { startBattle } from './data/battle.js'
@@ -91,10 +91,9 @@ export default {
     }
   },
   mounted() {
-    this.eventBus = eventBus;
-    // 不再在App层维护战斗日志，交由BattleScreen本地管理
+    this.eventBus = frontendEventBus;
     // 注册对话监听
-    dialogues.registerListeners(eventBus);
+    dialogues.registerListeners();
     dialogues.setIsRemiPresent(gameState.isRemiPresent);
 
     this.eventBus.on('start-game', () => {
@@ -104,7 +103,7 @@ export default {
   beforeUnmount() {
     if(this.eventBus) {
       this.eventBus.off('start-game');
-      dialogues.unregisterListeners(eventBus);
+      dialogues.unregisterListeners();
     }
   },
   watch: {
@@ -115,9 +114,9 @@ export default {
   },
   methods: {
     startGame() {
-      // 触发开场事件
-      eventBus.emit('before-game-start');
-      
+      // 触发开场事件（通过对话模块触发后端事件，总线隔离）
+      dialogues.triggerBeforeGameStart();
+
       // 为玩家添加初始技能到技能槽（写入后端状态）
       const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
       const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');

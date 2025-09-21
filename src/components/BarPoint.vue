@@ -6,7 +6,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'BarPoint',
@@ -101,7 +101,7 @@ export default {
       }
       
       // 发射粒子生成事件
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   }
 };

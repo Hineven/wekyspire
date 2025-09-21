@@ -1,6 +1,7 @@
 // dialogues.js - 对话事件管理
-import eventBus from '../eventBus.js';
+import backendEventBus from '../backendEventBus.js';
 import { getPlayerTierFromTierIndex } from './player.js';
+import { enqueueUI } from './animationDispatcher.js';
 
 let isRemiPresent = false;
 export function setIsRemiPresent(flag) {
@@ -267,33 +268,31 @@ function getSkillUseDialog(player, skill, result) {
 
 // 初始化函数，在游戏开始时调用一次，注意eventBus监听
 function registerListeners() {
-  // 注册事件监听
-  eventBus.on('before-battle', (params) => {
+  // 注册事件监听（使用后端事件总线）
+  backendEventBus.on('before-battle', (params) => {
     const {battleCount, player, enemy} = params;
     const sequence = getEventBeforeBattle(battleCount, player, enemy);
     if(sequence && isRemiPresent) {
-      // 发射调用对话界面显示对话的事件
-      eventBus.emit('display-dialog', sequence);
+      // 通过动画调度器触发前端UI显示对话
+      enqueueUI('displayDialog', sequence);
     }
   });
-  eventBus.on('after-battle', (params) => {
+  backendEventBus.on('after-battle', (params) => {
     const {battleCount, player, enemy, isVictory} = params;
     const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
     if(sequence && isRemiPresent) {
-      // 发射调用对话界面显示对话的事件
-      eventBus.emit('display-dialog', sequence);
+      enqueueUI('displayDialog', sequence);
     }
   });
-  eventBus.on('before-game-start', () => {
+  backendEventBus.on('before-game-start', () => {
     const openingDialog = getOpeningDialog();
     if(openingDialog && isRemiPresent) {
-      // 发射调用对话界面显示对话的事件
-      eventBus.emit('display-dialog', openingDialog);
+      enqueueUI('displayDialog', openingDialog);
     }
   });
   
   // 监听玩家获得技能事件
-  eventBus.on('player-claim-skill', (params) => {
+  backendEventBus.on('player-claim-skill', (params) => {
     // 检查是否已经触发过教程
     if (!playerLearnedMultiUseSkill && isRemiPresent) {
       const { skill } = params;
@@ -304,62 +303,42 @@ function registerListeners() {
         // 获取教程对话序列
         const sequence = getMultiUseSkillTutorial();
         if (sequence) {
-          // 发射调用对话界面显示对话的事件
-          eventBus.emit('display-dialog', sequence);
+          enqueueUI('displayDialog', sequence);
         }
       }
     }
   });
 
   // 监听玩家升级事件
-  eventBus.on('player-tier-upgraded', (player) => {
+  backendEventBus.on('player-tier-upgraded', (player) => {
     // 触发升级对话
     const sequence = getTierUpgradedDialog(player);
     if (sequence && isRemiPresent) {
-      // 发射调用对话界面显示对话的事件
-      eventBus.emit('display-dialog', sequence);
+      enqueueUI('displayDialog', sequence);
     }
   });
 
   // 监听玩家使用技能事件
-  eventBus.on('after-skill-use', (params) => {
+  backendEventBus.on('after-skill-use', (params) => {
     const {player, skill, result} = params;
     const sequence = getSkillUseDialog(player, skill, result);
     if(sequence && isRemiPresent) {
-      // 发射调用对话界面显示对话的事件
-      eventBus.emit('display-dialog', sequence);
+      enqueueUI('displayDialog', sequence);
     }
   });
 }
 
-// 获取可多次充能技能教程对话
-function getMultiUseSkillTutorial() {
-  return [
-    {
-      character: '瑞米',
-      text: '哎呀，我看到你获得了一个可以多次使用的/named{技能}呢！',
-      avatar: new URL('../assets/remi.png', import.meta.url).href
-    },
-    {
-      character: '瑞米',
-      text: '这类技能在战斗中有次数限制，但一般每次战斗开始时都会重新补满哦！',
-      avatar: new URL('../assets/remi.png', import.meta.url).href
-    },
-    {
-      character: '瑞米',
-      text: '好好利用它们，会让你在战斗中更加游刃有余！',
-      avatar: new URL('../assets/remi.png', import.meta.url).href
-    }
-  ];
+function unregisterListeners () {
+  backendEventBus.off('before-battle');
+  backendEventBus.off('after-battle');
+  backendEventBus.off('before-game-start');
+  backendEventBus.off('player-claim-skill');
+  backendEventBus.off('player-tier-upgraded');
+  backendEventBus.off('after-skill-use');
 }
 
-function unregisterListeners (eventBus) {
-  eventBus.off('before-battle');
-  eventBus.off('after-battle');
-  eventBus.off('before-game-start');
-  eventBus.off('player-claim-skill');
-  eventBus.off('player-tier-upgraded');
-  eventBus.off('after-skill-use');
+export function triggerBeforeGameStart() {
+  backendEventBus.emit('before-game-start');
 }
 
 // 导出注册函数

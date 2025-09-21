@@ -11,7 +11,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'CutsceneScreen',
@@ -34,7 +34,7 @@ export default {
   },
   mounted() {
     // 监听display-cutscene事件
-    eventBus.on('display-cutscene', (cutsceneEvent) => {
+    frontendEventBus.on('display-cutscene', (cutsceneEvent) => {
       if(this.cutsceneEvent) {
         console.error('CutsceneScreen: 尝试显示新的cutscene事件时，当前已存在一个cutscene事件');
         return ;
@@ -75,7 +75,7 @@ export default {
   },
   beforeUnmount() {
     // 移除事件监听
-    eventBus.off('display-cutscene');
+    frontendEventBus.off('display-cutscene', this.onCutsceneEnd);
     // 清除定时器
     if (this.fadeTimeout) {
       clearTimeout(this.fadeTimeout);

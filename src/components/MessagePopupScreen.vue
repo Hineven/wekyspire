@@ -14,7 +14,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'MessagePopupScreen',
@@ -26,13 +26,13 @@ export default {
   },
   mounted() {
     // 监听pop-message事件
-    eventBus.on('pop-message', (message) => {
+    frontendEventBus.on('pop-message', (message) => {
       this.addMessage(message);
     });
   },
   beforeUnmount() {
     // 移除事件监听
-    eventBus.off('pop-message');
+    frontendEventBus.off('pop-message');
   },
   methods: {
     addMessage(message) {

@@ -3,7 +3,7 @@
 
 import { watch } from 'vue';
 import { backendGameState, displayGameState } from './gameState.js';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 // 队列项类型：
 // - { kind: 'state', snapshot, duration? }
@@ -53,7 +53,10 @@ function captureSnapshot() {
 }
 
 function scheduleNext(delay) {
-  setTimeout(processQueue, delay);
+  if(delay > 0) {
+    console.log("delay", delay);
+    setTimeout(processQueue, delay);
+  } else processQueue();
 }
 
 function ensureScheduled() {
@@ -103,13 +106,26 @@ function handleUIAction(item) {
       displayGameState.controlDisableCount = Math.max(0, (displayGameState.controlDisableCount || 0) - 1);
       break;
     case 'spawnParticles':
-      eventBus.emit('spawn-particles', payload?.particles || payload || []);
+      frontendEventBus.emit('spawn-particles', payload?.particles || payload || []);
       break;
     case 'playSound':
-      eventBus.emit('play-sound', payload || {});
+      frontendEventBus.emit('play-sound', payload || {});
       break;
     case 'popMessage':
-      eventBus.emit('pop-message', payload || {});
+      frontendEventBus.emit('pop-message', payload || {});
+      break;
+    case 'displayDialog':
+      frontendEventBus.emit('display-dialog', payload || []);
+      break;
+    case 'addBattleLog':
+    case 'addBattleLogUI':
+      // 将战斗日志作为UI动作排队到事件总线
+      frontendEventBus.emit('add-battle-log', payload || {});
+      break;
+    case 'clearBattleLog':
+    case 'clearBattleLogUI':
+      // 清空战斗日志作为UI动作排队处理
+      frontendEventBus.emit('clear-battle-log');
       break;
     default:
       break;
@@ -122,7 +138,6 @@ export function enqueueState(options = {}) {
   const { duration } = options;
   queue.push({ kind: 'state', snapshot: captureSnapshot(), duration });
   ensureScheduled();
-  console.log('qwqwqw');
 }
 
 // 入队一个UI动作
@@ -142,12 +157,13 @@ export function clearQueue() {
   queue.length = 0;
 }
 
-export function initAnimationDispatcher({ stepMs = 300 } = {}) {
+export function initAnimationDispatcher({ stepMs = 0 } = {}) {
   defaultStepMs = stepMs;
   // 监听后端状态变化：每次变化入队一个state动作
   watch(
     () => backendGameState,
     (newVal, oldVal) => {
+      console.log("state change detected");
       enqueueState();
     },
     { deep: true, flush: 'post' }

@@ -30,7 +30,7 @@ const app = createApp(App)
 app.use(router)
 
 // 初始化动画调度器（一次）
-initAnimationDispatcher({ stepMs: 300 });
+initAnimationDispatcher();
 
 // 加载所有技能
 SkillManager.loadAllSkills().then(skillManager => {

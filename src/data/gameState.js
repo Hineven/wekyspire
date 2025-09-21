@@ -29,7 +29,7 @@ export function createGameState() {
     controlDisableCount: 0,
 
     // 玩家数据
-    player: new Player(),
+    player: reactive(new Player()),
 
     // 敌人数据（在战斗开始时赋值）
     enemy: {},

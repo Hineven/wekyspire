@@ -25,7 +25,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 export default {
   name: 'HurtAnimationWrapper',
   props: {
@@ -278,7 +278,7 @@ export default {
       };
       
       // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', [particle]);
+      frontendEventBus.emit('spawn-particles', [particle]);
     },
     
     createParticles(damage, hueShift = 0) {
@@ -350,7 +350,7 @@ export default {
       }
       
       // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   }
 };

@@ -36,7 +36,7 @@
 <script>
 import ColoredText from './ColoredText.vue';
 import { getSkillTierLabel } from '../utils/tierUtils.js';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'SkillCard',
@@ -106,12 +106,12 @@ export default {
     
     onMouseEnter() {
       if (this.previewMode) return;
-      eventBus.emit('skill-card-hover-start', this.skill);
+      frontendEventBus.emit('skill-card-hover-start', this.skill);
     },
     
     onMouseLeave() {
       if (this.previewMode) return;
-      eventBus.emit('skill-card-hover-end');
+      frontendEventBus.emit('skill-card-hover-end', this.skill);
     },
     // 播放技能激活动画
     playActivationAnimation() {
@@ -218,7 +218,7 @@ export default {
       }
       
       // 通过事件总线触发粒子特效
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   }
 }

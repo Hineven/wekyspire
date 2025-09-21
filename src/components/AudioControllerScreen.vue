@@ -11,7 +11,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'AudioControllerScreen',
@@ -26,10 +26,10 @@ export default {
   },
   mounted() {
     // 监听播放音效事件
-    eventBus.on('play-sound', this.playSound);
+    frontendEventBus.on('play-sound', this.playSound);
   },
   beforeUnmount() {
-    eventBus.off('play-sound', this.playSound);
+    frontendEventBus.off('play-sound', this.playSound);
   },
   methods: {
     handleGameStageChange(stage) {
