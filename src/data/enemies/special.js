@@ -1,6 +1,7 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
 import { addEnemyActionLog } from '../battleLogUtils.js';
+import {enqueueDelay} from "../animationDispatcher";
 
 // 雪狼 精英敌人
 export class BigWolf extends Enemy {
@@ -16,52 +17,39 @@ export class BigWolf extends Enemy {
     }
 
     // 执行行动
-    act(player, battleLogs) {
+    act(player) {
 
         this.actRounds += 1;
         // 在第二回合为玩家增加虚弱效果
         if (this.actRounds === 2) {
             addEnemyActionLog(`${this.name} 发出一生怒吼，你双股战战几欲跌倒！`);
             this.addEffect('虚弱', 2);
-            return Promise.resolve();
+            return ;
         }
 
         // 正常行动序列
         const actions = [
             () => {
-                return new Promise((resolve) => {
-                    addEnemyActionLog(`${this.name} 冲撞攻击！`);
-                    const damage = 1 + this.attack;
-                    launchAttack(this, player, damage);
-                    resolve();
-                });
+              addEnemyActionLog(`${this.name} 冲撞攻击！`);
+              const damage = 1 + this.attack;
+              launchAttack(this, player, damage);
             },
             () => {
-                return new Promise((resolve) => {
-                    addEnemyActionLog(`${this.name} 连续撕咬。`);
-                    const times = 2 + ((Math.random() > 0.5) ? 1 : 0);
-                    const damage = 1 + this.attack / 2;
-                    // 逐个执行攻击，并在每次攻击之间添加延时
-                    let i = 0;
-                    const executeAttack = () => {
-                        if (i < times) {
-                            launchAttack(this, player, damage);
-                            i++;
-                            // 添加延时后再执行下一次攻击
-                            setTimeout(executeAttack, 1200);
-                        } else {
-                            // 所有攻击执行完毕
-                            resolve();
-                        }
-                    };
-                    executeAttack();
-                });
+              addEnemyActionLog(`${this.name} 连续撕咬。`);
+              const times = 2 + ((Math.random() > 0.5) ? 1 : 0);
+              const damage = 1 + this.attack / 2;
+              // 逐个执行攻击，并在每次攻击之间添加延时
+              for(var i = 0; i < times; i++) {
+                  launchAttack(this, player, damage);
+                  // 添加延时后再执行下一次攻击
+                  enqueueDelay(1200);
+              }
             }
         ];
 
         const action = actions[this.actionIndex % actions.length];
+        action();
         this.actionIndex++;
-
-        return action();
+        return;
     }
 }

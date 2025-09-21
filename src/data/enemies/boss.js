@@ -1,6 +1,7 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
 import { addEnemyActionLog } from '../battleLogUtils.js';
+import {enqueueDelay} from "../animationDispatcher";
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
@@ -21,13 +22,13 @@ export class MEFM3 extends Enemy {
   }
 
   // 执行行动
-  act(player, battleLogs) {
+  act(player) {
     // 准备阶段
     if (!this.prepared) {
       this.prepared = true;
       this.addEffect('高燃弹药', 1);
       addEnemyActionLog(`${this.name} 完成了弹药装载，要来了！`);
-      return Promise.resolve();
+      return;
     }
     
     // 检查是否达到生命值阈值
@@ -35,78 +36,47 @@ export class MEFM3 extends Enemy {
       this.hpThresholdReached = true;
       addEnemyActionLog(`${this.name} 承受了太多伤害，陷入了故障状态！`);
       this.addEffect('眩晕', 1);
-      return Promise.resolve();
+      return;
     }
     
     // 正常行动序列
     const actions = [
       () => {
-        return new Promise((resolve) => {
-          addEnemyActionLog(`${this.name} 使用射流机枪扫射！`);
-          const times = 2 + (this.effects['机枪升温'] || 0);
-          const damage = 1 + this.attack;
-          // 逐个执行攻击，并在每次攻击之间添加延时
-          let i = 0;
-          const executeAttack = () => {
-            if (i < times) {
-              launchAttack(this, player, damage);
-              i++;
-              // 添加延时后再执行下一次攻击
-              setTimeout(executeAttack, 800);
-            } else {
-              // 所有攻击执行完毕
-              resolve();
-            }
-          };
-          executeAttack();
-        });
-      },
-      () => {
-        if(Math.random() < 0.5) {
-          return new Promise((resolve) => {
-            addEnemyActionLog(`${this.name} 使用射流机枪连续射击！`);
-            const times = 2 + (this.effects['机枪升温'] || 0);
-            const damage = 1 + this.attack;
-            // 逐个执行攻击，并在每次攻击之间添加延时
-            let i = 0;
-            const executeAttack = () => {
-              if (i < times) {
-                launchAttack(this, player, damage);
-                i++;
-                // 添加延时后再执行下一次攻击
-                setTimeout(executeAttack, 800);
-              } else {
-                // 所有攻击执行完毕
-                resolve();
-              }
-            };
-            executeAttack();
-          });
-        } else {
-          return new Promise((resolve) => {
-            addEnemyActionLog(`${this.name} 的钩爪抓住了你，你的防御变得薄弱。`);
-            player.addEffect('坚固', -2);
-            setTimeout(() =>{resolve();}, 1000);
-          });
+        addEnemyActionLog(`${this.name} 使用射流机枪扫射！`);
+        const times = 2 + (this.effects['机枪升温'] || 0);
+        const damage = 1 + this.attack;
+        // 逐个执行攻击，并在每次攻击之间添加延时
+        for(let i = 0; i < times; i++) {
+          launchAttack(this, player, damage);
+          enqueueDelay(800);
         }
       },
       () => {
-        return new Promise((resolve) => {
-          addEnemyActionLog(`${this.name} 启动能量耦合，泄露的魏启在空气中扭曲，它周遭的温度又升高了。`);
-          this.addEffect('机枪升温', 1);
-          const X = () => {
-            addEnemyActionLog(`${this.name} 完成了装甲强化。`);
-            this.addEffect('格挡', 2);
-            resolve();
-          };
-          setTimeout(X, 1000);
-        });
+        if(Math.random() < 0.5) {
+          addEnemyActionLog(`${this.name} 使用射流机枪连续射击！`);
+          const times = 2 + (this.effects['机枪升温'] || 0);
+          const damage = 1 + this.attack;
+          // 逐个执行攻击，并在每次攻击之间添加延时
+          for(let i = 0; i < times; i++) {
+            enqueueDelay(800);
+            launchAttack(this, player, damage);
+          }
+        } else {
+          addEnemyActionLog(`${this.name} 的钩爪抓住了你，你的防御变得薄弱。`);
+          player.addEffect('坚固', -2);
+        }
+      },
+      () => {
+        addEnemyActionLog(`${this.name} 启动能量耦合，泄露的魏启在空气中扭曲，它周遭的温度又升高了。`);
+        this.addEffect('机枪升温', 1);
+        enqueueDelay(1000);
+        addEnemyActionLog(`${this.name} 完成了装甲强化。`);
+        this.addEffect('格挡', 2);
       }
     ];
     
     const action = actions[this.actionIndex % actions.length];
+    action();
     this.actionIndex++;
-    
-    return action();
   }
 }
