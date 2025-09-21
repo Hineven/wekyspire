@@ -32,7 +32,7 @@ import PlayerBasicStats from './PlayerBasicStats.vue';
 import HealthBar from './HealthBar.vue';
 import ManaBar from './ManaBar.vue';
 import ActionPointsBar from './ActionPointsBar.vue';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'PlayerStatusPanel',
@@ -131,7 +131,7 @@ export default {
       }
       
       // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   },
   

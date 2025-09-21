@@ -25,8 +25,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
-
+import frontendEventBus from '../frontendEventBus.js';
 export default {
   name: 'HurtAnimationWrapper',
   props: {
@@ -94,46 +93,49 @@ export default {
     }
   },
   mounted() {
-    // 监听受伤事件
-    eventBus.on('unit-hurt', this.handleUnitHurt);
-    // 监听battle-victory事件
-    eventBus.on('battle-victory', this.handleBattleVictory);
+    // 改为由状态变化驱动动画，不再监听事件
+    this._prevSnapshot = {
+      hp: this.unit?.hp ?? 0,
+      shield: this.unit?.shield ?? 0
+    };
+  },
+  watch: {
+    unit: {
+      deep: true,
+      handler() {
+        if (!this.unit) return;
+        const prevHp = this._prevSnapshot?.hp ?? this.unit.hp;
+        const prevShield = this._prevSnapshot?.shield ?? this.unit.shield;
+        const currHp = this.unit.hp;
+        const currShield = this.unit.shield;
+
+        const dhp = currHp - prevHp; // 负值表示受伤，正值表示治疗
+        const dshield = currShield - prevShield; // 负值表示护盾损失
+
+        // 触发死亡动画（hp从>0到<=0）
+        if (prevHp > 0 && currHp <= 0 && this.unit.type !== 'player') {
+          this.handleBattleVictory();
+        }
+
+        if (dhp < 0 || dshield < 0) {
+          // 计算伤害量
+          const hpDamage = Math.max(0, -dhp);
+          const passThrough = hpDamage + Math.max(0, -dshield);
+          this.triggerHurtAnimation(hpDamage, passThrough);
+        } else if (dhp > 0) {
+          // 治疗
+          this.triggerHurtAnimation(-dhp, 0);
+        }
+
+        // 更新快照
+        this._prevSnapshot = { hp: currHp, shield: currShield };
+      }
+    }
   },
   beforeUnmount() {
-    // 移除事件监听
-    eventBus.off('unit-hurt', this.handleUnitHurt);
-    eventBus.off('battle-victory', this.handleBattleVictory);
+    // 无事件需要清理
   },
   methods: {
-    handleUnitHurt({ target, passThoughDamage, hpDamage }) {
-      // 检查这个组件是否是受伤目标的父组件
-      // 优先使用props中的unit属性
-      if (this.unit && this.unit === target) {
-        // 触发震颤和粒子效果
-        this.triggerHurtAnimation(hpDamage, passThoughDamage);
-        return;
-      }
-      
-      // 如果没有props中的unit属性，则通过检查子组件的enemy或player属性来判断
-      const parentComponent = this.$parent;
-      
-      if (parentComponent) {
-        // 检查是否是EnemyStatusPanel并且受伤的是enemy
-        if (parentComponent.$options.name === 'EnemyStatusPanel' && parentComponent.enemy === target) {
-          // 触发震颤和粒子效果
-          this.triggerHurtAnimation(hpDamage, passThoughDamage);
-          return;
-        }
-        
-        // 检查是否是PlayerStatusPanel并且受伤的是player
-        if (parentComponent.$options.name === 'PlayerStatusPanel' && parentComponent.player === target) {
-          // 触发震颤和粒子效果
-          this.triggerHurtAnimation(hpDamage, passThoughDamage);
-          return;
-        }
-      }
-    },
-    
     triggerHurtAnimation(hpDamage, passThoughDamage) {
       const damage = hpDamage;
       // 如果无伤害，且无穿透伤害，则认定为闪避，播放闪避动画并结束
@@ -276,7 +278,7 @@ export default {
       };
       
       // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', [particle]);
+      frontendEventBus.emit('spawn-particles', [particle]);
     },
     
     createParticles(damage, hueShift = 0) {
@@ -348,7 +350,7 @@ export default {
       }
       
       // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', particles);
+      frontendEventBus.emit('spawn-particles', particles);
     }
   }
 };

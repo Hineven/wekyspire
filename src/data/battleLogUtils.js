@@ -1,6 +1,6 @@
 // battleLogUtils.js - 提供战斗日志管理的助手函数
 
-import eventBus from '../eventBus.js';
+import { enqueueUI } from './animationDispatcher.js';
 
 // 战斗日志类型枚举
 export const BattleLogType = {
@@ -16,7 +16,8 @@ export const BattleLogType = {
 
 // 添加普通战斗日志
 export function addBattleLog(log, type = BattleLogType.OTHER) {
-  eventBus.emit('add-battle-log', { log, type });
+  // 通过动画调度器入队，保证UI顺序展示
+  enqueueUI('addBattleLog', { log, type });
 }
 
 // 添加玩家行动日志
@@ -56,7 +57,8 @@ export function addDeathLog(log) {
 
 // 清空
 export function clearBattleLog() {
-  eventBus.emit('clear-battle-log');
+  // 通过动画调度器入队，保证顺序清空
+  enqueueUI('clearBattleLog');
 }
 
 export default {

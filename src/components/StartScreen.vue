@@ -21,33 +21,7 @@
           故事模式
         </label>
       </div>
-      <div class="changelog-container">
-        <div 
-          class="changelog-toggle" 
-        >
-          <div class="toggle-icon"
-          @mouseenter="showChangelog = true" 
-          @mouseleave="showChangelog = false"
-          >≡</div>
-          <div 
-            class="changelog-content" 
-            :class="{ 'expanded': showChangelog }"
-          >
-            <h2>更新日志</h2>
-            <div v-for="(version, index) in changelogData" :key="index">
-              <h3>{{ version.version }}</h3>
-              <div v-for="(section, sectionIndex) in version.sections" :key="sectionIndex">
-                <h4>{{ section.title }}</h4>
-                <ul>
-                  <li v-for="(item, itemIndex) in section.items" :key="itemIndex">
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ChangeLog />
     </div>
     </transition>
     <div class="start-screen-background" :class="{'non-story-mode': !isRemiPresent, 'story-mode': isRemiPresent}"
@@ -57,54 +31,35 @@
 
 <script>
 
-import gameState from '../data/gameState.js';
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
+import ChangeLog from './ChangeLog.vue';
 
 export default {
   name: 'StartScreen',
+  components: { ChangeLog },
+  props: {
+    gameState: {
+      type: Object,
+      required: true
+    }
+  },
   data() {
     return {
-      showChangelog: false,
       isRemiPresent: false,
       isGameStarting: false,
       snowParticlesEnabled: false,
       backgroundYOffset: 0,
-      snowParticlesInterval: null,
-      changelogData: [
-        {
-          version: '2025.9.13 [Alpha 0.3.3]',
-          sections: [
-            {
-              title: '新增',
-              items: [
-                '增加丢弃技能机制'
-              ]
-            },
-            {
-              title: '改进',
-              items: [
-                '修复敌人坚固不起作用的问题',
-                '改善卡牌平衡'
-              ]
-            },
-            {
-              title: '已知问题',
-              items: [
-                '商店结算错误',
-                '敌人头像错乱'
-              ]
-            }
-          ]
-        }
-      ]
+      snowParticlesInterval: null
     }
   },
   watch: {
     isRemiPresent(newVal, oldVal) {
       if(newVal !== oldVal) {
+        // 同步到显示层状态（允许修改对象prop的子字段）
+        this.gameState.isRemiPresent = newVal;
         if(newVal === true) {
           // Play intro music
-          eventBus.emit('play-sound', {
+          frontendEventBus.emit('play-sound', {
             soundFile: new URL('../assets/sounds/story-mode-intro.mp3', import.meta.url),
             soundTrack: 0
           });
@@ -112,7 +67,7 @@ export default {
           this.setSnowParticles(true);
         } else {
           // Stop playing intro music
-          eventBus.emit('play-sound', {soundFile: null, soundTrack: 0});
+          frontendEventBus.emit('play-sound', {soundFile: null, soundTrack: 0});
           // 关闭雪花粒子特效
           this.setSnowParticles(false);
         }
@@ -146,13 +101,13 @@ export default {
       if(this.isGameStarting) return ;
       if(!debugMode && this.isRemiPresent) {
         // 瑞米还没开发好
-        eventBus.emit('pop-message', {
+        frontendEventBus.emit('pop-message', {
           id: 'remi-not-ready',
           text: '未完成开发'
         });
         return false;
       }
-      gameState.isRemiPresent = this.isRemiPresent;
+      // isRemiPresent 已在watch中同步到显示状态
       if(this.isRemiPresent) {
         this.isGameStarting = true;
         
@@ -166,25 +121,25 @@ export default {
         }, 50);
         // 延迟启动cutscene
         setTimeout(()=> {
-        eventBus.emit('display-cutscene', {
+        frontendEventBus.emit('display-cutscene', {
           images: [
             new URL('../assets/cutscenes/opening-1.png', import.meta.url),
             new URL('../assets/cutscenes/opening-2.png', import.meta.url)
           ],
           interval: 3500,
           onEnd: ()=>{
-            eventBus.emit('start-game');
+            frontendEventBus.emit('start-game');
             this.isGameStarting = false;
           }
         })}, 4000);
       } else {
         // 不搞些花里胡哨的，直接开始
-        eventBus.emit('start-game');
+        frontendEventBus.emit('start-game');
       }
     },
     
     /**
-     * 发射雪花粒子特效
+     * 触发雪花粒子特效
      */
     spawnSnowParticles() {
       
@@ -199,8 +154,7 @@ export default {
         // 随机角度和速度
         const angle = Math.random() * Math.PI * 2;
         const speed = 20 + Math.random() * 30; // 慢速飘荡
-        const distance = 50 + Math.random() * 100; // 发射距离
-        
+
         snowParticles.push({
           absoluteX: centerX,
           absoluteY: centerY,
@@ -222,8 +176,8 @@ export default {
         });
       }
       
-      // 发射粒子
-      eventBus.emit('spawn-particles', snowParticles);
+      // 触发粒子
+      frontendEventBus.emit('spawn-particles', snowParticles);
     }
   }
 }
@@ -286,74 +240,6 @@ export default {
   color: white;
 }
 
-.changelog-container {
-  position: absolute;
-  right: 80px;
-  top: 20px;
-  display: flex;
-}
-
-.changelog-toggle {
-  display: flex;
-  flex-direction: row-reverse;
-}
-
-.toggle-icon {
-  width: 30px;
-  height: 30px;
-  background: #6a6a6a;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 20px;
-  font-weight: bold;
-  user-select: none;
-  color:white;
-}
-
-.changelog-content {
-  width: 0;
-  overflow: hidden;
-  background: rgb(150, 150, 150);
-  margin-right: 10px;
-  transition: width 0.3s ease;
-  white-space: nowrap;
-  text-align: left;
-  /* color: white!important; */
-}
-
-.changelog-content.expanded {
-  width: 400px;
-  padding: 10px;
-}
-
-.changelog-content h2 {
-  margin-top: 0;
-  font-size: 1.2em;
-}
-
-.changelog-content h3 {
-  font-size: 1.1em;
-  margin: 10px 0 5px 0;
-}
-
-.changelog-content h4 {
-  font-size: 1em;
-  margin: 8px 0 4px 0;
-}
-
-.changelog-content ul {
-  margin: 0 0 0 20px;
-  padding: 0;
-}
-
-.changelog-content li {
-  margin: 2px 0;
-  font-size: 0.9em;
-}
 
 .game-title {
   font-size: 2em;

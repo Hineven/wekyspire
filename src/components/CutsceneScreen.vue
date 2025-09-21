@@ -11,8 +11,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
-import { gameState } from '../data/gameState.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'CutsceneScreen',
@@ -35,7 +34,7 @@ export default {
   },
   mounted() {
     // 监听display-cutscene事件
-    eventBus.on('display-cutscene', (cutsceneEvent) => {
+    frontendEventBus.on('display-cutscene', (cutsceneEvent) => {
       if(this.cutsceneEvent) {
         console.error('CutsceneScreen: 尝试显示新的cutscene事件时，当前已存在一个cutscene事件');
         return ;
@@ -71,12 +70,12 @@ export default {
       }, 1000);
     });
     
-    // 监听游戏阶段变化
-    this.previousStage = gameState.gameStage;
+    // 监听游戏阶段变化（如需）
+    this.previousStage = this.gameState.gameStage;
   },
   beforeUnmount() {
     // 移除事件监听
-    eventBus.off('display-cutscene');
+    frontendEventBus.off('display-cutscene', this.onCutsceneEnd);
     // 清除定时器
     if (this.fadeTimeout) {
       clearTimeout(this.fadeTimeout);

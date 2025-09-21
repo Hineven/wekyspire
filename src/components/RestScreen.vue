@@ -70,7 +70,6 @@ import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
-import { gameState } from '../data/gameState.js';
 import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage, spawnRewards } from '../data/rest.js';
 import { upgradePlayerTier } from '../data/player.js';
 
@@ -86,9 +85,14 @@ export default {
     MoneyRewardPanel,
     BreakthroughRewardPanel
   },
+  props: {
+    gameState: {
+      type: Object,
+      required: true
+    }
+  },
   data() {
     return {
-      gameState: gameState,
       currentRewardPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
       skillSlotSelectionPanelVisible: false,
       claimingSkill: null,
@@ -107,19 +111,19 @@ export default {
       this.rewardPanels = [];
       
       // 按顺序添加奖励面板
-      if (gameState.rewards.money > 0) {
+      if (this.gameState.rewards.money > 0) {
         this.rewardPanels.push('money');
       }
       
-      if (gameState.rewards.breakthrough) {
+      if (this.gameState.rewards.breakthrough) {
         this.rewardPanels.push('breakthrough');
       }
       
-      if (gameState.rewards.skills.length > 0) {
+      if (this.gameState.rewards.skills.length > 0) {
         this.rewardPanels.push('skill');
       }
       
-      if (gameState.rewards.abilities.length > 0) {
+      if (this.gameState.rewards.abilities.length > 0) {
         this.rewardPanels.push('ability');
       }
       
@@ -130,7 +134,7 @@ export default {
     showNextRewardPanel() {
       // 先隐藏当前面板
       this.currentRewardPanel = 'none';
-      // 稍等片刻后，再显示下一面板
+      // 稍等片刻后，再显示下一个面板
       setTimeout(()=> {
         if (this.currentRewardIndex < this.rewardPanels.length) {
           this.currentRewardPanel = this.rewardPanels[this.currentRewardIndex];
@@ -188,22 +192,12 @@ export default {
       // 结束休整阶段，开始下一场战斗
       endRestStage();
     },
-    buyItem(purchasedItem) {
-      // 直接调用商品实例的purchase方法
-      purchasedItem.purchase(this.$parent.player);
-      
-      // 添加日志
-      this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
-      
-      // 重新生成商店物品
-      this.$forceUpdate();
-    },
     onItemPurchased(purchasedItem) {
-      // 添加日志
+      // 添加日志（显示层）
       this.gameState.battleLogs.push(`购买了 ${purchasedItem.name}`);
     },
     refreshShop() {
-      // 重新生成商店物品
+      // 重新生成商店物品（作用于后端）
       spawnRewards();
       // 强制更新组件以反映新的商店物品
       this.$forceUpdate();

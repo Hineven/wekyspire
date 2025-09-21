@@ -17,8 +17,8 @@
 
 <script>
 import EffectIcon from './EffectIcon.vue';
-import eventBus from '../eventBus.js';
 import effectDescriptions from '../data/effectDescription.js';
+import { enqueueUI } from '../data/animationDispatcher.js';
 
 export default {
   name: 'EffectDisplayBar',
@@ -40,17 +40,15 @@ export default {
       previousEffects: JSON.parse(JSON.stringify(this.effects))
     };
   },
-  
-  mounted() {
-    // 监听effect-change事件
-    eventBus.on('effect-change', this.handleEffectChange);
+  watch: {
+    effects: {
+      deep: true,
+      handler(newVal) {
+        this.handleEffectsChanged(newVal, this.previousEffects);
+        this.previousEffects = JSON.parse(JSON.stringify(newVal));
+      }
+    }
   },
-  
-  beforeUnmount() {
-    // 移除事件监听
-    eventBus.off('effect-change', this.handleEffectChange);
-  },
-  
   methods: {
     showTooltip(event, effectName) {
       this.$emit('show-tooltip', {
@@ -63,21 +61,18 @@ export default {
     hideTooltip() {
       this.$emit('hide-tooltip');
     },
-    
-    // 处理effect-change事件
-    handleEffectChange({ 
-      target, effectName, 
-      deltaStacks, currStacks, previousStacks }) {
-      // 只处理当前目标的效果变化
-      if (target !== this.target) return;
-      
-      // 检查效果是否消失（从有到无）
-      if (previousStacks > 0 && currStacks === 0) {
-        this.playEffectExpiredAnimation(effectName);
+
+    // 基于effects对象变化触发动画（取代 effect-change 事件）
+    handleEffectsChanged(curr, prev) {
+      // 只处理当前目标的效果变化（组件级别即对应当前目标）
+      const prevKeys = Object.keys(prev || {});
+      for (const effectName of prevKeys) {
+        const previousStacks = prev[effectName] || 0;
+        const currStacks = (curr && curr[effectName]) || 0;
+        if (previousStacks > 0 && currStacks === 0) {
+          this.playEffectExpiredAnimation(effectName);
+        }
       }
-      
-      // 更新previousEffects
-      this.previousEffects = JSON.parse(JSON.stringify(this.effects));
     },
     
     // 播放效果过期动画
@@ -126,8 +121,8 @@ export default {
         }
       }];
       
-      // 通过事件总线发送粒子生成请求
-      eventBus.emit('spawn-particles', particles);
+      // 通过动画调度器发送UI动作（而非后端事件）
+      enqueueUI('spawnParticles', { particles });
     }
   }
 };

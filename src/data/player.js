@@ -1,9 +1,6 @@
 import SkillManager from './skillManager.js'
-import eventBus from '../eventBus.js'
-import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects, processDamageTakenEffects, processDamageDealtEffects, processPostAttackEffects } from './effectProcessor.js'
-import EnemyFactory from './enemyFactory.js'
-import AbilityManager from './abilityManager.js'
-import ItemManager from './itemManager.js'
+import backendEventBus from '../backendEventBus.js'
+import Unit from './unit.js'
 
 export function getNextPlayerTier(playerTier) {
   const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
@@ -15,7 +12,7 @@ export function upgradePlayerTier (player) {
   if (nextTier !== undefined) {
     player.tier = nextTier;
     player.maxMana += 1;
-    if(player.tier == 2) {
+    if(player.tier === 2) {
       // 特殊：第一次升级时多获得一点魏启
       player.maxMana += 1;
     }
@@ -24,7 +21,7 @@ export function upgradePlayerTier (player) {
     }
     player.hp = player.maxHp;
     player.mana = player.maxMana;
-    eventBus.emit('player-tier-upgraded', player);
+    backendEventBus.emit('player-tier-upgraded', player);
     return true;
   }
   return false;
@@ -44,8 +41,9 @@ export function getPlayerTierFromTierIndex(tierIndex) {
 }
 
 // 玩家数据类
-export class Player {
+export class Player extends Unit {
   constructor() {
+    super();
     this.type = 'player';
     this.name = "你";
     this.hp = 40;
@@ -65,34 +63,16 @@ export class Player {
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.maxFrontierSkills = 5; // 最大前台技能数量
-    this.effects = {}; // 效果列表，由一个 效果名称->效果层数 的词典组成。
+    // effects 由 Unit 初始化
     // SkillManager仅用于创建技能和保留技能模板，玩家拥有的技能保存在skillSlots内。
     this.skillManager = SkillManager.getInstance();
   }
-  
-  // 应用治疗
-  applyHeal(heal) {
-    if (heal > 0) {
-      this.hp += heal;
-      this.hp = Math.min(this.hp, this.maxHp);
-    }
-  }
-  
+
   // 计算属性
-  get attack() {
-    return this.baseAttack + (this.effects['力量'] || 0);
-  }
+  // attack/magic 继承自 Unit
 
   get agility() {
     return (this.effects['敏捷'] || 0)
-  }
-  
-  get magic() {
-    return this.baseMagic + (this.effects['集中'] || 0);
-  }
-  
-  get defense() {
-    return this.baseDefense + (this.effects['坚固'] || 0);
   }
 
   addBackupSkill (skill) {
@@ -121,30 +101,7 @@ export class Player {
   removeNegativeEffets(count, mode = 'random') {
     // TODO
   }
-  
-  // 添加效果方法
-  addEffect(effectName, stacks = 1) {
-    if(stacks == 0) return ;
-    const previousStacks = this.effects[effectName] || 0;
-    if (this.effects[effectName]) {
-      this.effects[effectName] += stacks;
-    } else {
-      this.effects[effectName] = stacks;
-    }
-    // 触发效果变化事件
-    eventBus.emit('effect-change', {
-      target: this,
-      effectName: effectName,
-      deltaStacks: stacks,
-      currStacks: this.effects[effectName] || 0,
-      previosStacks: previousStacks
-    });
-  }
-  
-  // 移除效果方法
-  removeEffect(effectName, stacks = 1) {
-    this.addEffect(effectName, -stacks);
-  }
+
 
   clearNegativeEffects () {
     // TODO

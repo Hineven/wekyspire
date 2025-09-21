@@ -1,5 +1,6 @@
 import { launchAttack, gainShield } from '../battleUtils.js';
 import Enemy from '../enemy.js';
+import { addEnemyActionLog } from '../battleLogUtils.js';
 
 // 史莱姆敌人
 export class Slime extends Enemy {
@@ -20,7 +21,7 @@ export class Slime extends Enemy {
   }
 
   // 执行行动
-  act(player, battleLogs) {
+  act(player) {
     // 史莱姆行动序列：
     // 1. 攻击，造成【1 + 攻击力】伤害。
     // 2. 攻击，造成【2 * 攻击力】伤害。
@@ -28,13 +29,13 @@ export class Slime extends Enemy {
     
     const actions = [
       () => {
-        battleLogs.push(`${this.name} 冲撞！`);
+        addEnemyActionLog(`${this.name} 冲撞！`);
         // 攻击，造成【攻击力】伤害
         const damage = this.calculateDamage(this.attack, player);
         launchAttack(this, player, damage);
       },
       () => {
-        battleLogs.push(`${this.name} 强力冲撞！`);
+        addEnemyActionLog(`${this.name} 强力冲撞！`);
         // 攻击，造成【2 * 攻击力】伤害
         const damage = this.calculateDamage(2 * this.attack, player);
         launchAttack(this, player, damage);
@@ -43,7 +44,7 @@ export class Slime extends Enemy {
         // 防御，获得【2 + 灵能强度】护盾
         const shieldAmount = 2 + this.magic;
         gainShield(this, this, shieldAmount);
-        battleLogs.push(`${this.name} 进入防御状态，获得了 ${shieldAmount} 点护盾！`);
+        addEnemyActionLog(`${this.name} 进入防御状态，获得了 ${shieldAmount} 点护盾！`);
       }
     ];
     
@@ -52,9 +53,6 @@ export class Slime extends Enemy {
     
     // 执行行动
     action();
-    return {
-      endTurn: true
-    }
   }
 }
 
@@ -70,7 +68,6 @@ export class Remi extends Enemy {
     this.actionIndex = 0;
     this.moneyStolen = false;
     this.description = "一只并不友善的瑞米。";
-    this.inTurnAction = 0;
   }
 
   // 计算伤害
@@ -79,7 +76,7 @@ export class Remi extends Enemy {
   }
 
   // 执行行动
-  act(player, battleLogs) {
+  act(player) {
     // 魔化瑞米行动序列：
     // 1. 攻击，造成【攻击力】伤害。
     // 2. 获得1层闪避。
@@ -92,44 +89,39 @@ export class Remi extends Enemy {
       () => {
         // 攻击，造成【攻击力】伤害
         const damage = this.calculateDamage(this.attack, player);
-        battleLogs.push(`${this.name} 抓挠！`);
+        addEnemyActionLog(`${this.name} 抓挠！`);
         launchAttack(this, player, damage);
       },
       () => {
         // 获得1层闪避
         this.addEffect('闪避', 1);
-        battleLogs.push(`${this.name} 进入了闪避状态！`);
+        addEnemyActionLog(`${this.name} 进入了闪避状态！`);
       },
       () => {
         // 吃你的钱包，造成【3】伤害，玩家失去10金钱
         if (!this.moneyStolen) {
-          if(this.inTurnAction == 0) {
-            battleLogs.push(`${this.name} 开始搞事！`);
-            this.inTurnAction = 1;
-            advanceAction = 0;
+          this.moneyStolen = true;
+          addEnemyActionLog(`${this.name} 开始搞事！`);
+          enqueueDelay(500);
+          const damage = this.calculateDamage(3, player);
+          const attackResult = launchAttack(this, player, damage);
+          if(attackResult.hpDamage > 0) {
+            player.money = Math.max(0, player.money - 10);
+            addEnemyActionLog(`${this.name} 偷偷吃掉了你的钱包，你失去了10金钱！`);
           } else {
-            this.moneyStolen = true;
-            const damage = this.calculateDamage(3, player);
-            const attackResult = launchAttack(this, player, damage);
-            if(attackResult.hpDamage > 0) {
-              player.money = Math.max(0, player.money - 10);
-              battleLogs.push(`${this.name} 偷偷吃掉了你的钱包，你失去了10金钱！`);
-            } else {
-              battleLogs.push(`${this.name} 尝试吃你的钱包，但被挡住了！`);
-            }
-            this.inTurnAction = 0;
+            addEnemyActionLog(`${this.name} 尝试吃你的钱包，但被挡住了！`);
           }
         } else {
           // 如果已经偷过钱包，则执行普通攻击
           const damage = this.calculateDamage(6 + this.attack, player);
-          battleLogs.push(`${this.name} 咬人！`);
+          addEnemyActionLog(`${this.name} 咬人！`);
           launchAttack(this, player, damage);
         }
       },
       () => {
         // 获得1层闪避
         this.addEffect('闪避', 1);
-        battleLogs.push(`${this.name} 进入了闪避状态！`);
+        addEnemyActionLog(`${this.name} 进入了闪避状态！`);
       }
     ];
     
@@ -137,11 +129,7 @@ export class Remi extends Enemy {
     
     // 执行行动
     action();
-    this.actionIndex += advanceAction;
-    
-    return {
-      endTurn: advanceAction === 0 ? false : true
-    }
+    this.actionIndex ++;
   }
 }
 
@@ -156,7 +144,6 @@ export class BuzzlingBugs extends Enemy {
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = "一群烦恼的嗡嗡虫，你很难够到它们。";
-    this.inTurnAction = 0;
 
     this.addEffect('闪避', 2);
   }
@@ -167,7 +154,7 @@ export class BuzzlingBugs extends Enemy {
   }
 
   // 执行行动
-  act(player, battleLogs) {
+  act(player) {
     let advanceAction = 0;
     // 嗡嗡虫群行动序列：
     // 1. 高飞，获得 4 层闪避。
@@ -176,23 +163,17 @@ export class BuzzlingBugs extends Enemy {
       () => {
         // 高飞，获得 4 层闪避。
         this.addEffect('闪避', 4);
-        battleLogs.push(`${this.name} 高高飞起，你很难碰到他们！`);
+        addEnemyActionLog(`${this.name} 高高飞起，你很难碰到他们！`);
         advanceAction = 1;
         return {};
       },
       () => {
         // 攻击，造成4 x 攻击力伤害。
         const damage = this.calculateDamage(this.attack, player);
-        if(this.inTurnAction == 0) {
-          battleLogs.push(`${this.name} 集结成群，向下俯冲！`);
-          this.inTurnAction ++;
-        } else {
-          this.inTurnAction ++;
+        addEnemyActionLog(`${this.name} 集结成群，向下俯冲！`);
+        for(var i = 0; i < 4; i++) {
+          enqueueDelay(500);
           launchAttack(this, player, damage);
-          if(this.inTurnAction >= 5) {
-            this.inTurnAction = 0;
-            advanceAction = 1;
-          }
         }
         return {};
       }
@@ -200,17 +181,13 @@ export class BuzzlingBugs extends Enemy {
 
     const action = actions[this.actionIndex % actions.length];
     action();
-    this.actionIndex += advanceAction;
-    
-    return {
-      endTurn: advanceAction === 0 ? false : true,
-      latency: 400
-    };
+    this.actionIndex ++;
   }
 }
 
 // 黏黏史莱姆敌人
 import { SlimeCurse } from '../skills/curses.js';
+import {enqueueDelay} from "../animationDispatcher";
 
 export class SlimySlime extends Enemy {
   constructor(battleIntensity) {
@@ -230,7 +207,7 @@ export class SlimySlime extends Enemy {
   }
 
   // 执行行动
-  act(player, battleLogs) {
+  act(player) {
     // 史莱姆行动序列：
     // 1. 诅咒，为玩家添加粘液后备技能。
     // 2. 攻击，造成【1 + 攻击力】伤害。
@@ -240,16 +217,16 @@ export class SlimySlime extends Enemy {
       () => {
         // 诅咒
         player.addBackupSkill(new SlimeCurse());
-        battleLogs.push(`${this.name} 喷了你一脸，你的后备技能中多了一张/skill{粘液}！`);
+        addEnemyActionLog(`${this.name} 喷了你一脸，你的后备技能中多了一张/skill{粘液}！`);
       },
       () => {
-        battleLogs.push(`${this.name} 冲撞！`);
+        addEnemyActionLog(`${this.name} 冲撞！`);
         // 攻击，造成【攻击力】伤害
         const damage = this.calculateDamage(this.attack, player);
         launchAttack(this, player, damage);
       },
       () => {
-        battleLogs.push(`${this.name} 强力冲撞！`);
+        addEnemyActionLog(`${this.name} 强力冲撞！`);
         // 攻击，造成【2 * 攻击力】伤害
         const damage = this.calculateDamage(2 * this.attack, player);
         launchAttack(this, player, damage);
@@ -261,8 +238,5 @@ export class SlimySlime extends Enemy {
     
     // 执行行动
     action();
-    return {
-      endTurn: true
-    }
   }
 }

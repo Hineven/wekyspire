@@ -15,7 +15,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js';
+import frontendEventBus from '../frontendEventBus.js';
 import ColoredText from './ColoredText.vue';
 
 export default {
@@ -37,7 +37,7 @@ export default {
   },
   mounted() {
     // 监听display-dialog事件
-    eventBus.on('display-dialog', (dialogSequence) => {
+    frontendEventBus.on('display-dialog', (dialogSequence) => {
       this.dialogSequence = dialogSequence;
       this.dialogIndex = 0;
       this.currentDialog = this.dialogSequence[this.dialogIndex];
@@ -46,7 +46,7 @@ export default {
   },
   beforeUnmount() {
     // 移除事件监听
-    eventBus.off('display-dialog');
+    frontendEventBus.off('display-dialog', this.onClose);
   },
   methods: {
     nextDialog() {
@@ -61,8 +61,8 @@ export default {
         this.dialogSequence = [];
         this.dialogIndex = 0;
         
-        // 发射对话结束事件
-        eventBus.emit('dialog-ended');
+        // 触发对话结束事件（前端事件总线）
+        frontendEventBus.emit('dialog-ended');
       }
       this.$emit('next-dialog');
     }

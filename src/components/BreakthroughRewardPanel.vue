@@ -1,14 +1,13 @@
 <template>
   <transition-group name="slide" tag="div" class="breakthrough-reward-panel-wrapper">
     <div class="breakthrough-reward-panel" v-if="isVisible" key="panel" @click="claimReward">
-      <h2>🥇突破！</h2>
+      <h2>🏇突破！</h2>
     </div>
   </transition-group>
 </template>
 
 <script>
-import { upgradePlayerTier } from '../data/player.js';
-import { gameState } from '../data/gameState.js';
+import { claimBreakthroughReward } from '../data/rest.js';
 
 export default {
   name: 'BreakthroughRewardPanel',
@@ -20,8 +19,7 @@ export default {
   },
   methods: {
     claimReward() {
-      gameState.rewards.breakthrough = false;
-      upgradePlayerTier(gameState.player);
+      claimBreakthroughReward();
       this.$emit('claimed');
     }
   }

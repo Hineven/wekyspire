@@ -15,7 +15,7 @@
 </template>
 
 <script>
-import eventBus from '../eventBus.js'
+import frontendEventBus from '../frontendEventBus.js'
 
 export default {
   name: 'ParticleEffectManager',
@@ -28,15 +28,15 @@ export default {
   },
   mounted() {
     // 监听spawn-particles事件
-    eventBus.on('spawn-particles', this.spawnParticles);
-    
+    frontendEventBus.on('spawn-particles', this.spawnParticles);
+
     // 开始动画循环
     this.animate();
   },
   beforeUnmount() {
     // 清理事件监听
-    eventBus.off('spawn-particles', this.spawnParticles);
-    
+    frontendEventBus.off('spawn-particles', this.spawnParticles);
+
     // 取消动画循环
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
