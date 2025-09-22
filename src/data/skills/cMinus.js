@@ -7,7 +7,10 @@ import { addBattleLog } from '../battleLogUtils.js';
 export class PurifyWeky extends Skill {
   constructor() {
     super('纯化', 'normal', 1, 1, 1, 1, '纯化');
-    this.coldDownTurns = 4;
+  }
+
+  get coldDownTurns() {
+    return 5;
   }
 
   get stack() {
@@ -32,7 +35,10 @@ export class PurifyWeky extends Skill {
 export class StrongPurifyWeky extends Skill {
   constructor() {
     super('超纯化', 'normal', 3, 2, 1, 1, '纯化');
-    this.coldDownTurns = 4;
+  }
+
+  get coldDownTurns() {
+    return 5;
   }
 
   get stack() {
@@ -115,8 +121,11 @@ export class ChargePunch extends Skill {
   constructor() {
     super('蓄力一击', 'magic', 2, 1, 1, 1, '蓄力一击');
     this.mode = 'idle';
-    this.coldDownTurns = 1;
     this.chargedDamage = 0;
+  }
+
+  get coldDownTurns() {
+    return 1;
   }
 
   get damage() {
@@ -288,7 +297,10 @@ export class TransformSword extends Skill {
 export class FloatingI extends Skill {
   constructor() {
     super('浮空I', 'magic', 3, 1, 1, 1, "浮空");
-    this.coldDownTurns = 3;
+  }
+
+  get coldDownTurns() {
+    return 5;
   }
 
   get stacks() {
@@ -310,7 +322,9 @@ export class FloatingI extends Skill {
 export class RockFormationI extends Skill {
   constructor() {
     super('成岩I', 'magic', 3, 1, 1, 1, "成岩");
-    this.coldDownTurns = 2;
+  }
+  get coldDownTurns() {
+    return 4;
   }
   get stacks() {
     return Math.max(4 + this.power, 1);
@@ -329,7 +343,9 @@ export class RockFormationI extends Skill {
 export class SpeedThinking extends Skill {
   constructor() {
     super('超速思考', 'magic', 3, 1, 1, Infinity, "超速思考");
-    this.coldDownTurns = 1;
+  }
+  get coldDownTurns() {
+    return 1;
   }
   get times() {
     return Math.max(this.power + 1, 1);
@@ -366,7 +382,7 @@ export class EvilSacrifice extends Skill {
     // 找到右边的技能
     const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
     if(rightSkill) {
-      rightSkill.coldDownTurns = 0;
+      rightSkill.coldDownTurns = ()=>{return 0;};
     }
   }
   regenerateDescription(player) {

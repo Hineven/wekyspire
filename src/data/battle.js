@@ -65,9 +65,6 @@ export function generateEnemy() {
     // 普通敌人
     gameState.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, false);
   }
-  
-  // 初始化敌人效果管理器
-  gameState.enemy.init();
 }
 
 // 开始玩家回合

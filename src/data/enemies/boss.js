@@ -80,3 +80,75 @@ export class MEFM3 extends Enemy {
     this.actionIndex++;
   }
 }
+
+
+// 卡姆拉 Boss敌人
+export class Karmura extends Enemy {
+  constructor(battleIntensity) {
+    const hp = 30 + 9 * battleIntensity;
+    const attack = Math.round((6 + battleIntensity) * 0.7);
+    super(
+      '卡姆拉', hp, attack, 1, 0,
+      new URL('../assets/enemies/slime.png', import.meta.url).href
+    );
+    this.type = 'boss'; // 标记为Boss敌人
+    this.battleIntensity = battleIntensity;
+    this.actionIndex = 0;
+    this.hpThresholdReached = false;
+    this.subtitle = "狂躁的猛兽";
+    this.description = "一只可怖的猛兽，伊休山脉间的著名朝圣者杀手！\n ";
+    this.addEffect('暴怒', 1);
+  }
+
+  // 执行行动
+  act(player) {
+    // 检查是否达到生命值阈值
+    if (!this.hpThresholdReached && this.hp < this.maxHp * 0.5) {
+      this.hpThresholdReached = true;
+      addEnemyActionLog(`${this.name} 狂嚎！它彻底暴怒了！`);
+      enqueueDelay(400);
+      this.addEffect('暴怒', 3);
+      enqueueDelay(400);
+      this.addEffect('力量', 3);
+      enqueueDelay(400);
+      this.addEffect('格挡', 1);
+      return;
+    }
+
+    // 正常行动序列
+    const actions = [
+      () => {
+        addEnemyActionLog(`${this.name} 对你虎视眈眈。`);
+        this.addEffect('暴怒', 1);
+      },
+      () => {
+        addEnemyActionLog(`${this.name} 扑击！`);
+        const result = launchAttack(this, player, this.attack);
+        if (result.hpDamage > 0) {
+          enqueueDelay(400);
+          addEnemyActionLog(`你的鲜血让 ${this.name} 更加兴奋了！`);
+          enqueueDelay(800);
+          this.applyHeal(1 + this.effects['暴怒']);
+          enqueueDelay(800);
+          this.addEffect('力量', 1);
+        }
+      },
+      () => {
+        addEnemyActionLog(`${this.name} 狂热撕咬！`);
+        const result = launchAttack(this, player, this.attack);
+        if (result.hpDamage > 0) {
+          enqueueDelay(400);
+          addEnemyActionLog(`你的鲜血让 ${this.name} 更加兴奋了！`);
+          enqueueDelay(800);
+          this.applyHeal(1 + this.effects['暴怒']);
+          enqueueDelay(800);
+          this.addEffect('力量', 1);
+        }
+      },
+    ];
+
+    const action = actions[this.actionIndex % actions.length];
+    action();
+    this.actionIndex++;
+  }
+}

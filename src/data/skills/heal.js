@@ -5,8 +5,11 @@ import Skill from '../skill.js';
 export class VeryWeakRecovery extends Skill {
   constructor() {
     super('恢复I', '木', 1, 1, 1, 1, '恢复');
-    this.coldDownTurns = 3;
     this.upgradeTo = "恢复II";
+  }
+
+  get coldDownTurns() {
+    return 4;
   }
 
   get baseStacks() {
@@ -34,8 +37,11 @@ export class VeryWeakRecovery extends Skill {
 export class WeakRecovery extends Skill {
   constructor() {
     super('恢复II', '木', 3, 1, 1, 1, '恢复');
-    this.coldDownTurns = 3;
     this.upgradeTo = "恢复III";
+  }
+
+  get coldDownTurns() {
+    return 4;
   }
 
   get baseStacks() {
@@ -63,8 +69,11 @@ export class WeakRecovery extends Skill {
 export class Recovery extends Skill {
   constructor() {
     super('强力恢复', '木', 5, 1, 1, 1, '恢复');
-    this.coldDownTurns = 3;
     this.upgradeTo = "强力恢复";
+  }
+
+  get coldDownTurns() {
+    return 4;
   }
 
   get baseStacks() {
@@ -92,8 +101,11 @@ export class Recovery extends Skill {
 export class StrongRecovery extends Skill {
   constructor() {
     super('复苏', '木', 7, 3, 1, 1, '复苏');
-    this.coldDownTurns = 4;
     this.upgradeTo = "奇迹";
+  }
+
+  get coldDownTurns() {
+    return 7;
   }
 
   get baseStacks() {
@@ -127,8 +139,11 @@ export class StrongRecovery extends Skill {
 export class Miracle extends Skill {
   constructor() {
     super('奇迹', '木', 9, 5, 1, 1, '奇迹');
-    this.coldDownTurns = 5;
     this.subtitle = "用禁忌对抗死亡";
+  }
+
+  get coldDownTurns() {
+    return 10;
   }
 
   get stacks() {

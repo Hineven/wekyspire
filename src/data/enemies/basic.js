@@ -133,7 +133,7 @@ export class Remi extends Enemy {
   }
 }
 
-// 嗡嗡虫敌人
+// 嗡嗡虫群敌人
 export class BuzzlingBugs extends Enemy {
   constructor(battleIntensity) {
     const hp = 5 + Math.floor(2 * battleIntensity);
@@ -236,6 +236,49 @@ export class SlimySlime extends Enemy {
     const action = actions[this.actionIndex % actions.length];
     this.actionIndex++;
     
+    // 执行行动
+    action();
+  }
+}
+
+// 腐食甲虫敌人
+export class StinkyBugs extends Enemy {
+  constructor(battleIntensity) {
+    const hp = 18 + Math.floor(4 * battleIntensity);
+    const attack = 1 + Math.floor(battleIntensity * 0.2);
+    super('腐食甲虫', hp, attack, 1,
+      new URL('../../assets/enemies/slime.png', import.meta.url).href
+    );
+    this.battleIntensity = battleIntensity;
+    this.actionIndex = 0;
+    this.description = "一群散发着臭气的大甲虫，噫，好恶心。";
+    this.addEffect("坚固", 2);
+  }
+
+  // 计算伤害
+  calculateDamage(attack, target) {
+    return Math.max(1, attack);
+  }
+
+  // 执行行动
+  act(player) {
+    // 1. 攻击，造成【攻击力】伤害。同时为玩家添加中毒x3效果。
+
+    const actions = [
+      () => {
+        addEnemyActionLog(`${this.name} 撞击！`);
+        // 攻击，造成【攻击力】伤害
+        const damage = this.calculateDamage(this.attack, player);
+        const attackResult = launchAttack(this, player, damage);
+        enqueueDelay(600);
+        player.addEffect('中毒', 3);
+        addEnemyActionLog(`${this.name} 的臭气让你感到恶心，你中毒了！`);
+      }
+    ];
+
+    const action = actions[this.actionIndex % actions.length];
+    this.actionIndex++;
+
     // 执行行动
     action();
   }

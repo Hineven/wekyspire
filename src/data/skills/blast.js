@@ -5,12 +5,15 @@ import { launchAttack } from '../battleUtils.js';
 export class Fireshot extends Skill {
   constructor() {
     super('火弹术', 'magic', 1, 1, 1, 1, '火球术');
-    this.coldDownTurns = 1;
     this.upgradeTo = "火球术";
   }
 
+  get coldDownTurns() {
+    return 3;
+  }
+
   get baseDamage() {
-    return Math.max(10 + 3 * this.power, 1);
+    return Math.max(14 + 6 * this.power, 1);
   }
 
   getDamage(player) {
@@ -34,12 +37,15 @@ export class Fireshot extends Skill {
 export class Fireball extends Skill {
   constructor() {
     super('火球术', 'magic', 3, 1, 1, 1, '火球术');
-    this.coldDownTurns = 2;
     this.upgradeTo = "大火球术";
   }
 
+  get coldDownTurns() {
+    return 3;
+  }
+
   get baseDamage() {
-    return Math.max(12 + 4 * this.power, 1);
+    return Math.max(16 + 7 * this.power, 1);
   }
 
   getDamage(player) {
@@ -63,12 +69,15 @@ export class Fireball extends Skill {
 export class LargeFireball extends Skill {
   constructor() {
     super('大火球术', 'magic', 5, 2, 1, 1, '火球术');
-    this.coldDownTurns = 2;
     this.upgradeTo = "弱卡拉迪亚爆裂术";
   }
 
+  get coldDownTurns() {
+    return 4;
+  }
+
   get baseDamage() {
-    return Math.max(15 + 5 * this.power, 1);
+    return Math.max(20 + 8 * this.power, 1);
   }
 
   getDamage(player) {
@@ -93,11 +102,14 @@ export class LargeFireball extends Skill {
 export class KaradiaBurst extends Skill {
   constructor() {
     super('弱卡拉迪亚爆裂术', 'magic', 7, 3, 1, 1, '火球术');
-    this.coldDownTurns = 4;
+  }
+
+  get coldDownTurns() {
+    return 6;
   }
 
   get baseDamage() {
-      return Math.max(20 + 8 * this.power, 1);
+      return Math.max(30 + 15 * this.power, 1);
   }
 
   getDamage(player) {
@@ -121,16 +133,19 @@ export class KaradiaBurst extends Skill {
 export class SolarBlast extends Skill {
   constructor() {
     super('齐明天焱', 'magic', 9, 5, 1, 1, '火球术');
-    this.coldDownTurns = 5;
-    this.subtitle = "最纯粹的破坏力";
+    this.subtitle = "纯粹的破坏力";
+  }
+
+  get coldDownTurns() {
+    return 10;
   }
 
   get baseDamage() {
-    return Math.max(30 + 15 * this.power, 1);
+    return Math.max(50 + 25 * this.power, 1);
   }
 
   get multiplier() {
-    return 20 + 4 * this.power;
+    return 20 + 5 * this.power;
   }
 
   getDamage(player) {

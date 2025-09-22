@@ -101,12 +101,7 @@ export function gainShield (caster, target, shield) {
   // 移除事件通知，改由状态变化驱动UI
 }
 
-// 手动更新所有技能描述（保留函数但不再通过事件触发）
-export function updateSkillDescriptions() {
-  // no-op: SkillCard将通过watchers基于状态自动更新描述
-}
-
-// 统一的效果添加入口
+// 统一的效果添加入口（通过动画队列事件）
 export function addEffect(target, effectName, stacks = 1) {
   if (stacks === 0) return;
   const previousStacks = target.effects[effectName] || 0;
@@ -119,23 +114,19 @@ export function addEffect(target, effectName, stacks = 1) {
 
   const currStacks = target.effects[effectName] || 0;
 
-  // 如果需要，这里可以追加日志/描述更新
-  // eventBus.emit('update-skill-descriptions');
 }
 
 // 统一的效果移除入口
 export function removeEffect(target, effectName, stacks = 1) {
   addEffect(target, effectName, -stacks);
 }
-
-// 统一的治疗入口
+// 统一的治疗入口（通过 changeHp，考虑到上限）
 export function applyHeal(target, heal) {
-  if (heal > 0) {
-    target.hp += heal;
-    if (target.hp > target.maxHp) target.hp = target.maxHp;
-    // 如需日志，可在此处添加，但为避免重复日志，保持静默
-    // addHealLog(`${target.name}恢复了${heal}点生命！`);
-  }
-  // 更新技能描述（因为玩家状态可能已改变）
-  // eventBus.emit('update-skill-descriptions');
+  // 统一的治疗入口
+  const canHeal = Math.max(0, target.maxHp - target.hp);
+  const delta = Math.min(canHeal, heal);
+  target.hp += heal;
+  if (target.hp > target.maxHp) target.hp = target.maxHp;
+  // 如需日志，可在此处添加，但为避免重复日志，保持静默
+  // addHealLog(`${target.name}恢复了${heal}点生命！`);
 }

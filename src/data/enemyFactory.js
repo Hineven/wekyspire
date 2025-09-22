@@ -1,6 +1,6 @@
-import { BuzzlingBugs, Slime, SlimySlime } from './enemies/basic.js';
+import { BuzzlingBugs, Slime, SlimySlime, StinkyBugs } from './enemies/basic.js';
 import { Remi } from './enemies/basic.js';
-import { MEFM3 } from './enemies/boss.js';
+import {Karmura, MEFM3} from './enemies/boss.js';
 import { FireSlime } from './enemies/slimes.js';
 import {BigWolf} from "./enemies/special";
 
@@ -15,12 +15,14 @@ class EnemyFactory {
     // 初始化时注册预定义敌人
     this.registerEnemy(Slime);
     this.registerEnemy(Remi);
-    this.registerEnemy(MEFM3);
     this.registerEnemy(FireSlime);
+    this.registerEnemy(StinkyBugs);
     this.registerEnemy(BuzzlingBugs);
     this.registerEnemy(SlimySlime);
 
     this.registerEnemy(BigWolf);
+    this.registerEnemy(MEFM3);
+    this.registerEnemy(Karmura);
   }
   
   // 注册敌人
@@ -56,13 +58,22 @@ class EnemyFactory {
       return enemy;
     }
     
-    // 随机选择普通敌人
+    // 随机选择普通敌人 / 特殊敌人
     const instance = this.getInstance();
-    const normalEnemies = Array.from(instance.normalEnemyRegistry.keys());
-    const randomType = normalEnemies[Math.floor(Math.random() * normalEnemies.length)];
-    const enemy = this.createEnemy(randomType, battleIntensity);
-    enemy.init();
-    return enemy;
+    const roll = Math.random();
+    if(roll < 0.3 && battleIntensity > 4) {
+      const specialEnemies = Array.from(instance.specialEnemyRegistry.keys());
+      const randomType = specialEnemies[Math.floor(Math.random() * specialEnemies.length)];
+      const enemy = this.createEnemy(randomType, battleIntensity);
+      enemy.init();
+      return enemy;
+    } else {
+      const normalEnemies = Array.from(instance.normalEnemyRegistry.keys());
+      const randomType = normalEnemies[Math.floor(Math.random() * normalEnemies.length)];
+      const enemy = this.createEnemy(randomType, battleIntensity);
+      enemy.init();
+      return enemy;
+    }
   }
   
   // 获取EnemyFactory实例

@@ -9,6 +9,7 @@ import './assets/main.css'
 import './assets/common.css'
 import SkillManager from './data/skillManager.js'
 import { initAnimationDispatcher } from './data/animationDispatcher.js'
+import {initGameFlowListeners} from "./game";
 
 // 创建路由
 const routes = [
@@ -40,3 +41,6 @@ SkillManager.loadAllSkills().then(skillManager => {
   // 挂载应用
   app.mount('#app');
 });
+
+// 初始化后端游戏流程在backendEventBus上的监听器
+initGameFlowListeners();

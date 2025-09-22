@@ -64,8 +64,6 @@ export class Player extends Unit {
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.maxFrontierSkills = 5; // 最大前台技能数量
     // effects 由 Unit 初始化
-    // SkillManager仅用于创建技能和保留技能模板，玩家拥有的技能保存在skillSlots内。
-    this.skillManager = SkillManager.getInstance();
   }
 
   // 计算属性

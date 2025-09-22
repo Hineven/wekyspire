@@ -5,7 +5,9 @@ import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 export class RollPunch extends Skill {
   constructor() {
     super('王八拳', 'normal', 0, 0, 1);
-    this.coldDownTurns = 1;
+  }
+  get coldDownTurns() {
+    return 1;
   }
 
   get damage() {
@@ -58,8 +60,11 @@ export class Roll extends Skill {
 export class Sleep extends Skill {
   constructor() {
     super('睡觉', 'normal', 0, 0, 1, 1, '睡觉', 1);
-    this.baseHeal = 7;
-    this.coldDownTurns = 2;
+    this.baseHeal = 10;
+  }
+
+  get coldDownTurns() {
+    return 4;
   }
 
   get heal() {
@@ -83,7 +88,10 @@ export class LargeSleep extends Skill {
   constructor() {
     super('睡大觉', 'normal', 1, 0, 1, 1);
     this.baseHeal = 22;
-    this.coldDownTurns = 2;
+  }
+
+  get coldDownTurns() {
+    return 3;
   }
 
   get heal() {
@@ -134,7 +142,10 @@ export class PrepareExercise extends Skill {
 export class AmateurDefense extends Skill {
   constructor() {
     super('抱头防御', 'normal', 0, 0, 1);
-    this.coldDownTurns = 1;
+  }
+
+  get coldDownTurns() {
+    return 1;
   }
 
   get shield() {

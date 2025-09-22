@@ -72,6 +72,7 @@ import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
 import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage, spawnRewards } from '../data/rest.js';
 import { upgradePlayerTier } from '../data/player.js';
+import frontendEventBus from "../frontendEventBus";
 
 export default {
   name: 'RestScreen',
@@ -194,7 +195,10 @@ export default {
     },
     onItemPurchased(purchasedItem) {
       // 添加日志（显示层）
-      this.gameState.battleLogs.push(`购买了 ${purchasedItem.name}`);
+      frontendEventBus.emit("pop-message", {
+        id: 'item-purchased',
+        text: `购买了物品：${purchasedItem.name}`
+      });
     },
     refreshShop() {
       // 重新生成商店物品（作用于后端）
