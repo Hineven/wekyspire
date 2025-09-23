@@ -1,16 +1,16 @@
 // 技能抽象类
 class Skill {
-  constructor(name, type, tier, manaCost, actionPointCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
+  constructor(name, type, tier, baseManaCost, baseActionPointCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
     this.type = type; // 技能类型：'普通'（非魔法）, '木', '火', '光', '水', '通用'（通用类魔法）, '特殊'，'诅咒'（负面技能卡）
     this.tier = tier; // 技能等阶
-    // 随机生成一个唯一ID
+    // 随机生成一个唯一ID。注意！前后台技能的id可能不同。
     this.uniqueID = Math.random().toString(36).substring(2, 10);
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
     this.description = ''; // 生成的技能描述
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
-    this.manaCost = manaCost || 0; // 魏启消耗
-    this.actionPointCost = actionPointCost || 1; // 行动点消耗，默认为1
+    this.baseManaCost = baseManaCost || 0; // 魏启消耗
+    this.baseActionPointCost = baseActionPointCost || 1; // 行动点消耗，默认为1
     this.maxUses = maxUses || 1; // 最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
@@ -19,13 +19,21 @@ class Skill {
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
   }
 
+  get manaCost () {
+    return Math.max(this.baseManaCost, 0);
+  }
+
+  get actionPointCost () {
+    return Math.max(this.baseActionPointCost, 0);
+  }
+
   get coldDownTurns() {
     return 0;
   }
 
   canColdDown() {
     if(this.coldDownTurns === 0) return false;
-    if(this.remainingUses == this.maxUses) return false;
+    if(this.remainingUses === this.maxUses) return false;
     return true;
   }
 

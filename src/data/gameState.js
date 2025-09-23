@@ -51,8 +51,8 @@ export function createGameState() {
 }
 
 // 分别创建“显示层状态”和“后端状态”，二者结构一致，但相互独立
-export const displayGameState = reactive(createGameState());
 export const backendGameState = reactive(createGameState());
+export const displayGameState = reactive(createGameState());
 
 // 重置显示层状态
 export function resetDisplayGameState() {
