@@ -40,8 +40,6 @@
         :is-visible="currentRewardPanel === 'shop'"
         :shop-items="gameState.shopItems"
         :game-state="gameState"
-        @item-purchased="onItemPurchased"
-        @refresh-shop="refreshShop"
         @close="closeShopPanel"
       />
         </div>
@@ -70,9 +68,8 @@ import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
-import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage, spawnRewards } from '../data/rest.js';
-import { upgradePlayerTier } from '../data/player.js';
 import frontendEventBus from "../frontendEventBus";
+import backendEventBus, { EventNames } from "../backendEventBus";
 
 export default {
   name: 'RestScreen',
@@ -106,6 +103,16 @@ export default {
     this.initRewardPanels();
     // 显示第一个奖励面板
     this.showNextRewardPanel();
+    // 监听后端商品购买，弹出UI消息
+    backendEventBus.on(EventNames.Shop.ITEM_PURCHASED, (purchasedItem) => {
+      frontendEventBus.emit("pop-message", {
+        id: 'item-purchased',
+        text: `购买了物品：${purchasedItem.name}`
+      });
+    });
+  },
+  beforeUnmount() {
+    backendEventBus.off && backendEventBus.off(EventNames.Shop.ITEM_PURCHASED);
   },
   methods: {
     initRewardPanels() {
@@ -174,37 +181,25 @@ export default {
       this.skillSlotSelectionPanelVisible = false;
     },
     onSkillSlotSelected(slotIndex) {
-      claimSkillReward(this.claimingSkill, slotIndex,
-        // 不要当即清空奖励，这会导致控件变更
-        false
-      );
+      backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
+        skill: this.claimingSkill,
+        slotIndex,
+        clearRewards: false
+      });
       // 关闭面板
       this.closeSkillSlotSelectionPanel();
       this.closeSkillRewardPanel();
     },
     onAbilityRewardSelected(ability) {
-      claimAbilityReward(ability,
-        // 不要当即清空奖励，这会导致控件变更
-        false
-      );
+      backendEventBus.emit(EventNames.Rest.CLAIM_ABILITY, {
+        ability,
+        clearRewards: false
+      });
       this.closeAbilityRewardPanel();
     },
     closeShopPanel() {
-      // 结束休整阶段，开始下一场战斗
-      endRestStage();
-    },
-    onItemPurchased(purchasedItem) {
-      // 添加日志（显示层）
-      frontendEventBus.emit("pop-message", {
-        id: 'item-purchased',
-        text: `购买了物品：${purchasedItem.name}`
-      });
-    },
-    refreshShop() {
-      // 重新生成商店物品（作用于后端）
-      spawnRewards();
-      // 强制更新组件以反映新的商店物品
-      this.$forceUpdate();
+      // 结束休整阶段，开始下一场战斗（后端流程监听）
+      backendEventBus.emit(EventNames.Rest.FINISH);
     }
 
   }

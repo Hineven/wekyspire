@@ -7,7 +7,7 @@
 </template>
 
 <script>
-import { claimBreakthroughReward } from '../data/rest.js';
+import backendEventBus, { EventNames } from '../backendEventBus.js';
 
 export default {
   name: 'BreakthroughRewardPanel',
@@ -19,7 +19,7 @@ export default {
   },
   methods: {
     claimReward() {
-      claimBreakthroughReward();
+      backendEventBus.emit(EventNames.Rest.CLAIM_BREAKTHROUGH);
       this.$emit('claimed');
     }
   }

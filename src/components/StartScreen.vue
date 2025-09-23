@@ -34,7 +34,7 @@
 import frontendEventBus from '../frontendEventBus.js';
 import ChangeLog from './ChangeLog.vue';
 import {backendGameState} from "../data/gameState";
-import backendEventBus from "../backendEventBus";
+import backendEventBus, { EventNames } from "../backendEventBus";
 
 export default {
   name: 'StartScreen',
@@ -130,13 +130,13 @@ export default {
           ],
           interval: 3500,
           onEnd: ()=>{
-            backendEventBus.emit('start-game');
+            backendEventBus.emit(EventNames.Game.START);
             this.isGameStarting = false;
           }
         })}, 4000);
       } else {
         // 不搞些花里胡哨的，直接开始
-        backendEventBus.emit('start-game');
+        backendEventBus.emit(EventNames.Game.START);
       }
     },
     

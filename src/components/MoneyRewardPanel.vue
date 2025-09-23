@@ -8,7 +8,7 @@
 </template>
 
 <script>
-import { claimMoney } from '../data/rest.js';
+import backendEventBus, { EventNames } from '../backendEventBus.js';
 
 export default {
   name: 'MoneyRewardPanel',
@@ -24,7 +24,7 @@ export default {
   },
   methods: {
     claimReward() {
-      claimMoney();
+      backendEventBus.emit(EventNames.Rest.CLAIM_MONEY);
       this.$emit('claimed');
     }
   }
