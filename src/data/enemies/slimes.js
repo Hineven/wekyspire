@@ -23,7 +23,7 @@ class FireSlime extends Enemy {
   }
 
   // 敌人行动方法
-  act(player, battleLogs) {
+  act(player) {
     // 火史莱姆有50%概率使用普通攻击，50%概率使用燃烧攻击
     if (Math.random() < 0.5) {
       // 普通攻击
@@ -37,9 +37,6 @@ class FireSlime extends Enemy {
       const result = launchAttack(this, player, damage);
       if(result.passThoughDamage > 0) player.addEffect('燃烧', 4);
     }
-    
-    // 返回Promise以适配新的act方法
-    return Promise.resolve();
   }
 }
 

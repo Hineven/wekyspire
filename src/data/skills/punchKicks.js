@@ -60,7 +60,10 @@ export class CarelessPunchKick extends Skill {
 export class SpeedyPunchKick extends Skill {
   constructor() {
     super('快速打击', 'normal', 0, 0, 1, 1);
-    this.coldDownTurns = 1;
+  }
+
+  get coldDownTurns() {
+    return 1;
   }
 
   get damage () {
@@ -105,7 +108,10 @@ export class SpeedyPunchKick extends Skill {
 export class PrecisePunchKick extends Skill {
   constructor() {
     super('精准打击', 'normal', 0, 0, 1, 1);
-    this.coldDownTurns = 1;
+  }
+
+  get coldDownTurns() {
+    return 1;
   }
   
   get damage () {
@@ -133,7 +139,10 @@ export class PrecisePunchKick extends Skill {
 export class PowerPunchKick extends Skill {
   constructor() {
     super('重击', 'normal', 0, 0, 2, 1);
-    this.coldDownTurns = 1;
+  }
+
+  get coldDownTurns() {
+    return 2;
   }
   
   get damage () {
@@ -163,7 +172,10 @@ export class PowerPunchKick extends Skill {
 export class OffPowerPunchKick extends Skill {
   constructor() {
     super('脱力打击', 'normal', 0, 0, 1, 1);
-    this.coldDownTurns = 1;
+  }
+
+  get coldDownTurns() {
+    return 2;
   }
   
   get damage () {

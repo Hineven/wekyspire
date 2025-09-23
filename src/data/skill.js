@@ -16,12 +16,11 @@ class Skill {
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
     this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称。如果有多个升级方向，则为数组。
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
-    if (!Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(this), 'coldDownTurns'
-    )?.get) {
-      this.coldDownTurns = 0; // 技能冷却时间, 以回合为单位。如果为0则表示无法自动冷却。
-    }
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
+  }
+
+  get coldDownTurns() {
+    return 0;
   }
 
   canColdDown() {

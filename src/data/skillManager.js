@@ -7,8 +7,6 @@ class SkillManager {
     this.skillRegistry = new Map(); // 新增技能注册表
     
   }
-
-
   // 注册技能
   registerSkill(SkillClass) {
     const skillName = (new SkillClass()).name;

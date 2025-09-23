@@ -59,12 +59,9 @@ import CutsceneScreen from './components/CutsceneScreen.vue'
 import AudioControllerScreen from './components/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
-import SkillManager from './data/skillManager.js'
 
 import frontendEventBus from './frontendEventBus.js'
-import * as dialogues from './data/dialogues.js'
-import { displayGameState as gameState, backendGameState, resetAllGameStates } from './data/gameState.js';
-import { startBattle } from './data/battle.js'
+import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 
 export default {
   name: 'App',
@@ -90,22 +87,6 @@ export default {
       gameState: gameState
     }
   },
-  mounted() {
-    this.eventBus = frontendEventBus;
-    // 注册对话监听
-    dialogues.registerListeners();
-    dialogues.setIsRemiPresent(gameState.isRemiPresent);
-
-    this.eventBus.on('start-game', () => {
-        this.startGame();
-    });
-    },
-  beforeUnmount() {
-    if(this.eventBus) {
-      this.eventBus.off('start-game');
-      dialogues.unregisterListeners();
-    }
-  },
   watch: {
     // 当显示层的故事模式开关变化时，同步给对话系统
     'gameState.isRemiPresent'(val) {
@@ -113,27 +94,6 @@ export default {
     }
   },
   methods: {
-    startGame() {
-      // 触发开场事件（通过对话模块触发后端事件，总线隔离）
-      dialogues.triggerBeforeGameStart();
-
-      // 为玩家添加初始技能到技能槽（写入后端状态）
-      const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
-      const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
-      const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
-      const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
-
-      // 以一次性替换数组的方式写入，减少深度watch触发次数
-      const slots = backendGameState.player.skillSlots.slice();
-      slots[0] = initialSkill1;
-      slots[1] = initialSkill2;
-      slots[2] = initialSkill3;
-      slots[3] = initialSkill4;
-      backendGameState.player.skillSlots = slots;
-
-      // 开始第一场战斗（写入后端状态）
-      startBattle();
-    },
     restartGame() {
       // 重置两份游戏状态
       resetAllGameStates();

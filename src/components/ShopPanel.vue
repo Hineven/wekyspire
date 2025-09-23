@@ -31,8 +31,8 @@
 
 <script>
 import ColoredText from './ColoredText.vue';
-import { getItemTierClass, getItemTierLabel } from '../utils/tierUtils.js';
-import { purchaseItem } from '../data/rest.js';
+import { getItemTierLabel } from '../utils/tierUtils.js';
+import backendEventBus, { EventNames } from '../backendEventBus.js';
 
 export default {
   name: 'ShopPanel',
@@ -54,20 +54,13 @@ export default {
     }
   },
   methods: {
-    getItemTierClass(tier) {
-      return getItemTierClass(tier);
-    },
     getItemTierLabel(tier) {
        return getItemTierLabel(tier);
      },
     onBuy(purchasedItem) {
-      const ok = purchaseItem(purchasedItem);
-      if (ok) {
-        // 添加日志（父组件记录显示层日志）
-        this.$emit('item-purchased', purchasedItem);
-        // 刷新商店（后端重新生成）
-        this.$emit('refresh-shop');
-      }
+      // 交由后端事件驱动处理
+      backendEventBus.emit(EventNames.Rest.PURCHASE_ITEM, { item: purchasedItem });
+      // 购买结果与刷新由后端通过事件通知（item-purchased + rest-refresh-shop）
     }
   }
 }

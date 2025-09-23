@@ -3,9 +3,8 @@
 import SkillManager from './skillManager.js'
 import AbilityManager from './abilityManager.js'
 import ItemManager from './itemManager.js'
-import backendEventBus from '../backendEventBus.js'
+import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { backendGameState as gameState } from './gameState.js'
-import { generateEnemy, startBattle } from './battle.js'
 import { getNextPlayerTier, upgradePlayerTier } from './player.js'
 
 export function spawnSkillRewards() {
@@ -57,7 +56,7 @@ export function spawnRewards() {
   gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
   
   // 发送事件
-  backendEventBus.emit('rewards-spawned', gameState.rewards);
+  backendEventBus.emit(EventNames.Rest.REWARDS_SPAWNED, gameState.rewards);
 }
 
 // 领取金钱奖励
@@ -65,8 +64,8 @@ export function claimMoney() {
   gameState.player.money += gameState.rewards.money;
   const amount = gameState.rewards.money;
   gameState.rewards.money = 0;
-  // 发送事件
-  backendEventBus.emit('money-claimed', amount);
+  // 发送事件（已领取）
+  backendEventBus.emit(EventNames.Rest.MONEY_CLAIMED, amount);
 }
 
 // 领取技能奖励
@@ -75,8 +74,8 @@ export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
   if(clearRewardsFlag) {
     gameState.rewards.skills = [];
   }
-  // 发送事件
-  backendEventBus.emit('skill-reward-claimed', { skill: skill, slotIndex: slotIndex });
+  // 发送事件（统一为 Player.SKILL_REWARD_CLAIMED）
+  backendEventBus.emit(EventNames.Player.SKILL_REWARD_CLAIMED, { skill: skill, slotIndex: slotIndex });
 }
 
 // 领取能力奖励
@@ -86,8 +85,8 @@ export function claimAbilityReward(ability, clearRewardsFlag) {
   if(clearRewardsFlag) {
     gameState.rewards.abilities = [];
   }
-  // 发送玩家领取能力奖励事件
-  backendEventBus.emit('player-claim-ability', { ability: ability });
+  // 发送玩家领取能力奖励事件（已领取）
+  backendEventBus.emit(EventNames.Rest.ABILITY_CLAIMED, { ability: ability });
 }
 
 // 领取突破奖励（新加：由UI调用，而不是在UI组件中直接变更display层）
@@ -95,15 +94,7 @@ export function claimBreakthroughReward() {
   if (!gameState.rewards.breakthrough) return;
   gameState.rewards.breakthrough = false;
   upgradePlayerTier(gameState.player);
-  backendEventBus.emit('player-tier-upgraded', gameState.player);
-}
-
-// 结束休整阶段
-export function endRestStage() {
-  // 发送事件
-  backendEventBus.emit('rest-end');
-  // 开始下一场战斗
-  startBattle();  
+  backendEventBus.emit(EventNames.Player.TIER_UPGRADED, gameState.player);
 }
 
 // 购买物品（后端结算）
@@ -114,6 +105,13 @@ export function purchaseItem(item) {
   item.purchase(gameState.player);
   gameState.player.money -= item.price;
   // 通知UI
-  backendEventBus.emit('item-purchased', item);
+  backendEventBus.emit(EventNames.Shop.ITEM_PURCHASED, item);
   return true;
+}
+
+// 刷新商店物品
+export function refreshShopItems() {
+  const itemManager = new ItemManager();
+  gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
+  backendEventBus.emit(EventNames.Rest.REFRESH_SHOP, gameState.shopItems);
 }

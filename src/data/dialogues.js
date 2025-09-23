@@ -1,5 +1,5 @@
 // dialogues.js - 对话事件管理
-import backendEventBus from '../backendEventBus.js';
+import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { getPlayerTierFromTierIndex } from './player.js';
 import { enqueueUI } from './animationDispatcher.js';
 
@@ -269,22 +269,21 @@ function getSkillUseDialog(player, skill, result) {
 // 初始化函数，在游戏开始时调用一次，注意eventBus监听
 function registerListeners() {
   // 注册事件监听（使用后端事件总线）
-  backendEventBus.on('before-battle', (params) => {
+  backendEventBus.on(EventNames.Game.BEFORE_BATTLE, (params) => {
     const {battleCount, player, enemy} = params;
     const sequence = getEventBeforeBattle(battleCount, player, enemy);
     if(sequence && isRemiPresent) {
-      // 通过动画调度器触发前端UI显示对话
       enqueueUI('displayDialog', sequence);
     }
   });
-  backendEventBus.on('after-battle', (params) => {
+  backendEventBus.on(EventNames.Game.AFTER_BATTLE, (params) => {
     const {battleCount, player, enemy, isVictory} = params;
     const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
     if(sequence && isRemiPresent) {
       enqueueUI('displayDialog', sequence);
     }
   });
-  backendEventBus.on('before-game-start', () => {
+  backendEventBus.on(EventNames.Game.BEFORE_GAME_START, () => {
     const openingDialog = getOpeningDialog();
     if(openingDialog && isRemiPresent) {
       enqueueUI('displayDialog', openingDialog);
@@ -292,7 +291,7 @@ function registerListeners() {
   });
   
   // 监听玩家获得技能事件
-  backendEventBus.on('player-claim-skill', (params) => {
+  backendEventBus.on(EventNames.Player.SKILL_REWARD_CLAIMED, (params) => {
     // 检查是否已经触发过教程
     if (!playerLearnedMultiUseSkill && isRemiPresent) {
       const { skill } = params;
@@ -310,7 +309,7 @@ function registerListeners() {
   });
 
   // 监听玩家升级事件
-  backendEventBus.on('player-tier-upgraded', (player) => {
+  backendEventBus.on(EventNames.Player.TIER_UPGRADED, (player) => {
     // 触发升级对话
     const sequence = getTierUpgradedDialog(player);
     if (sequence && isRemiPresent) {
@@ -319,7 +318,7 @@ function registerListeners() {
   });
 
   // 监听玩家使用技能事件
-  backendEventBus.on('after-skill-use', (params) => {
+  backendEventBus.on(EventNames.Player.AFTER_SKILL_USE, (params) => {
     const {player, skill, result} = params;
     const sequence = getSkillUseDialog(player, skill, result);
     if(sequence && isRemiPresent) {
@@ -329,16 +328,16 @@ function registerListeners() {
 }
 
 function unregisterListeners () {
-  backendEventBus.off('before-battle');
-  backendEventBus.off('after-battle');
-  backendEventBus.off('before-game-start');
-  backendEventBus.off('player-claim-skill');
-  backendEventBus.off('player-tier-upgraded');
-  backendEventBus.off('after-skill-use');
+  backendEventBus.off(EventNames.Game.BEFORE_BATTLE);
+  backendEventBus.off(EventNames.Game.AFTER_BATTLE);
+  backendEventBus.off(EventNames.Game.BEFORE_GAME_START);
+  backendEventBus.off(EventNames.Player.SKILL_REWARD_CLAIMED);
+  backendEventBus.off(EventNames.Player.TIER_UPGRADED);
+  backendEventBus.off(EventNames.Player.AFTER_SKILL_USE);
 }
 
 export function triggerBeforeGameStart() {
-  backendEventBus.emit('before-game-start');
+  backendEventBus.emit(EventNames.Game.BEFORE_GAME_START);
 }
 
 // 导出注册函数

@@ -1,7 +1,7 @@
 // battle.js - 战斗阶段逻辑
 
 import EnemyFactory from './enemyFactory.js'
-import backendEventBus from '../backendEventBus.js'
+import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { reactive } from 'vue'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects } from './effectProcessor.js'
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
@@ -18,7 +18,7 @@ export function startBattle() {
   generateEnemy(gameState);
 
   // 战前事件
-  backendEventBus.emit('before-battle', {
+  backendEventBus.emit(EventNames.Game.BEFORE_BATTLE, {
     battleCount: gameState.battleCount,
     player: gameState.player,
     enemy: gameState.enemy
@@ -65,9 +65,6 @@ export function generateEnemy() {
     // 普通敌人
     gameState.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, false);
   }
-  
-  // 初始化敌人效果管理器
-  gameState.enemy.init();
 }
 
 // 开始玩家回合
@@ -142,7 +139,7 @@ export function useSkill(skill) {
     stage ++;
   }
 
-  backendEventBus.emit('after-skill-use', { player: gameState.player, skill: skill });
+  backendEventBus.emit(EventNames.Player.AFTER_SKILL_USE, { player: gameState.player, skill: skill });
   handleSkillAfterUse(skill);
 
   // UI解锁
@@ -160,7 +157,7 @@ export function dropSkill() {
     // 左侧技能进入后备技能
     gameState.player.backupSkills.push(droppedSkill);
     // 触发技能丢弃事件
-    backendEventBus.emit('skill-dropped', { skill: droppedSkill });
+    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
   }
 }
 
@@ -176,14 +173,14 @@ export function enemyTurn() {
   enqueueDelay(1000);
 
   // 触发敌人回合开始事件
-  backendEventBus.emit('enemy-turn-start');
+  backendEventBus.emit(EventNames.Enemy.TURN_START);
 
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.enemy);
   if (isStunned) {
     addSystemLog('敌人被眩晕，跳过回合！');
     // 触发敌人回合结束事件，通知BattleScreen组件
-    backendEventBus.emit('enemy-turn-end');
+    backendEventBus.emit(EventNames.Enemy.TURN_END);
     startNextTurn(gameState);
     enqueueUI('unlockControl');
     return;
@@ -199,11 +196,11 @@ export function enemyTurn() {
     return;
   }
   // 触发敌人行动结束事件，通知BattleScreen组件
-  backendEventBus.emit('enemy-action-end');
+  backendEventBus.emit(EventNames.Enemy.ACTION_END);
   // 结算敌人回合结束效果
   processEndOfTurnEffects(gameState.enemy);
   // 触发敌人回合结束事件，通知BattleScreen组件
-  backendEventBus.emit('enemy-turn-end');
+  backendEventBus.emit(EventNames.Enemy.TURN_END);
   // 敌人行动结束后开始新回合
   startNextTurn(gameState);
 }
@@ -261,32 +258,20 @@ export function endBattle(isVictory) {
   }
 
   // 发送胜利事件
-  if(isVictory) backendEventBus.emit('battle-victory');
+  if(isVictory) backendEventBus.emit(EventNames.Enemy.BATTLE_VICTORY);
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
   setTimeout(() => {
     // 解锁操作面板
-    backendEventBus.emit('enemy-turn-end');
+    backendEventBus.emit(EventNames.Enemy.TURN_END);
 
     // 战斗结束事件
-    backendEventBus.emit('after-battle', {
+    backendEventBus.emit(EventNames.Game.AFTER_BATTLE, {
       battleCount : gameState.battleCount,
       player: gameState.player,
       enemy: gameState.enemy,
       isVictory: isVictory
     });
-    
-    if (isVictory) {
-      // 计算奖励
-      clearRewards();
-      spawnRewards();
-      gameState.gameStage = 'rest';
-      gameState.isVictory = true;
-    } else {
-      // 玩家失败
-      gameState.isVictory = false;
-      gameState.gameStage = 'end';
-    }
   }, 3000); // 3秒延迟
 }
 
@@ -299,7 +284,7 @@ function fillFrontierSkills(player) {
   }
   
   // 触发技能列表更新事件
-  backendEventBus.emit('frontier-skills-updated', {
+  backendEventBus.emit(EventNames.Player.FRONTIER_UPDATED, {
     frontierSkills: player.frontierSkills,
     backupSkills: player.backupSkills
   });
@@ -329,7 +314,7 @@ function handleSkillAfterUse(skill) {
       }
       
       // 触发技能列表更新事件
-      backendEventBus.emit('frontier-skills-updated', {
+      backendEventBus.emit(EventNames.Player.FRONTIER_UPDATED, {
         frontierSkills: gameState.player.frontierSkills,
         backupSkills: gameState.player.backupSkills
       });
