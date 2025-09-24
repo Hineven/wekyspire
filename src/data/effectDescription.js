@@ -25,6 +25,11 @@ const effectDescriptions = {
     icon: '💥',
     color: '#FF4500' // 橙红色
   },
+  '虚弱': {
+    name: '虚弱',
+    description: '造成50%伤害，回合结束时，层数减1',
+    icon: '🩶'
+  },
 
   // 回合开始时触发的效果
   '吸收': {
@@ -124,6 +129,18 @@ const effectDescriptions = {
     description: '回合结束时，减少层数层集中、力量、坚固',
     icon: '🧟',
     color: '#800080' // 紫色
+  },
+  '不灭': {
+    name: '不灭',
+    description: '不会死亡。回合结束时，层数减1',
+    icon: '♾️',
+    color: '#FF8C00' // 深橙色
+  },
+  '禁忌': {
+    name: '禁忌',
+    description: '层数达0时，死亡。回合结束时，层数减1',
+    icon: '☠️',
+    color: '#c36cff' // 靛青色
   },
   
   // 发动技能时触发的效果

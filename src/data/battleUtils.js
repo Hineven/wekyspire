@@ -1,6 +1,9 @@
 // battleUtil.js - 提供战斗中的攻击结算、治疗结算等修改战斗状态相关助手函数，以供技能、敌人和效果结算逻辑调用
 
-import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects } from './effectProcessor.js';
+import {
+  processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects,
+  processDamageDealtEffects
+} from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -15,6 +18,8 @@ function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker 
     mitigatedDamage -= shieldDamage;
     hpDamage = mitigatedDamage;
     target.hp = Math.max(target.hp - mitigatedDamage, 0);
+
+    processDamageDealtEffects(target, hpDamage);
 
     if (mitigatedDamage > 0) {
       if (mode === 'attack') {

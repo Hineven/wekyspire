@@ -262,6 +262,11 @@ export function processPostAttackEffects(attacker, target, damage) {
   let finalDamage = damage;
   // 力量效果
   finalDamage += (attacker.effects['力量'] || 0);
+
+  // 虚弱效果
+  if (attacker.effects['虚弱'] > 0) {
+    finalDamage = Math.ceil(finalDamage * 0.5);
+  }
   
 
   // 处理超频效果

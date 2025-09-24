@@ -1,7 +1,7 @@
 <template>
   <HurtAnimationWrapper :unit="player" ref="hurtAnimation">
     <div class="player-status-panel" :class="{ 'rest-mode': restScreen }" 
-    :style="restScreen ? { backgroundColor: getPlayerTierColor(player.tier), color: getPlayerTierTextColor(player.tier) } : {}">
+    :style="restScreen ? getPlayerPanelTierStyle() : {}">
       <PlayerBasicStats :player="player" :show-mana="restScreen" />
     
       <!-- 魏启条 -->
@@ -26,7 +26,7 @@
 
 <script>
 import EffectDisplayBar from './EffectDisplayBar.vue';
-import { getPlayerTierLabel, getPlayerTierColor } from '../utils/tierUtils.js';
+import {getPlayerTierLabel, getPlayerTierColor, getPlayerTierPallete} from '../utils/tierUtils.js';
 import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
 import PlayerBasicStats from './PlayerBasicStats.vue';
 import HealthBar from './HealthBar.vue';
@@ -59,12 +59,14 @@ export default {
     };
   },
   methods: {
-    getPlayerTierLabel,
-    getPlayerTierColor,
-
-    getPlayerTierTextColor() {
-      if(this.player.tier >= 9) return 'white';
-      return 'black';
+    getPlayerPanelTierStyle() {
+      const pallette = getPlayerTierPallete(this.player.tier);
+      return {
+        borderWidth: '8px',
+        borderColor: pallette.major,
+        backgroundColor: pallette.background,
+        color: pallette.text
+      };
     },
     
     
@@ -75,7 +77,7 @@ export default {
       // 颜色渐变动画
       const panel = this.$el.querySelector('.player-status-panel');
       if (panel) {
-        const originalColor = this.getPlayerTierColor(this.player.tier);
+        const originalColor = this.getPlayerPanelTierStyle(this.player.tier).major;
         
         // 闪烁效果
         panel.style.transition = 'background-color 0.5s ease';

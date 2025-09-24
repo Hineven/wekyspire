@@ -17,6 +17,7 @@ class Skill {
     this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称。如果有多个升级方向，则为数组。
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
+    this.baseColdDownTurns = 0;
   }
 
   get manaCost () {
@@ -28,7 +29,7 @@ class Skill {
   }
 
   get coldDownTurns() {
-    return 0;
+    return Math.max(this.baseColdDownTurns, 0);
   }
 
   canColdDown() {

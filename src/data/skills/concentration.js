@@ -7,11 +7,12 @@ import { addBattleLog } from '../battleLogUtils.js';
 // 思索（C-）
 export class SmallThinking extends Skill {
   constructor() {
-    super('思索', 'normal', 1, 0, 3, 1);
+    super('思索', 'normal', 1, 0, 3);
+    this.baseColdDownTurns = 3;
   }
 
   get coldDownTurns() {
-    return Math.max(3 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -29,11 +30,12 @@ export class SmallThinking extends Skill {
 // 深思（B-）
 export class DeepThinking extends Skill {
   constructor() {
-    super('深思', 'normal', 3, 0, 5, 1);
+    super('深思', 'normal', 3, 0, 4);
+    this.baseColdDownTurns = 4;
   }
 
   get coldDownTurns() {
-    return Math.max(4 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -48,14 +50,74 @@ export class DeepThinking extends Skill {
   }
 }
 
-// 想入非非（C+）
-export class DreamThinking extends Skill {
+// 推敲（B+）
+export class CarefulThinking extends Skill {
   constructor() {
-    super('想入非非', 'normal', 2, 0, 2, 1);
+    super('推敲', 'normal', 5, 0, 5);
+    this.baseColdDownTurns = 5;
   }
 
   get coldDownTurns() {
-    return Math.max(4 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    player.addEffect('集中', 3);
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return '获得3层/effect{集中}'
+  }
+}
+
+// 出神（A）
+export class PureThinking extends Skill {
+  constructor() {
+    super('出神', 'normal', 7, 0, 7);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    player.addEffect('集中', 5);
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return '获得5层/effect{集中}'
+  }
+}
+
+// 顿悟（A）
+export class Epiphany extends Skill {
+  constructor() {
+    super('顿悟', 'normal', 7, 0, 0, 1);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    player.addEffect('集中', 5);
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return '获得5层/effect{集中}'
+  }
+}
+
+// 想入非非（C+）
+export class DreamThinking extends Skill {
+  constructor() {
+    super('想入非非', 'normal', 2, 0, 1);
+    this.baseColdDownTurns = 4;
+  }
+
+  get coldDownTurns() {
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -78,11 +140,12 @@ export class DreamThinking extends Skill {
 // 弱集中 （C-）
 export class SmallConcentration extends Skill {
   constructor() {
-    super('弱集中', 'magic', 1, 1, 1, 1);
+    super('弱集中', 'normal', 1, 1, 1);
+    this.baseColdDownTurns = 2;
   }
 
   get coldDownTurns() {
-    return Math.max(2 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -97,14 +160,15 @@ export class SmallConcentration extends Skill {
   }
 }
 
-// 集中（B-）
+// 集中（C+）
 export class Concentration extends Skill {
   constructor() {
-    super('集中', 'magic', 3, 1, 1, 1);
+    super('集中', 'normal', 2, 2, 1);
+    this.baseColdDownTurns = 3;
   }
 
   get coldDownTurns() {
-    return Math.max(3 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -119,16 +183,11 @@ export class Concentration extends Skill {
   }
 }
 
-// 专注（B+）
+// 专注（B）
 export class FullConcentration extends Skill {
   constructor() {
-    super('专注', 'magic', 3, 2, 1, 1);
+    super('专注', 'normal', 4, 3, 1, 1);
   }
-
-  get coldDownTurns() {
-    return Math.max(4 - this.power, 0);
-  }
-
   // 使用技能
   use(player, enemy, stage) {
     player.addEffect('超然', 1);
@@ -141,3 +200,38 @@ export class FullConcentration extends Skill {
   }
 }
 
+// 忘我（A-）
+export class MaximumConcentration extends Skill {
+  constructor() {
+    super('忘我', 'normal', 6, 5, 1, 1);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    player.addEffect('超然', 2);
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return '获得2层/effect{超然}'
+  }
+}
+
+// 纯粹（A+）
+export class Devotion extends Skill {
+  constructor() {
+    super('纯粹', 'normal', 8, 8, 1, 1);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    player.addEffect('超然', 5);
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return '获得5层/effect{超然}'
+  }
+}

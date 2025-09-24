@@ -6,6 +6,7 @@ import { startBattle, useSkill, dropSkill, endPlayerTurn } from './data/battle.j
 import {
   claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
+import {upgradePlayerTier} from "./data/player";
 
 function startGame() {
   // 触发开场事件（通过对话模块触发后端事件，总线隔离）
@@ -24,6 +25,9 @@ function startGame() {
   slots[2] = initialSkill3;
   slots[3] = initialSkill4;
   backendGameState.player.skillSlots = slots;
+  for(var i = 0; i < 9; i++)
+    upgradePlayerTier(backendGameState.player);
+  // 直接给满级以便测试
 
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.START_BATTLE);

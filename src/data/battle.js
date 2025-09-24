@@ -261,18 +261,17 @@ export function endBattle(isVictory) {
   if(isVictory) backendEventBus.emit(EventNames.Enemy.BATTLE_VICTORY);
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
-  setTimeout(() => {
-    // 解锁操作面板
-    backendEventBus.emit(EventNames.Enemy.TURN_END);
+  enqueueDelay(3000);
+  // 解锁操作面板
+  enqueueUI('unlockControl');
 
-    // 战斗结束事件
-    backendEventBus.emit(EventNames.Game.AFTER_BATTLE, {
-      battleCount : gameState.battleCount,
-      player: gameState.player,
-      enemy: gameState.enemy,
-      isVictory: isVictory
-    });
-  }, 3000); // 3秒延迟
+  // 战斗结束事件
+  backendEventBus.emit(EventNames.Game.AFTER_BATTLE, {
+    battleCount : gameState.battleCount,
+    player: gameState.player,
+    enemy: gameState.enemy,
+    isVictory: isVictory
+  });
 }
 
 

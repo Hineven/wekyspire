@@ -12,19 +12,18 @@ export function upgradePlayerTier (player) {
   if (nextTier !== undefined) {
     player.tier = nextTier;
     player.maxMana += 1;
-    if(player.tier === 2) {
+    if (player.tier === 2) {
       // 特殊：第一次升级时多获得一点魏启
       player.maxMana += 1;
     }
-    if(player.maxActionPoints < 8) {
-      player.maxActionPoints ++;
+    if (player.maxActionPoints < 8) {
+      player.maxActionPoints++;
     }
-    player.hp = player.maxHp;
-    player.mana = player.maxMana;
-    backendEventBus.emit(EventNames.Player.TIER_UPGRADED, player);
-    return true;
   }
-  return false;
+  player.hp = player.maxHp;
+  player.mana = player.maxMana;
+  backendEventBus.emit(EventNames.Player.TIER_UPGRADED, player);
+  return true;
 }
 
 export function getPlayerTierFromTierIndex(tierIndex) {
