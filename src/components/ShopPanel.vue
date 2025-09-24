@@ -4,8 +4,8 @@
     <h2>商店</h2>
     <div class="shop-items">
       <div 
-        v-for="(item, index) in shopItems" 
-        :key="'item-' + index" 
+        v-for="item in shopItems"
+        :key="item.uniqueID"
         class="shop-item"
         :class="'tier-' + item.tier"
       >

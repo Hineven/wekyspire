@@ -14,6 +14,8 @@ class Enemy extends Unit {
     this.description = '一个面目狰狞的敌人！'; // 敌人描述
     this.type = 'normal'; // normal / special / boss
     this.avatarUrl = avatarUrl; // 敌人头像URL
+    // 为每个实例生成唯一ID（用于动画同步等）
+    this.uniqueID = Math.random().toString(36).substring(2, 10);
   }
 
   get isBoss () {
@@ -33,7 +35,7 @@ class Enemy extends Unit {
     // 初始化逻辑（如果需要）
   }
 
-  // 执行行动
+  // 执行动作
   act(player) {
     // 子类需要实现具体逻辑
   }

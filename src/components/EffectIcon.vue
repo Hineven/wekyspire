@@ -148,6 +148,7 @@ export default {
   font-size: 16px;
   cursor: help;
   margin: 0 2px;
+  font-weight: bold;
   transition: transform 0.5s ease;
 }
 
@@ -171,6 +172,7 @@ export default {
   padding: 10px;
   border-radius: 4px;
   font-size: 14px;
+  font-weight: bold;
   z-index: 10000;
   max-width: 300px;
   word-wrap: break-word;

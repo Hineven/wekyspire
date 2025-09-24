@@ -5,7 +5,7 @@
       <div class="skill-cards">
         <SkillCard
           v-for="(skill, index) in skills" 
-          :key="'skill-' + index"
+          :key="skill.uniqueID"
           :skill="skill"
           :preview-mode="true"
           @skill-card-clicked="onSkillCardClicked"

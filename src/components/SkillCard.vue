@@ -2,19 +2,20 @@
   <div 
     class="skill-card"
   >
-    <div :class="['skill-card-panel', 'tier-' + skill.tier, { disabled: disabled }]"
+    <div class="mana-cost" v-if="skill.manaCost > 0">
+      <span class="mana-icon">💧</span>
+      <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
+    </div>
+    <div class="action-cost" v-if="skill.actionPointCost > 0">
+      <span class="action-icon">⚡</span>
+      <span class="action-value">{{ skill.actionPointCost }}</span>
+    </div>
+    <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
+    <div class="skill-subtitle" v-if="skill.subtitle"> {{skill.subtitle}} </div>
+    <div :class="['skill-card-panel', { disabled: disabled }]" :style="skillCardStyle"
      @click="onClick"
      @mouseenter="onMouseEnter"
      @mouseleave="onMouseLeave">
-      <div class="mana-cost" v-if="skill.manaCost > 0">
-        <span class="mana-icon">💧</span>
-        <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
-      </div>
-      <div class="action-cost" v-if="skill.actionPointCost > 0">
-        <span class="action-icon">⚡</span>
-        <span class="action-value">{{ skill.actionPointCost }}</span>
-      </div>
-      <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
       <div class="skill-name" :style="{color: skillNameColor}">
         {{ skill.name + (skill.power < 0 ? '（' + skill.power + '）' : '') + (skill.power > 0 ? '（+' + skill.power + '）' : '') }}</div>
       <div class="skill-description">
@@ -35,8 +36,9 @@
 
 <script>
 import ColoredText from './ColoredText.vue';
-import { getSkillTierLabel } from '../utils/tierUtils.js';
+import {getSkillTierColor, getSkillTierLabel} from '../utils/tierUtils.js';
 import frontendEventBus from '../frontendEventBus.js';
+import skill from "../data/skill";
 
 export default {
   name: 'SkillCard',
@@ -85,6 +87,15 @@ export default {
       } else {
         return 'black';
       }
+    },
+    skillCardStyle () {
+      const color = getSkillTierColor(this.skill.tier);
+      const backgroundColor = this.adjustColorBrightness(color, 40);
+      const borderColor = this.adjustColorBrightness(color, -40);
+      return {
+        backgroundColor: backgroundColor,
+        borderColor: borderColor
+      };
     }
   },
   mounted() {
@@ -95,6 +106,41 @@ export default {
   },
   methods: {
     getSkillTierLabel,
+    adjustColorBrightness(color, percent) {
+      // 移除可能存在的#号
+      let hex = color.replace(/#/g, '');
+
+      // 验证颜色格式是否正确
+      if (hex.length !== 6) {
+        throw new Error('无效的颜色格式，请使用6位十六进制颜色，如"#AACC12"');
+      }
+
+      // 将十六进制转换为RGB分量
+      let r = parseInt(hex.substring(0, 2), 16);
+      let g = parseInt(hex.substring(2, 4), 16);
+      let b = parseInt(hex.substring(4, 6), 16);
+
+      // 计算调整值（基于百分比）
+      const factor = percent / 100;
+
+      // 调整每个颜色分量的亮度
+      r = Math.round(r + (255 - r) * factor);
+      g = Math.round(g + (255 - g) * factor);
+      b = Math.round(b + (255 - b) * factor);
+
+      // 确保值在0-255范围内
+      r = Math.min(255, Math.max(0, r));
+      g = Math.min(255, Math.max(0, g));
+      b = Math.min(255, Math.max(0, b));
+
+      // 将RGB转回十六进制，并确保两位表示
+      const toHex = (c) => {
+        const hex = c.toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+      };
+
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+    },
     onClick(event) {
       if (!this.disabled) {
         // 播放技能激活动画
@@ -228,7 +274,6 @@ export default {
 .skill-card-panel {
   z-index: 1;
   width: 150px;
-  height: 220px;
   padding: 15px;
   border-radius: 8px;
   cursor: pointer;
@@ -238,8 +283,7 @@ export default {
   align-items: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.3s ease;
-  background-color: white;
-  border: 1px solid #eee;
+  border: 3px solid #eee;
 }
 
 .skill-card-panel:hover {
@@ -333,9 +377,22 @@ export default {
   font-size: 16px;
 }
 
+.skill-subtitle {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  padding: 2px 6px;
+  color: dimgray;
+  font-size: 12px;
+  font-style: italic;
+}
+
 .skill-card {
-  /* width: 150px; */
-  min-height: 100px;
+  width: 212px;
+  height: 280px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -343,67 +400,12 @@ export default {
   align-items: center;
   /* transition: all 0.3s ease; */
   position: relative;
-}
-
-/* 不同等阶的技能卡片样式 */
-/* D */
-.skill-card-panel.tier-0 { 
-  background-color: #ffffff;
-  border: 1px solid #000000;
-}
-/* C- */
-.skill-card-panel.tier-1 {
-  background-color: #ffffff;
-  border: 1px solid #41db39;
-}
-
-/* C+ */
-.skill-card-panel.tier-2 {
-  background-color: #daffbc;
-  border: 1px solid #41db39;
-}
-
-/* B- */
-.skill-card-panel.tier-3 {
-  background-color: #ffffff;
-  border: 1px solid #759eff;
-}
-
-/* B */
-.skill-card-panel.tier-4 {
-  background-color: #bfebff;
-  border: 1px solid #759eff;
-}
-
-/* B+ */
-.skill-card-panel.tier-5 {
-  background-color: #ffffff;
-  border: 1px solid #d072ff;
-}
-
-
-/* A- */
-.skill-card-panel.tier-6 {
-  background-color: #f4daff;
-  border: 1px solid #d072ff;
-}
-
-/* A */
-.skill-card-panel.tier-7 {
-  background-color: #ffffff;
-  border: 1px solid #ff9059;
-}
-
-/* A+ */
-.skill-card-panel.tier-8 {
-  background-color: #ffe4d0;
-  border: 1px solid #ff9059;
-}
-
-/* S */
-.skill-card-panel.tier-9 {
-  background-color: #ffc0c0;
-  border: 1px solid #ff0000;
+  background-image: url("@assets/cards/wood-3.png");
+  background-origin: content-box;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-color: white;
 }
 
 /* 技能激活动画关键帧 */

@@ -8,6 +8,8 @@ class Item {
     this.spawnWeight = spawnWeight; // 商品生成权重，默认为1
     this.alwaysPresent = alwaysPresent; // 是否为常驻商品，默认为false
     this.stock = stock; // 商品库存，Infinity表示无限制
+    // 为每个实例生成一个唯一ID（用于动画同步与列表key）
+    this.uniqueID = Math.random().toString(36).substring(2, 10);
   }
 
   // 购买商品效果
