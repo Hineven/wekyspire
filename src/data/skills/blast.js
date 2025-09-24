@@ -1,16 +1,14 @@
 import Skill from '../skill.js';
 import { launchAttack } from '../battleUtils.js';
 
-// 火弹术(C-)
+// 火矢(C-)
 export class Fireshot extends Skill {
   constructor() {
-    super('火弹术', 'magic', 1, 1, 1, 1, '火球术');
-    this.upgradeTo = "火球术";
+    super('火矢', 'magic', 1, 1, 1, 1, '火球术');
+    this.upgradeTo = "强火矢";
+    this.baseColdDownTurns = 3;
   }
 
-  get coldDownTurns() {
-    return 3;
-  }
 
   get baseDamage() {
     return Math.max(14 + 6 * this.power, 1);
@@ -33,15 +31,12 @@ export class Fireshot extends Skill {
   }
 }
 
-// 火球术(B-)
+// 强火矢(B-)
 export class Fireball extends Skill {
   constructor() {
-    super('火球术', 'magic', 3, 1, 1, 1, '火球术');
-    this.upgradeTo = "大火球术";
-  }
-
-  get coldDownTurns() {
-    return 3;
+    super('强火矢', 'magic', 3, 1, 1, 1, '火球术');
+    this.upgradeTo = "炙火矢";
+    this.baseColdDownTurns = 4;
   }
 
   get baseDamage() {
@@ -65,23 +60,20 @@ export class Fireball extends Skill {
   }
 }
 
-// 大火球术(B+)
+// 炙火矢(B+)
 export class LargeFireball extends Skill {
   constructor() {
-    super('大火球术', 'magic', 5, 2, 1, 1, '火球术');
-    this.upgradeTo = "弱卡拉迪亚爆裂术";
-  }
-
-  get coldDownTurns() {
-    return 4;
+    super('炙火矢', 'magic', 5, 3, 1, 1, '火球术');
+    this.upgradeTo = "小爆裂术";
+    this.baseColdDownTurns = 5;
   }
 
   get baseDamage() {
-    return Math.max(20 + 8 * this.power, 1);
+    return Math.max(28 + 10 * this.power, 1);
   }
 
   getDamage(player) {
-    return this.baseDamage + player.magic * 6;
+    return this.baseDamage + player.magic * 9;
   }
 
   // 使用技能
@@ -93,27 +85,24 @@ export class LargeFireball extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if(player) return `造成${this.getDamage(player) + (player?.attack ?? 0)}点伤害`;
-    return `造成【${this.baseDamage} + 6x/named{灵能}】点伤害`;
+    return `造成【${this.baseDamage} + 9x/named{灵能}】点伤害`;
   }
 }
 
 
-// 弱卡拉迪亚爆裂术(A)
-export class KaradiaBurst extends Skill {
+// 小爆裂术(A-)
+export class TinyKaradiaBurst extends Skill {
   constructor() {
-    super('弱卡拉迪亚爆裂术', 'magic', 7, 3, 1, 1, '火球术');
-  }
-
-  get coldDownTurns() {
-    return 6;
+    super('小爆裂术', 'magic', 6, 5, 1, Infinity, '火球术');
+    this.baseColdDownTurns = 8;
   }
 
   get baseDamage() {
-      return Math.max(30 + 15 * this.power, 1);
+      return Math.max(40 + 35 * this.power, 1);
   }
 
   getDamage(player) {
-      return this.baseDamage + player.magic * 12;
+      return this.baseDamage + player.magic * 16;
   }
 
   // 使用技能
@@ -125,14 +114,14 @@ export class KaradiaBurst extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if(player) return `造成${this.getDamage(player) + (player?.attack ?? 0)}点伤害`;
-    return `造成【${this.baseDamage} + 12x/named{灵能}】点伤害`;
+    return `造成【${this.baseDamage} + 16x/named{灵能}】点伤害`;
   }
 }
 
-// 齐明天焱(S)
+// 齐明天焱(A+)
 export class SolarBlast extends Skill {
   constructor() {
-    super('齐明天焱', 'magic', 9, 5, 1, 1, '火球术');
+    super('齐明天焱', 'magic', 8, 8, 1, 1, '火球术');
     this.subtitle = "纯粹的破坏力";
   }
 
@@ -141,11 +130,11 @@ export class SolarBlast extends Skill {
   }
 
   get baseDamage() {
-    return Math.max(50 + 25 * this.power, 1);
+    return Math.max(80 + 40 * this.power, 1);
   }
 
   get multiplier() {
-    return 20 + 5 * this.power;
+    return 31 + 5 * this.power;
   }
 
   getDamage(player) {
@@ -161,15 +150,6 @@ export class SolarBlast extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if(player) return `造成${this.getDamage(player) + (player?.attack ?? 0)}点伤害`;
-    return `造成【${this.baseDamage} + ${this.multipler}x/named{灵能}】点伤害`;
+    return `造成【${this.baseDamage} + ${this.multiplier}x/named{灵能}】点伤害`;
   }
-};
-
-// 导出所有技能
-export default {
-  Fireshot,
-  Fireball,
-  LargeFireball,
-  KaradiaBurst,
-  SolarBlast
 };

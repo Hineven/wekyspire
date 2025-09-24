@@ -1,15 +1,5 @@
 // 等阶工具函数
-
-// 玩家等阶映射
-const PLAYER_TIER_MAP = {
-  '0': '见习灵御',
-  '2': '普通灵御',
-  '3': '中级灵御',
-  '5': '高级灵御',
-  '7': '准大师灵御',
-  '8': '大师灵御',
-  '9': '传奇灵御'
-};
+import {getPlayerTierFromTierIndex} from "../data/player";
 
 // 技能等阶映射
 const SKILL_TIER_MAP = {
@@ -47,14 +37,17 @@ const ITEM_TIER_MAP = {
 
 
 // 玩家等阶颜色映射
-const PLAYER_TIER_COLORS = {
-  '0': '#FFFFFF', // 见习灵御 - 白色
-  '2': '#66FF66', // 普通灵御 - 绿色
-  '3': '#88BBFF', // 中级灵御 - 蓝色
-  '5': '#AA44EE', // 高级灵御 - 紫色
-  '7': '#FFFFAA',  // 准大师灵御 - 金色 
-  '8': '#FF7722', // 大师灵御 - 橙色
-  '9': '#FF0000' // 传奇灵御 - 红色
+const PLAYER_TIER_PALLETE = {
+  '0': {major: '#333333', background: '#DDDDDD', text: '#000000'}, // 旅人 - 黑色 + 灰色
+  '1': {major: '#008000', background: '#90EE90', text: '#000000'}, // 见习灵御 - 绿色 + 淡绿色
+  '2': {major: '#00FFFF', background: '#E0FFFF', text: '#000000'}, // 普通灵御 - 青色 + 浅青色
+  '3': {major: '#00008B', background: '#ADD8E6', text: '#000000'}, // 中级灵御 - 深蓝色 + 浅蓝色
+  '4': {major: '#700090', background: '#cfbfd8', text: '#000000'}, // 资深灵御 - 紫色 + 淡紫色
+  '5': {major: '#A00050', background: '#d8bfcc', text: '#000000'}, // 高级灵御 - 嫣红色 + 淡紫色
+  '6': {major: '#FFA500', background: '#FFFFFF', text: '#000000'},  // 准大师灵御 - 橙色
+  '7': {major: '#FF8800', background: '#FFE5A0', text: '#000000'}, // 大师灵御 - 橙色 + 金色
+  '8': {major: '#FF0000', background: '#FFC0A0', text: '#000000'}, // 一代宗师 - 红色 + 橙红色
+  '9': {major: '#CCCCCC', background: '#000000', text: '#FFFFFF'} // 传奇 - 深红色 + 红色 （白字）
 };
 
 // 技能等阶颜色映射
@@ -112,7 +105,7 @@ const ITEM_TIER_CLASSES = {
 
 // 根据玩家等阶获取标签
 export function getPlayerTierLabel(tier) {
-  return PLAYER_TIER_MAP[tier] || '';
+  return getPlayerTierFromTierIndex(tier).name || '';
 }
 
 // 根据技能等阶获取标签
@@ -132,7 +125,11 @@ export function getItemTierLabel(tier) {
 
 // 根据玩家等阶获取颜色
 export function getPlayerTierColor(tier) {
-  return PLAYER_TIER_COLORS[tier] || '#000000';
+  return PLAYER_TIER_PALLETE[tier].major || '#000000';
+}
+
+export function getPlayerTierPallete(tier) {
+  return PLAYER_TIER_PALLETE[tier] || {major: '#000000', minor: '#000000', background: '#DDDDDD'};
 }
 
 // 根据技能等阶获取颜色

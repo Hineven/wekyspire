@@ -115,7 +115,7 @@ export class PrecisePunchKick extends Skill {
   }
   
   get damage () {
-    return Math.max(10 + 4 * this.power, 6);
+    return Math.max(8 + 4 * this.power, 6);
   }
   
   canUse (player) {
@@ -196,5 +196,24 @@ export class OffPowerPunchKick extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     return `造成${this.damage + (player?.attack ?? 0)}点伤害，/effect{力量}减1`;
+  }
+}
+
+export class FinalPunchKick extends Skill {
+  constructor() {
+    super('终极一击', 'normal', 0, 0, 2, 1);
+  }
+
+  get damage () {
+    return Math.max(8, 19 + 6 * this.power);
+  }
+
+  use (player, enemy, stage) {
+    launchAttack(player, enemy, this.damage);
+    return true;
+  }
+
+  regenerateDescription (player) {
+    return `造成${this.damage + (player?.attack ?? 0)}点伤害`;
   }
 }

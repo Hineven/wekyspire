@@ -50,8 +50,8 @@ import BattleLogPanel from './BattleLogPanel.vue';
 import EnemyStatusPanel from './EnemyStatusPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import SkillCard from './SkillCard.vue';
-import { useSkill, endPlayerTurn, dropSkill } from '../data/battle.js';
 import frontendEventBus from '../frontendEventBus.js';
+import backendEventBus, {EventNames} from "../backendEventBus";
 
 export default {
   name: 'BattleScreen',
@@ -95,7 +95,7 @@ export default {
       this.logs = [];
     },
     canUseSkill(skill) {
-      return skill && skill.canUse(this.player) && skill.usesLeft !== 0;
+      return skill && typeof skill.canUse === 'function' && skill.canUse(this.player) && skill.usesLeft !== 0;
     },
     onSkillCardClicked(skill, event) {
       if(this.canUseSkill(skill)) {
@@ -103,15 +103,16 @@ export default {
         const actionPointCost = skill.actionPointCost;
         const mouseX = event.clientX;
         const mouseY = event.clientY;
-        useSkill(skill);
+        const skillIndex = this.player.frontierSkills.indexOf(skill);
+        backendEventBus.emit(EventNames.Player.USE_SKILL, skillIndex);
         this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },
     onEndTurnButtonClicked() {
-      endPlayerTurn();
+      backendEventBus.emit(EventNames.Player.END_TURN);
     },
     onDropSkillButtonClicked() {
-      dropSkill();
+      backendEventBus.emit(EventNames.Player.DROP_SKILL);
     },
     generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY) {
       const particles = [];

@@ -210,11 +210,11 @@ export class StrengthenI extends Skill {
 // 锻造技能
 export class Forge extends Skill {
   constructor() {
-    super('锻造', 'magic', 2, 1, 1, 1, "锻造");
+    super('锻造', 'magic', 2, 0, 1, 1, "锻造");
   }
 
   get coldDownTurns () {
-    return 4 + Math.min(this.power, 0);
+    return Math.max(3 - Math.max(this.power - 1, 0), 0);
   }
   
   use(player, enemy, stage) { 

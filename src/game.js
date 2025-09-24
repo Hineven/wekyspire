@@ -6,6 +6,7 @@ import { startBattle, useSkill, dropSkill, endPlayerTurn } from './data/battle.j
 import {
   claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
+import {upgradePlayerTier} from "./data/player";
 
 function startGame() {
   // 触发开场事件（通过对话模块触发后端事件，总线隔离）
@@ -24,6 +25,9 @@ function startGame() {
   slots[2] = initialSkill3;
   slots[3] = initialSkill4;
   backendGameState.player.skillSlots = slots;
+  for(var i = 0; i < 9; i++)
+    upgradePlayerTier(backendGameState.player);
+  // 直接给满级以便测试
 
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.START_BATTLE);
@@ -44,8 +48,12 @@ export function initGameFlowListeners() {
   });
 
   // 玩家使用技能（由前端仅发事件，不直接调用函数）
-  backendEventBus.on(EventNames.Player.USE_SKILL, ({ skill }) => {
+  backendEventBus.on(EventNames.Player.USE_SKILL, (skill_index_in_frontier_skills ) => {
+    const skill = gameState.player.frontierSkills[skill_index_in_frontier_skills];
     if (skill) useSkill(skill);
+    else {
+      console.warn(`技能使用失败：前台技能列表中未找到第 ${skill_index_in_frontier_skills} 个技能`);
+    }
   });
 
   // 玩家丢弃最左侧技能

@@ -116,11 +116,73 @@ function projectToS(value, seen = new WeakMap()) {
   return out;
 }
 
+function getIdKeyFromArray(arr) {
+  if (!Array.isArray(arr)) return null;
+  for (const el of arr) {
+    if (el && typeof el === 'object') {
+      if ('uniqueID' in el) return 'uniqueID';
+      if ('id' in el) return 'id';
+    }
+  }
+  return null;
+}
+
+function createInstanceFromBackendNode(bEl) {
+  if (bEl && typeof bEl === 'object') {
+    const proto = Object.getPrototypeOf(toRaw(bEl));
+    return Object.create(proto || Object.prototype);
+  }
+  return {};
+}
+
+function reconcileArrayById(sArr, dArr, bArr) {
+  const idKey = getIdKeyFromArray(sArr) || getIdKeyFromArray(bArr);
+  if (!idKey) return false; // no id available
+  // Build id -> dest element map
+  const dstMap = new Map();
+  for (let i = 0; i < dArr.length; i++) {
+    const el = dArr[i];
+    if (el && typeof el === 'object' && idKey in el) {
+      dstMap.set(el[idKey], el);
+    }
+  }
+  const newArr = new Array(sArr.length);
+  for (let i = 0; i < sArr.length; i++) {
+    const sEl = sArr[i];
+    const bEl = Array.isArray(bArr) ? bArr[i] : undefined;
+    if (sEl && typeof sEl === 'object' && idKey in sEl) {
+      const id = sEl[idKey];
+      let target = dstMap.get(id);
+      if (!target) {
+        target = createInstanceFromBackendNode(bEl);
+      }
+      applyProjectionToDisplay(sEl, target, bEl);
+      newArr[i] = target;
+    } else if (sEl && typeof sEl === 'object') {
+      // object but no id on this element: create/reuse by backend prototype
+      let target = (Array.isArray(bArr) && bArr[i]) ? createInstanceFromBackendNode(bArr[i]) : {};
+      applyProjectionToDisplay(sEl, target, Array.isArray(bArr) ? bArr[i] : undefined);
+      newArr[i] = target;
+    } else {
+      // primitive
+      newArr[i] = sEl;
+    }
+  }
+  // In-place replace dArr contents to preserve reactive array reference
+  dArr.splice(0, dArr.length, ...newArr);
+  return true;
+}
+
 // 将 S 投影快照合并到显示层，仅写入/删除 S 字段，保留实例/方法
 function applyProjectionToDisplay(src, dst, backendNode = undefined) {
-  // 若为数组，执行就地元素级合并，尽量保持实例原型
+  // 若为数组，执行就地元素级合并（优先按 id 对齐），尽量保持实例原型
   if (Array.isArray(src) && Array.isArray(dst)) {
     const bArr = Array.isArray(backendNode) ? backendNode : undefined;
+    // Try keyed reconciliation first
+    const done = reconcileArrayById(src, dst, bArr);
+    if (done) return;
+
+    // Fallback: index-based merge (best effort)
     const len = src.length;
     for (let i = 0; i < len; i++) {
       const sEl = src[i];
@@ -130,22 +192,14 @@ function applyProjectionToDisplay(src, dst, backendNode = undefined) {
         if (dEl && typeof dEl === 'object') {
           applyProjectionToDisplay(sEl, dEl, bEl);
         } else {
-          // 为新元素创建与后端相同原型的对象（若可用），保留方法
-          let inst;
-          if (bEl && typeof bEl === 'object') {
-            inst = Object.create(Object.getPrototypeOf(toRaw(bEl)));
-          } else {
-            inst = {};
-          }
+          const inst = createInstanceFromBackendNode(bEl);
           applyProjectionToDisplay(sEl, inst, bEl);
           dst[i] = inst;
         }
       } else {
-        // 原始值：直接覆盖
         dst[i] = sEl;
       }
     }
-    // 调整长度以匹配源
     if (dst.length > len) dst.splice(len);
     return;
   }

@@ -22,7 +22,7 @@ export class BigWolf extends Enemy {
     // 在第二回合为玩家增加虚弱效果
     if (this.actRounds === 2) {
       addEnemyActionLog(`${this.name} 发出一生怒吼，你双股战战几欲跌倒！`);
-      this.addEffect('虚弱', 2);
+      player.addEffect('虚弱', 2);
       return ;
     }
 

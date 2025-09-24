@@ -41,7 +41,7 @@ export class Roll extends Skill {
   }
 
   get coldDownTurns() {
-    return Math.max(3 - this.power, 1);
+    return Math.max(4 - this.power, 1);
   }
 
   // 使用技能
