@@ -1,7 +1,13 @@
 <template>
   <div 
-    class="skill-card"
+    :class="['skill-card', { disabled: disabled }]"
+    @click="onClick"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
+    :style="skillCardStyle"
   >
+    <div class="skill-card-background-paper"></div>
+    <div class="skill-card-background-image" :style="{backgroundImage:`url(${skillCardImageUrl})`}"></div>
     <div class="mana-cost" v-if="skill.manaCost > 0">
       <span class="mana-icon">💧</span>
       <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
@@ -12,10 +18,7 @@
     </div>
     <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
     <div class="skill-subtitle" v-if="skill.subtitle"> {{skill.subtitle}} </div>
-    <div :class="['skill-card-panel', { disabled: disabled }]" :style="skillCardStyle"
-     @click="onClick"
-     @mouseenter="onMouseEnter"
-     @mouseleave="onMouseLeave">
+    <div :class="['skill-card-panel']">
       <div class="skill-name" :style="{color: skillNameColor}">
         {{ skill.name + (skill.power < 0 ? '（' + skill.power + '）' : '') + (skill.power > 0 ? '（+' + skill.power + '）' : '') }}</div>
       <div class="skill-description">
@@ -38,7 +41,7 @@
 import ColoredText from './ColoredText.vue';
 import {getSkillTierColor, getSkillTierLabel} from '../utils/tierUtils.js';
 import frontendEventBus from '../frontendEventBus.js';
-import skill from "../data/skill";
+
 
 export default {
   name: 'SkillCard',
@@ -96,6 +99,17 @@ export default {
         backgroundColor: backgroundColor,
         borderColor: borderColor
       };
+    },
+    skillCardImageUrl () {
+      let imageName = this.skill.image;
+      if(imageName) {} else {
+        imageName = 'wood-0.png';
+        if (this.skill.tier >= 2) imageName = 'wood-1.png';
+        if (this.skill.tier >= 4) imageName = 'wood-2.png';
+        if (this.skill.tier >= 6) imageName = 'wood-3.png';
+        if (this.skill.tier >= 8) imageName = 'wood-4.png';
+      }
+      return new URL(`../assets/cards/${imageName}`, import.meta.url).href;
     }
   },
   mounted() {
@@ -281,21 +295,7 @@ export default {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: all 0.3s ease;
-  border: 3px solid #eee;
-}
-
-.skill-card-panel:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.skill-card-panel.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background-color: rgba(255, 255, 255, 0.8);
 }
 
 .skill-name {
@@ -400,12 +400,40 @@ export default {
   align-items: center;
   /* transition: all 0.3s ease; */
   position: relative;
-  background-image: url("@assets/cards/wood-3.png");
+  transition: all 0.3s ease;
+
+  border: 3px solid #eee;
+  border-radius: 5px;
+}
+
+.skill-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.skill-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* 垫在skill-card上，用来铺上一个白色背景*/
+.skill-card-background-paper {
+  position: absolute;
+  width: 180px;
+  height: 240px;
+  background-color: white;
+}
+
+.skill-card-background-image {
+  position: absolute;
+  width: 212px;
+  height: 280px;
   background-origin: content-box;
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  background-color: white;
 }
 
 /* 技能激活动画关键帧 */
