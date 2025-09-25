@@ -17,9 +17,9 @@
       <span class="action-value">{{ skill.actionPointCost }}</span>
     </div>
     <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
-    <div class="skill-subtitle" v-if="skill.subtitle"> {{skill.subtitle}} </div>
+    <div :class="['skill-subtitle', {'hovered': hovered}]" v-if="skill.subtitle"> {{skill.subtitle}} </div>
     <div :class="['skill-card-panel']">
-      <div class="skill-name" :style="{color: skillNameColor}">
+      <div class="skill-name" :style="{color: skillNameColor, borderColor: skillBackgroundColor}">
         {{ skill.name + (skill.power < 0 ? '（' + skill.power + '）' : '') + (skill.power > 0 ? '（+' + skill.power + '）' : '') }}</div>
       <div class="skill-description">
         <ColoredText :text="skillDescription" />
@@ -71,6 +71,11 @@ export default {
       default: false
     }
   },
+  data() {
+    return {
+      hovered: false,
+    };
+  },
   computed: {
     skillDescription() {
       // 动态根据玩家/技能当前状态生成描述
@@ -100,14 +105,19 @@ export default {
         borderColor: borderColor
       };
     },
+    skillBackgroundColor() {
+      const color = getSkillTierColor(this.skill.tier);
+      return this.adjustColorBrightness(color, 50);
+    },
     skillCardImageUrl () {
       let imageName = this.skill.image;
       if(imageName) {} else {
-        imageName = 'wood-0.png';
-        if (this.skill.tier >= 2) imageName = 'wood-1.png';
-        if (this.skill.tier >= 4) imageName = 'wood-2.png';
-        if (this.skill.tier >= 6) imageName = 'wood-3.png';
-        if (this.skill.tier >= 8) imageName = 'wood-4.png';
+        imageName = `0`;
+        if (this.skill.tier >= 2) imageName = '1';
+        if (this.skill.tier >= 4) imageName = '2';
+        if (this.skill.tier >= 6) imageName = '3';
+        if (this.skill.tier >= 8) imageName = '4';
+        imageName = `${this.skill.type}-${imageName}.png`;
       }
       return new URL(`../assets/cards/${imageName}`, import.meta.url).href;
     }
@@ -165,11 +175,13 @@ export default {
     },
     
     onMouseEnter() {
+      this.hovered = true;
       if (this.previewMode) return;
       frontendEventBus.emit('skill-card-hover-start', this.skill);
     },
     
     onMouseLeave() {
+      this.hovered = false;
       if (this.previewMode) return;
       frontendEventBus.emit('skill-card-hover-end', this.skill);
     },
@@ -301,7 +313,11 @@ export default {
 .skill-name {
   font-weight: bold;
   font-size: 16px;
-  margin-bottom: 8px;
+  padding:2px;
+  border-radius: 8px;
+  border-width: 3px;
+  border-style: solid;
+  margin: 0 auto 8px auto;
 }
 
 .skill-description {
@@ -385,14 +401,19 @@ export default {
   align-items: center;
   z-index: 2;
   padding: 2px 6px;
-  color: dimgray;
+  color: rgba(200, 200, 200, 0.7);
   font-size: 12px;
   font-style: italic;
+  transition: 0.5s ease;
+}
+.skill-subtitle.hovered {
+  color: black;
+  background-color: rgba(255, 255, 255, 0.7);
 }
 
 .skill-card {
-  width: 212px;
-  height: 280px;
+  width: 192px;
+  height: 260px;
   cursor: pointer;
   display: flex;
   flex-direction: column;

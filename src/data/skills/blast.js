@@ -4,7 +4,7 @@ import { launchAttack } from '../battleUtils.js';
 // 火矢(C-)
 export class Fireshot extends Skill {
   constructor() {
-    super('火矢', 'magic', 1, 1, 1, 1, '火球术');
+    super('火矢', 'fire', 1, 1, 1, 1, '火球术');
     this.upgradeTo = "强火矢";
     this.baseColdDownTurns = 3;
   }
@@ -34,7 +34,7 @@ export class Fireshot extends Skill {
 // 强火矢(B-)
 export class Fireball extends Skill {
   constructor() {
-    super('强火矢', 'magic', 3, 1, 1, 1, '火球术');
+    super('强火矢', 'fire', 3, 1, 1, 1, '火球术');
     this.upgradeTo = "炙火矢";
     this.baseColdDownTurns = 4;
   }
@@ -63,7 +63,7 @@ export class Fireball extends Skill {
 // 炙火矢(B+)
 export class LargeFireball extends Skill {
   constructor() {
-    super('炙火矢', 'magic', 5, 3, 1, 1, '火球术');
+    super('炙火矢', 'fire', 5, 3, 1, 1, '火球术');
     this.upgradeTo = "小爆裂术";
     this.baseColdDownTurns = 5;
   }
@@ -93,8 +93,9 @@ export class LargeFireball extends Skill {
 // 小爆裂术(A-)
 export class TinyKaradiaBurst extends Skill {
   constructor() {
-    super('小爆裂术', 'magic', 6, 5, 1, Infinity, '火球术');
+    super('小爆裂术', 'fire', 6, 5, 1, Infinity, '火球术');
     this.baseColdDownTurns = 8;
+    this.image = '小爆裂术.png';
   }
 
   get baseDamage() {
@@ -121,8 +122,9 @@ export class TinyKaradiaBurst extends Skill {
 // 齐明天焱(A+)
 export class SolarBlast extends Skill {
   constructor() {
-    super('齐明天焱', 'magic', 8, 8, 1, 1, '火球术');
+    super('齐明天焱', 'fire', 8, 8, 1, 1, '火球术');
     this.subtitle = "纯粹的破坏力";
+    this.image = '齐明天焱.png';
   }
 
   get coldDownTurns() {
