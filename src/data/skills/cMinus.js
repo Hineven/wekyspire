@@ -4,128 +4,13 @@ import Skill from '../skill.js';
 import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 import { addBattleLog } from '../battleLogUtils.js';
 
-export class PurifyWeky extends Skill {
-  constructor() {
-    super('纯化', 'normal', 1, 1, 1, 1, '纯化');
-  }
-
-  get coldDownTurns() {
-    return 5;
-  }
-
-  get stack() {
-    return Math.max(1, 2 + this.power);
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use(player, enemy)) {
-      player.addEffect('聚气', this.stack);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `获得${this.stack}/effect{聚气}`;
-  }
-}
-
-export class StrongPurifyWeky extends Skill {
-  constructor() {
-    super('超纯化', 'normal', 3, 2, 1, 1, '纯化');
-  }
-
-  get coldDownTurns() {
-    return 5;
-  }
-
-  get stack() {
-    return Math.max(3, 4 + this.power);
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use(player, enemy)) {
-      player.addEffect('聚气', this.stack);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `获得${this.stack}/effect{聚气}`;
-  }
-}
-
-export class IntakeWeky extends Skill {
-  constructor() {
-    super('萃取', 'normal', 2, 0, 3, 1, '萃取');
-  }
-
-  get coldDownTurns() {
-    return Math.max(1, 4 - this.power);
-  }
-
-  get stack() {
-    return 1;
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use(player, enemy)) {
-      player.addEffect('聚气', this.stack);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `获得${this.stack}/effect{聚气}`;
-  }
-}
-
-export class SuperIntakeWeky extends Skill {
-  constructor() {
-    super('超萃取', 'normal', 4, 0, 4, 1, '萃取');
-  }
-
-  get stack() {
-    return 2;
-  }
-
-  get coldDownTurns() {
-    return Math.max(1, 5 - this.power);
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use(player, enemy)) {
-      player.addEffect('聚气', this.stack);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `获得${this.stack}/effect{聚气}`;
-  }
-}
-
 // 蓄力一击技能
 export class ChargePunch extends Skill {
   constructor() {
     super('蓄力一击', 'magic', 2, 1, 1, 1, '蓄力一击');
     this.mode = 'idle';
     this.chargedDamage = 0;
-  }
-
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
 
   get damage() {
@@ -292,39 +177,12 @@ export class TransformSword extends Skill {
   }
 }
 
-// 浮空I 
-// 浮空，获得3层/effect{闪避}'
-export class FloatingI extends Skill {
-  constructor() {
-    super('浮空I', 'magic', 3, 1, 1, 1, "浮空");
-  }
-
-  get coldDownTurns() {
-    return 5;
-  }
-
-  get stacks() {
-    return Math.max(3 + this.power, 1);
-  }
-
-  use(player, enemy) {
-    player.addEffect('闪避', this.stacks);
-    return true;
-  }
-
-  regenerateDescription(player) {
-    return `浮空，获得${this.stacks}层/effect{闪避}`;
-  }
-}
-
 // 成岩
 // 获得4格挡
 export class RockFormationI extends Skill {
   constructor() {
     super('成岩I', 'magic', 3, 1, 1, 1, "成岩");
-  }
-  get coldDownTurns() {
-    return 4;
+    this.baseColdDownTurns = 4;
   }
   get stacks() {
     return Math.max(4 + this.power, 1);
@@ -335,35 +193,6 @@ export class RockFormationI extends Skill {
   }
   regenerateDescription(player) {
     return `获得${this.stacks}层/effect{格挡}`;
-  }
-}
-
-// 超速思考
-// 冷却所有技能一次
-export class SpeedThinking extends Skill {
-  constructor() {
-    super('超速思考', 'magic', 3, 1, 1, Infinity, "超速思考");
-  }
-  get coldDownTurns() {
-    return 1;
-  }
-  get times() {
-    return Math.max(this.power + 1, 1);
-  }
-  use(player, enemy, stage) {
-    if(stage < this.times) {
-      for (const skill of player.frontierSkills) {
-        if (skill !== this && skill.canColdDown()) {
-          skill.coldDown();
-        }
-      }
-      return false;
-    }
-    return true;
-  }
-
-  regenerateDescription(player) {
-    return `/named{冷却}所有/named{前端}技能${this.times}次`;
   }
 }
 

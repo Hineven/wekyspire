@@ -32,23 +32,17 @@ const effectDescriptions = {
   },
 
   // 回合开始时触发的效果
-  '吸收': {
-    name: '吸收',
+  '泉涌': {
+    name: '泉涌',
     description: '回合结束时，获得层数点魏启',
     icon: '💧',
     color: '#00BFFF' // 深天蓝
   },
-  '漏气': {
-    name: '漏气',
+  '泄露': {
+    name: '泄露',
     description: '回合结束时，失去层数点魏启',
     icon: '💨',
     color: '#808080' // 灰色
-  },
-  '眩晕': {
-    name: '眩晕',
-    description: '回合开始时，层数减1，结束回合',
-    icon: '💫',
-    color: '#FFD700' // 金色
   },
   '燃烧': {
     name: '燃烧',
@@ -62,7 +56,19 @@ const effectDescriptions = {
     icon: '💧',
     color: '#00BFFF' // 深天蓝
   },
-  
+  '肌肉记忆': {
+    name: '肌肉记忆',
+    description: '回合开始时，额外冷却所有技能，层数减1',
+    icon: '🧠',
+    color: '#8A2BE2' // 蓝紫色
+  },
+  '眩晕': {
+    name: '眩晕',
+    description: '回合开始时，层数减1，结束回合',
+    icon: '💫',
+    color: '#FFD700' // 金色
+  },
+
   // 回合结束时触发的效果
   '中毒': {
     name: '中毒',

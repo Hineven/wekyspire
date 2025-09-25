@@ -21,14 +21,17 @@ class SkillManager {
     const skillModules = [
       await import('./skills/basic.js'),
       await import('./skills/blast.js'),
-      await import('./skills/heal.js'),
-      // await import('./skills/remi.js'),
       await import('./skills/cMinus.js'),
-      await import('./skills/punchKicks.js'),
-      await import('./skills/fireAssist.js'),
-      await import('./skills/shielding.js'),
       await import('./skills/concentration.js'),
-      // await import('./skills/firecontrol.js'),
+      await import('./skills/fireAssist.js'),
+      await import('./skills/fireControl.js'),
+      await import('./skills/heal.js'),
+      await import('./skills/levitation.js'),
+      await import('./skills/punchKicks.js'),
+      await import('./skills/refuelWeky.js'),
+      await import('./skills/shielding.js'),
+      await import('./skills/speedThinking.js'),
+      // await import('./skills/remi.js'),
       // await import('./skills/lumi.js')
     ];
     

@@ -41,6 +41,16 @@ export function processStartOfTurnEffects(target) {
     }
     target.addEffect('聚气', -target.effects['聚气']);
   }
+
+  // 肌肉记忆效果
+  if (target.effects['肌肉记忆'] > 0) {
+    if (target.frontierSkills) {
+      target.frontierSkills.forEach(skill => {
+        if(skill.canColdDown()) skill.coldDown();
+      });
+    }
+    target.addEffect('肌肉记忆', -1);
+  }
   
   // 最后再处理眩晕效果
   if (target.effects['眩晕'] > 0) {

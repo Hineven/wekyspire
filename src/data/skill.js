@@ -54,6 +54,14 @@ class Skill {
     }
   }
 
+  // 立刻冷却
+  instantColdDown() {
+    if(this.canColdDown()) {
+      this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
+      this.resetColdDownProcess();
+    }
+  }
+
   resetColdDownProcess() {
     this.remainingColdDownTurns = this.coldDownTurns;
   }

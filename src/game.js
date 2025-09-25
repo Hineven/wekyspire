@@ -26,6 +26,11 @@ function startGame() {
   slots[3] = initialSkill4;
   backendGameState.player.skillSlots = slots;
 
+  // 升满级调试
+  // while(backendGameState.player.tier < 9) {
+  //   upgradePlayerTier(backendGameState.player);
+  // }
+
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.START_BATTLE);
 }
