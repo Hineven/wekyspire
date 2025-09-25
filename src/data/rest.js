@@ -12,7 +12,8 @@ export function spawnSkillRewards() {
   let tier = gameState.player.tier;
   // 如果已经生成了突破奖励，那么生成技能奖励时奖励提升
   if(gameState.rewards.breakthrough) {
-    tier = getNextPlayerTier(tier);
+    const nextTier = getNextPlayerTier(tier);
+    if(nextTier) tier = nextTier;
   }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
     3, gameState.player.skillSlots, tier, true // 生成高质量奖励

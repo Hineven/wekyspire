@@ -83,18 +83,55 @@ class SkillManager {
 
     const playerNonEmptySkillSlots = playerSkillSlots.filter(skill => skill !== null);
     const playerSkills = playerNonEmptySkillSlots.map(slot => slot);
-    console.log(playerSkills);
-    
+    // console.log(playerSkills);
+
     // 获取玩家已有的技能系列
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
-    
+    const playerSkillNames = playerSkills.map(skill => skill.name);
+
     // 过滤掉玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
-    const availableSkills = allSkills.filter(skill => 
-      !playerSkills.some(playerSkill => playerSkill.name === skill.name) &&
+    const baseAvailableSkills = allSkills.filter(skill =>
+      !playerSkillNames.includes(skill.name) &&
       !playerSkillSeries.includes(skill.series) &&
       skill.tier <= playerTier
     );
-    
+
+    // —— 新逻辑：收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——
+    const upgradeTargetNames = new Set();
+    const upgradeSourceMap = new Map(); // targetName -> sourceSkillName
+    for(const ownedSkill of playerSkills) {
+      const upgradeTo = ownedSkill.upgradeTo;
+      if(!upgradeTo) continue;
+      if(Array.isArray(upgradeTo)) {
+        upgradeTo.forEach(name => {
+          if(name && name !== ownedSkill.name) {
+            upgradeTargetNames.add(name);
+            if(!upgradeSourceMap.has(name)) upgradeSourceMap.set(name, ownedSkill.name);
+          }
+        });
+      } else if (typeof upgradeTo === 'string') {
+        if(upgradeTo && upgradeTo !== ownedSkill.name) {
+          upgradeTargetNames.add(upgradeTo);
+          if(!upgradeSourceMap.has(upgradeTo)) upgradeSourceMap.set(upgradeTo, ownedSkill.name);
+        }
+      }
+    }
+
+    // 根据名称找到元数据并追加到可用列表（即使同系列也允许，因为这是升级路径）
+    for(const targetName of upgradeTargetNames) {
+      if(playerSkillNames.includes(targetName)) continue; // 已拥有不再加入
+      // 查找此技能的元数据
+      const meta = allSkills.find(s => s.name === targetName);
+      if(!meta) continue; // 注册表中不存在
+      if(meta.tier > playerTier) continue; // 仍然遵守等阶限制（如需忽略，可移除此行）
+      // 避免重复
+      if(!baseAvailableSkills.some(s => s.name === meta.name)) {
+        baseAvailableSkills.push({ ...meta, isUpgradeCandidate: true, upgradedFrom: upgradeSourceMap.get(targetName) });
+      }
+    }
+
+    const availableSkills = baseAvailableSkills; // 之后流程对 availableSkills 操作
+
     // 计算每个技能的出现权重
     const weightedSkills = availableSkills.map(skill => {
       const tierDifference = playerTier - skill.tier;
@@ -115,15 +152,18 @@ class SkillManager {
       // 高质量奖励中，贴近玩家等级上限技能概率大幅提升
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
-      
+
+      // 升级候选技能稍微再提升一点（避免被其它随机权重稀释）
+      if(skill.isUpgradeCandidate) modifyFactor *= 1.5;
+
       return {
         ...skill,
         weight: skill.spawnWeight * modifyFactor
       };
     });
-    // 减少已获得技能的出现权重（x0.2）
+    // 减少已获得技能的出现权重（x0.2） — 这里理论上已过滤，不再需要，但保留以防未来逻辑调整
     weightedSkills.forEach(skill => {
-      if (playerSkills.some(playerSkill => playerSkill.name === skill.name)) {
+      if (playerSkillNames.includes(skill.name)) {
         skill.weight *= 0.2;
       }
     });
@@ -138,6 +178,9 @@ class SkillManager {
       // 计算总权重
       const totalWeight = weightedSkills.reduce((sum, skill) => sum + skill.weight, 0);
       
+      // 如果没有权重可供选择，提前跳出
+      if(totalWeight <= 0) break;
+
       // 生成随机数
       const random = Math.random() * totalWeight;
       
@@ -156,6 +199,10 @@ class SkillManager {
       // 获取选中的技能
       const skillInfo = weightedSkills[selectedIndex];
       const skill = this.createSkill(skillInfo.name);
+      if(skillInfo.isUpgradeCandidate) {
+        skill.isUpgradeCandidate = true; // 标记（目前 UI 未使用）
+        if(skillInfo.upgradedFrom) skill.upgradedFrom = skillInfo.upgradedFrom; // 记录来源技能名称
+      }
       selectedSkills.push(skill);
       
       // 从可选技能中移除已选择的技能

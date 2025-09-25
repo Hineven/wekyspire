@@ -10,17 +10,18 @@
 //    - { kind: 'ui', name, payload, duration? }：纯 UI 行为（日志、音效、飘字等），通过前端事件总线驱动。
 //    - { kind: 'delay', duration }：纯延时，用于拉开动画节奏。
 //
-// 2) 监听与入队
-//    - 使用 watch(() => projectToS(backendGameState), { deep:true, flush:'sync' })：
-//      仅对 S 子集建立响应式依赖；每次 S 的修改会同步（逐次）触发回调，并把“当前 S 投影快照”入队一个 state 项。
-//    - flush:'sync' 确保单次动作中的多次修改不会被批量合并，能逐帧展现。
-//    - init 时会先入队一次“初始投影快照”，确保显示层从一开始就与后端同步。
+// 2) 入队策略（性能优化版）
+//    - 初始仅在 init 时入队一次 S 投影快照，以完成首次同步。
+//    - 使用 watch(() => backendGameState, { deep:true, flush:'sync' }) 仅标记 dirty=true，不立即入队；
+//      当有“非零延时”的 UI 或 delay 入队时，若 dirty==true，则在它之前入队一条 state 快照（duration=0），随后将 dirty 置为 false。
+//    - 在每个 macro tick 结束（setTimeout 0）也会检查 dirty；若仍为 true，则强制入队一条 state 快照（duration=0），避免遗漏同步。
+//    - 这样 0ms 的 UI 事件天然被合并展示；只有出现节拍（非零 delay）或 tick 结束时，才把当下的状态切片进队列，显著降低快照频率与开销。
 //
 // 3) 投影（S）与应用
 //    - projectToS(obj)：把后端状态按 S 规则抽取为“纯数据”快照。
 //    - applyProjectionToDisplay(src, dst, backendNode)：把 S 快照就地合并到显示层：
 //      - 对象：按键合并，删除快照中不存在的 S 键；保留实例与方法；必要时依据 backendNode 的原型创建承载对象，避免丢失原型链。
-//      - 数组：逐元素就地合并；若需要新增元素，会依据同位置的 backendNode 元素原型创建实例壳，再填充数据；会对齐数组长度。
+//      - 数组：优先按 id（uniqueID/id）对齐逐元素合并；若无 id 再回退索引合并；会对齐数组长度，且在创建新元素时按 backend 原型构造实例壳，避免方法丢失。
 //      - 不会直接整体替换对象/实例，避免丢失方法（如 Skill.canUse）。
 //
 // S（共享投影子集）的规范
@@ -36,27 +37,25 @@
 //   - 前端组件中如需调用实例方法（如 Skill.canUse），方法内部仅访问 S 字段，确保在显示层可用。
 //
 // 使用指南
-// - 启动：initAnimationDispatcher({ stepMs })；可按需设置节拍间隔。
+// - 启动：initAnimationDispatcher({ stepMs })；可按需设置节拍间隔（默认 0ms）。
 // - 入队 UI 动作：
-//   - enqueueUI('addBattleLog', { log, type }) / enqueueUI('clearBattleLog')
-//   - enqueueUI('playSound', payload) / enqueueUI('spawnParticles', payload) / enqueueUI('popMessage', payload)
-//   - enqueueUI('lockControl') / enqueueUI('unlockControl') / enqueueUI('displayDialog', payload)
-// - 拉开节奏：enqueueDelay(ms)
-// - 不要直接修改 displayGameState；只修改 backendGameState（或发起 UI 事件），动画器会按节奏把 S 投影同步过来。
+//   - enqueueUI(name, payload, { duration })：当 duration>0 时，会在该 UI 前自动入队一条 state 快照（若 dirty==true）。
+//   - enqueueDelay(duration)：当 duration>0 时，会在该 delay 前自动入队一条 state 快照（若 dirty==true）。
+//   - enqueueState({ snapshot })：如需手动推进状态，也可直接入队投影快照（会清理 dirty）。
+// - 不要直接修改 displayGameState；只修改 backendGameState（或发起 UI 事件）。
 // - 在类（Skill/Enemy/Item/Ability 等）中：
 //   - 非 UI 关键数据（hp、shield、effects、money、AP 等）作为普通字段进入 S。
 //   - 仅后端使用的中间态字段请加“_”后缀（如 actionIndex_），避免触发动画。
 //   - 方法如 canUse 只读取 S 字段（可从显示层读取），确保在显示层实例上正常运行。
 //
 // 常见坑与规避
-// - 方法丢失：不要整体替换对象或数组；本模块在应用投影时会尽量就地合并，并按 backend 原型创建承载对象，避免丢失 canUse 等方法。
+// - 若完全没有非零延时，状态不会自动切片入队，显示层会在下一次出现非零延时前保持合并展示；这是预期的“帧间合并”。
+// - 数组重排/插入/删除：为元素提供稳定 id（uniqueID/id），以避免回退到索引合并时的潜在错配。
 // - 无关触发多：把纯后端中间态统一命名为 *_ 并确保是可枚举自有属性；这类字段不会被 S 监听到。
-// - 数组重排/对齐：当前按“同索引”合并；如后端存在频繁重排且索引不稳定，建议为元素提供稳定 id，并在此处扩展为“按 id 对齐”的合并策略。
 //
 // 扩展点
-// - 可按模块将 watch 拆分为多路（player、enemy、rewards 等）以进一步优化粒度。
-// - 可为特定路径定制“删除/只写”策略，以适配特殊渲染需求。
-// - 如需进一步减少队列项，可在队列层对相同路径的多次 state 合并做轻微折叠（当前未启用，先保证逐帧一致性）。
+// - 可为特定 UI 事件手动传入 { duration: X } 以强制切片当前状态，控制动画节拍。
+// - 如需进一步减少冗余快照，可在入队前做“最近一次入队项是否已是 state”检查以去重。
 
 // animationDispatcher.js - 将后端状态的变化以动画节奏应用到显示层状态，并支持UI动作
 
@@ -71,7 +70,23 @@ import frontendEventBus from '../frontendEventBus.js';
 const queue = [];
 let processing = false;
 let stalling = false;
-let defaultStepMs = 300;
+let defaultStepMs = 0;
+// 新增：脏位与 tick 末兜底检查
+let dirty = false;
+let endOfTickScheduled = false;
+function scheduleEndOfTickCheck() {
+  if (endOfTickScheduled) return;
+  endOfTickScheduled = true;
+  setTimeout(() => {
+    endOfTickScheduled = false;
+    if (dirty) {
+      // tick 结束仍有未同步的变更，强制入队一次当前快照
+      queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
+      dirty = false;
+      tryStartProcessQueue();
+    }
+  }, 0);
+}
 
 function isWritableProperty(target, key) {
   const desc = Object.getOwnPropertyDescriptor(target, key);
@@ -236,6 +251,16 @@ function applyProjectionToDisplay(src, dst, backendNode = undefined) {
 
     if (sVal && typeof sVal === 'object') {
       if (dVal && typeof dVal === 'object' && !Array.isArray(dVal)) {
+        // 如果后端节点有原型且当前显示层对象原型不同，则同步原型（避免丢失 getter 如 attack/defense）
+        if (bVal && typeof bVal === 'object') {
+          try {
+            const backendProto = Object.getPrototypeOf(toRaw(bVal));
+            const dstProto = Object.getPrototypeOf(dVal);
+            if (backendProto && dstProto !== backendProto) {
+              Object.setPrototypeOf(dVal, backendProto);
+            }
+          } catch (_) { /* ignore prototype set errors */ }
+        }
         applyProjectionToDisplay(sVal, dVal, bVal);
       } else {
         // 以后端节点原型创建目标对象，保留方法；否则退回普通对象
@@ -339,17 +364,29 @@ function handleUIAction(item) {
 export function enqueueState(options = {}) {
   const {duration, snapshot} = options;
   queue.push({kind: 'state', snapshot: snapshot || captureSnapshot(), duration});
+  // 快照已捕获，清除脏位
+  dirty = false;
   tryStartProcessQueue();
 }
 // 入队一个UI动作
 export function enqueueUI(name, payload = {}, options = {}) {
-  const { duration } = options;
+  const { duration = 0 } = options;
+  // 若有非零延时，且存在未同步的后端变更，则在它之前切片一次状态
+  if (duration > 0 && dirty) {
+    queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
+    dirty = false;
+  }
   queue.push({ kind: 'ui', name, payload, duration });
   tryStartProcessQueue();
 }
 
 // 入队一个延时
 export function enqueueDelay(duration = defaultStepMs) {
+  // 若有非零延时，且存在未同步的后端变更，则在它之前切片一次状态
+  if (duration > 0 && dirty) {
+    queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
+    dirty = false;
+  }
   queue.push({ kind: 'delay', duration });
   tryStartProcessQueue();
 }
@@ -360,13 +397,14 @@ export function clearQueue() {
 
 export function initAnimationDispatcher({ stepMs = 0 } = {}) {
   defaultStepMs = stepMs;
-  // 先做一次初始化同步：把当前后端 S 投影入队
+  // 初始同步一次（避免空白）
   enqueueState({ snapshot: projectToS(backendGameState) });
-  // 监听后端状态变化：仅对 S 字段建立依赖
+  // 新增：监听后端状态变化，仅置脏，不立刻入队
   watch(
-    () => projectToS(backendGameState),
-    (snap) => {
-      enqueueState({ snapshot: snap });
+    () => backendGameState,
+    () => {
+      dirty = true;
+      scheduleEndOfTickCheck();
     },
     { deep: true, flush: 'sync' }
   );

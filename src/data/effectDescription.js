@@ -178,7 +178,7 @@ const effectDescriptions = {
     name: '闪避',
     description: '攻击结算发生后，将伤害减少到0',
     icon: '👻',
-    color: '#C0C0C0' // 银色
+    color: '#6e6e6e' // 银色
   },
   
   // 受到伤害时触发的效果

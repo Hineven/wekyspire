@@ -35,6 +35,7 @@ class Skill {
   canColdDown() {
     if(this.coldDownTurns === 0) return false;
     if(this.remainingUses === this.maxUses) return false;
+    if(this.maxUses === Infinity) return false;
     return true;
   }
 

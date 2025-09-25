@@ -8,7 +8,7 @@ import { addBattleLog } from '../battleLogUtils.js';
 // 获得4层集中和1层燃心
 export class DevotionCurse extends Skill {
   constructor() {
-    super('燃心决', 'magic', 7, 0, 1, 1);
+    super('燃心决', 'fire', 7, 0, 1, 1);
     this.subtitle = '烈焰焚心';
   }
 
@@ -35,7 +35,7 @@ export class DevotionCurse extends Skill {
 // 获得1层暴怒
 export class Rage extends Skill {
   constructor() {
-    super('暴怒', 'magic', 5, 3, 1, 1);
+    super('暴怒', 'buff', 5, 3, 1, 1);
   }
 
   get stacks() {
@@ -69,7 +69,7 @@ export class Rage extends Skill {
 // 获得高燃弹药
 export class FireDance extends Skill {
   constructor() {
-    super('燃烧弹', 'magic', 4, 2, 1, 1);
+    super('燃烧弹', 'boss-buff', 4, 2, 1, 1);
   }
 
   get burnStacks() {

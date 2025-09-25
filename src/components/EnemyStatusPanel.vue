@@ -64,6 +64,7 @@
 import EffectDisplayBar from './EffectDisplayBar.vue';
 import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
 import HealthBar from './HealthBar.vue';
+import Enemy from "../data/enemy";
 
 export default {
   name: 'EnemyStatusPanel',

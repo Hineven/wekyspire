@@ -4,7 +4,7 @@ import Skill from '../skill.js';
 // 恢复I (C-)
 export class VeryWeakRecovery extends Skill {
   constructor() {
-    super('恢复I', '木', 1, 1, 1, 1, '恢复');
+    super('恢复I', 'wood', 1, 1, 1, 1, '恢复');
     this.baseColdDownTurns = 6;
     this.upgradeTo = "恢复II";
   }
@@ -33,7 +33,7 @@ export class VeryWeakRecovery extends Skill {
 // 恢复II （B-）
 export class WeakRecovery extends Skill {
   constructor() {
-    super('恢复II', '木', 3, 1, 1, 1, '恢复');
+    super('恢复II', 'wood', 3, 1, 1, 1, '恢复');
     this.baseColdDownTurns = 8;
     this.upgradeTo = "恢复III";
   }
@@ -62,7 +62,7 @@ export class WeakRecovery extends Skill {
 // 强力恢复 （B+）
 export class Recovery extends Skill {
   constructor() {
-    super('强力恢复', '木', 5, 1, 1, 1, '恢复');
+    super('强力恢复', 'wood', 5, 1, 1, 1, '恢复');
     this.baseColdDownTurns = 10;
     this.upgradeTo = "强力恢复";
   }
@@ -91,7 +91,7 @@ export class Recovery extends Skill {
 // 治疗I （C+）
 export class WeakHeal extends Skill {
   constructor() {
-    super('治疗I', '木', 2, 1, 1, 1, '治疗');
+    super('治疗I', 'wood', 2, 1, 1, 1, '治疗');
     this.baseColdDownTurns = 4;
     this.upgradeTo = "治疗II";
   }
@@ -120,7 +120,7 @@ export class WeakHeal extends Skill {
 // 治疗II （B）
 export class Heal extends Skill {
   constructor() {
-    super('治疗II', '木', 4, 2, 1, 1, '治疗');
+    super('治疗II', 'wood', 4, 2, 1, 1, '治疗');
     this.baseColdDownTurns = 4;
     this.upgradeTo = "治愈";
   }
@@ -149,7 +149,7 @@ export class Heal extends Skill {
 // 治愈 （A-）
 export class StrongHeal extends Skill {
   constructor() {
-    super('治愈', '木', 6, 3, 1, 1, '治疗');
+    super('治愈', 'wood', 6, 3, 1, 1, '治疗');
     this.baseColdDownTurns = 4;
     this.upgradeTo = "复苏";
   }
@@ -179,7 +179,7 @@ export class StrongHeal extends Skill {
 // 复苏（A+）
 export class StrongRecovery extends Skill {
   constructor() {
-    super('复苏', '木', 8, 4, 1, 1, '复苏');
+    super('复苏', 'wood', 8, 4, 1, 1, '复苏');
     this.baseColdDownTurns = 10;
     this.upgradeTo = "奇迹";
   }
@@ -214,9 +214,10 @@ export class StrongRecovery extends Skill {
 // 奇迹(S)
 export class Miracle extends Skill {
   constructor() {
-    super('奇迹', '木', 9, 5, 1, 1, '奇迹');
+    super('奇迹', 'wood', 9, 5, 1, 1, '奇迹');
     this.baseColdDownTurns = 10;
     this.subtitle = "用禁忌对抗死亡";
+    this.image = "奇迹.png";
   }
 
   get stacks() {

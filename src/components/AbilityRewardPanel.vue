@@ -9,8 +9,8 @@
       <h2>选择一项能力！</h2>
       <div class="ability-cards">
         <div 
-          v-for="(ability, index) in abilities" 
-          :key="'ability-' + index"
+          v-for="ability in abilities"
+          :key="ability.uniqueID"
           :class="[
             'ability-card', 
             'tier-' + ability.tier,

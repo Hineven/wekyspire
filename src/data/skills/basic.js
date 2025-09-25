@@ -5,9 +5,7 @@ import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 export class RollPunch extends Skill {
   constructor() {
     super('王八拳', 'normal', 0, 0, 1);
-  }
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
 
   get damage() {
@@ -34,6 +32,7 @@ export class Roll extends Skill {
   constructor() {
     super('打滚', 'normal', 0, 0, 1, 1, '打滚', 1);
     this.maxUses = 1;
+    this.baseColdDownTurns = 4;
   }
 
   get stacks() {
@@ -41,7 +40,7 @@ export class Roll extends Skill {
   }
 
   get coldDownTurns() {
-    return Math.max(4 - this.power, 1);
+    return Math.max(this.baseColdDownTurns - this.power, 1);
   }
 
   // 使用技能
@@ -61,10 +60,7 @@ export class Sleep extends Skill {
   constructor() {
     super('睡觉', 'normal', 0, 0, 1, 1, '睡觉', 1);
     this.baseHeal = 10;
-  }
-
-  get coldDownTurns() {
-    return 4;
+    this.baseColdDownTurns = 4;
   }
 
   get heal() {
@@ -88,10 +84,7 @@ export class LargeSleep extends Skill {
   constructor() {
     super('睡大觉', 'normal', 1, 0, 1, 1);
     this.baseHeal = 22;
-  }
-
-  get coldDownTurns() {
-    return 3;
+    this.baseColdDownTurns = 3;
   }
 
   get heal() {
@@ -120,6 +113,7 @@ export class PrepareExercise extends Skill {
   constructor() {
     super('活动筋骨', 'normal', 0, 0, 1, 1);
     this.stacks = 1;
+    this.baseColdDownTurns = 3;
   }
 
   // 使用技能
@@ -129,7 +123,7 @@ export class PrepareExercise extends Skill {
   }
 
   get coldDownTurns() {
-    return Math.max(3 - this.power, 1);
+    return Math.max(this.baseColdDownTurns - this.power, 1);
   }
 
   // 重新生成技能描述
@@ -142,10 +136,7 @@ export class PrepareExercise extends Skill {
 export class AmateurDefense extends Skill {
   constructor() {
     super('抱头防御', 'normal', 0, 0, 1);
-  }
-
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
 
   get shield() {
@@ -246,10 +237,11 @@ export class HoldOn extends Skill {
 export class FastThinking extends Skill {
   constructor() {
     super('快速思考', 'normal', 1, 0, 1, 3, '思考', 1);
+    this.baseColdDownTurns = 1;
   }
 
   get coldDownTurns() {
-    return Math.max(0, 1 - this.power);
+    return Math.max(0, this.baseColdDownTurns - this.power);
   }
 
   findSkillToColdDown (player) {

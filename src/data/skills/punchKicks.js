@@ -1,5 +1,5 @@
 import Skill from '../skill.js';
-import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
+import {launchAttack, dealDamage, gainShield, drawSkillCard} from '../battleUtils.js';
 
 // 拳打脚踢技能
 export class PunchKick extends Skill {
@@ -202,6 +202,7 @@ export class OffPowerPunchKick extends Skill {
 export class FinalPunchKick extends Skill {
   constructor() {
     super('终极一击', 'normal', 0, 0, 2, 1);
+    this.baseColdDownTurns = 10;
   }
 
   get damage () {
@@ -215,5 +216,36 @@ export class FinalPunchKick extends Skill {
 
   regenerateDescription (player) {
     return `造成${this.damage + (player?.attack ?? 0)}点伤害`;
+  }
+}
+
+export class AgilePunchKick extends Skill {
+  constructor() {
+    super('敏捷打击', 'normal', 0, 0, 1, 1);
+  }
+
+  get coldDownTurns() {
+    return Math.max(3 - this.power, 1);
+  }
+
+  get damage() {
+    return Math.max(6 + 3 * this.power, 4);
+  }
+
+  // 使用技能
+  use(player, enemy, stage) {
+    if (stage == 0) {
+      const result = launchAttack(player, enemy, this.damage);
+      if (result.passThoughDamage > 0) return false;
+      return true;
+    } else {
+      drawSkillCard(player, 1);
+      return true;
+    }
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return `造成${this.damage + (player?.attack ?? 0)}点伤害，造成伤害则抽牌`;
   }
 }

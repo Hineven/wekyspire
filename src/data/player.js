@@ -12,7 +12,7 @@ export function upgradePlayerTier (player) {
   if (nextTier !== undefined) {
     player.tier = nextTier;
     player.maxMana += 1;
-    if (player.tier === 2) {
+    if (player.tier === 1) {
       // 特殊：第一次升级时多获得一点魏启
       player.maxMana += 1;
     }
