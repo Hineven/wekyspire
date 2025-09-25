@@ -10,7 +10,6 @@ class Ability {
     // 为每个实例生成唯一ID（用于动画同步与列表key）
     this.uniqueID = Math.random().toString(36).substring(2, 10);
   }
-
   // 应用能力效果
   apply(player) {
     // 子类需要实现具体逻辑

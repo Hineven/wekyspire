@@ -251,6 +251,16 @@ function applyProjectionToDisplay(src, dst, backendNode = undefined) {
 
     if (sVal && typeof sVal === 'object') {
       if (dVal && typeof dVal === 'object' && !Array.isArray(dVal)) {
+        // 如果后端节点有原型且当前显示层对象原型不同，则同步原型（避免丢失 getter 如 attack/defense）
+        if (bVal && typeof bVal === 'object') {
+          try {
+            const backendProto = Object.getPrototypeOf(toRaw(bVal));
+            const dstProto = Object.getPrototypeOf(dVal);
+            if (backendProto && dstProto !== backendProto) {
+              Object.setPrototypeOf(dVal, backendProto);
+            }
+          } catch (_) { /* ignore prototype set errors */ }
+        }
         applyProjectionToDisplay(sVal, dVal, bVal);
       } else {
         // 以后端节点原型创建目标对象，保留方法；否则退回普通对象

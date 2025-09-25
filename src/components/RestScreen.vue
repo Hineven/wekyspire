@@ -171,11 +171,28 @@ export default {
     },
 
     onSkillRewardSelected(currentSkill) {
+      // 简化后的自动升级逻辑：如果奖励技能带有 upgradedFrom，直接替换来源技能
+      if(currentSkill.isUpgradeCandidate && currentSkill.upgradedFrom) {
+        const slots = this.gameState.player.skillSlots;
+        const sourceSlotIndex = slots.findIndex(s => s && s.name === currentSkill.upgradedFrom);
+        if(sourceSlotIndex !== -1) {
+          const oldSkill = slots[sourceSlotIndex];
+          backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
+            skill: currentSkill,
+            slotIndex: sourceSlotIndex,
+            clearRewards: false
+          });
+          frontendEventBus.emit('pop-message', {
+            id: 'skill-upgraded',
+            text: `技能升级：${oldSkill.name} -> ${currentSkill.name}`
+          });
+          this.closeSkillRewardPanel();
+          return;
+        }
+      }
+      // 回退：未能自动升级则进入槽位选择
       this.claimingSkill = currentSkill;
-      // 稍等片刻后打开SkillSlotSelectionPanel，让动画放完
-      setTimeout(() => {
-        this.skillSlotSelectionPanelVisible = true;
-      }, 300);
+      setTimeout(() => { this.skillSlotSelectionPanelVisible = true; }, 300);
     },
     closeSkillSlotSelectionPanel() {
       this.skillSlotSelectionPanelVisible = false;

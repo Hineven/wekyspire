@@ -86,7 +86,7 @@ export class MEFM3 extends Enemy {
 export class Karmura extends Enemy {
   constructor(battleIntensity) {
     const hp = 30 + 9 * battleIntensity;
-    const attack = Math.round((6 + battleIntensity) * 0.7);
+    const attack = Math.round((6 + battleIntensity) * 0.6);
     super(
       '卡姆拉', hp, attack, 1, 0,
       new URL('../assets/enemies/slime.png', import.meta.url).href

@@ -8,6 +8,11 @@
   >
     <div class="skill-card-background-paper"></div>
     <div class="skill-card-background-image" :style="{backgroundImage:`url(${skillCardImageUrl})`}"></div>
+    <div class="upgrade-badge" v-if="skill.isUpgradeCandidate">升级</div>
+    <div
+      v-if="hovered && skill.isUpgradeCandidate && skill.upgradedFrom"
+      class="upgrade-replace-tooltip"
+    >将替换：{{ skill.upgradedFrom }}</div>
     <div class="mana-cost" v-if="skill.manaCost > 0">
       <span class="mana-icon">💧</span>
       <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
@@ -479,5 +484,41 @@ export default {
   animation-name: skillActivation;
   animation-timing-function: ease-in-out;
   animation-fill-mode: forwards;
+}
+
+.upgrade-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: linear-gradient(135deg, #ffcc33, #ff8800);
+  color: #222;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  box-shadow: 0 0 4px rgba(0,0,0,0.4);
+  z-index: 2;
+}
+.upgrade-replace-tooltip {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translate(-50%, 100%);
+  background: rgba(255,255,255,0.95);
+  color: #222;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  border: 1px solid #e0e0e0;
+  z-index: 10;
+  pointer-events: none;
+  animation: fadeIn 0.18s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translate(-50%, 120%); }
+  to { opacity: 1; transform: translate(-50%, 100%); }
 }
 </style>

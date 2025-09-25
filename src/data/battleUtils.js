@@ -135,3 +135,18 @@ export function applyHeal(target, heal) {
   // 如需日志，可在此处添加，但为避免重复日志，保持静默
   // addHealLog(`${target.name}恢复了${heal}点生命！`);
 }
+
+export function drawSkillCard(player, number = 1) {
+  for (let i = 0; i < number; i++) {
+    if (player.frontierSkills.length >= player.maxHandSize) {
+      // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
+      break;
+    }
+    if (player.backupSkills.length === 0) {
+      // addBattleLog('你的后备技能已空，无法抽取更多卡牌！');
+      break;
+    }
+    const firstSkill = player.backupSkills.shift();
+    player.frontierSkills.push(firstSkill);
+  }
+}

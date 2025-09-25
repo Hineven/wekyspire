@@ -7,11 +7,12 @@ export class EmergencyShield extends Skill {
   
   constructor() {
     super('紧急护盾', 'normal', 0, 0, 1, 1);
-    this.extraColdDownTurns = 0;
+    this.baseColdDownTurns = 2;
+    this.extraColdDownTurns = 0; // 额外冷却时间
   }
   
   get coldDownTurns () {
-    return this.extraColdDownTurns + Math.max(2 - this.power, 1);
+    return this.extraColdDownTurns + Math.max(this.baseColdDownTurns - this.power, 1);
   }
 
   // 使用技能
@@ -32,10 +33,11 @@ export class EmergencyShield extends Skill {
 export class QuickShield extends Skill {
   constructor() {
     super('快速护盾', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 2;
   }
 
-get coldDownTurns () {
-    return Math.max(2 - this.power, 1);
+  get coldDownTurns () {
+    return Math.max(this.baseColdDownTurns - this.power, 1);
   }
 
   get shield () {
@@ -64,10 +66,7 @@ get coldDownTurns () {
 export class ChargeShield extends Skill {
   constructor() {
     super('冲锋盾', 'normal', 0, 0, 1, 1);
-  }
-
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
 
   get damage () {
@@ -96,10 +95,11 @@ export class ChargeShield extends Skill {
 export class GuardShield extends Skill {
   constructor() {
     super('警戒', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 1;
   }
 
   get coldDownTurns () {
-    return 1 - Math.min(0, this.power);
+    return this.baseColdDownTurns - Math.min(0, this.power);
   }
 
   get stack () {
@@ -113,5 +113,40 @@ export class GuardShield extends Skill {
 
   regenerateDescription(player) {
     return `获得${this.stack}层/effect{警戒}`;
+  }
+}
+
+// 灵能盾
+// 获得13+【2x灵能】点护盾，1层警戒
+export class PsychicShield extends Skill {
+  constructor() {
+    super('灵能盾', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 4;
+  }
+
+  get coldDownTurns () {
+    return Math.max(this.baseColdDownTurns - this.power, 1);
+  }
+
+  get shield () {
+    return Math.max(13 + 2 * this.power, 5);
+  }
+  get guardStacks() {
+    return Math.max(1 + Math.floor(this.power / 2), 1);
+  }
+
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      gainShield(player, player, this.shield);
+      return false;
+    } else {
+      player.addEffect('警戒', this.guardStacks);
+      return true;
+    }
+  }
+
+  regenerateDescription(player) {
+    if(player) return `获得${this.shield + 2 * player.magic}/named{护盾}，${this.guardStacks}层/effect{警戒}`;
+    return `获得【${this.shield}+2x/named{灵能}】/named{护盾}，${this.guardStacks}层/effect{警戒}`;
   }
 }
