@@ -66,13 +66,14 @@ export class Player extends Unit {
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.maxFrontierSkills = 5; // 最大前台技能数量
     // effects 由 Unit 初始化
+    this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
   }
 
   // 计算属性
   // attack/magic 继承自 Unit
 
   get agility() {
-    return (this.effects['敏捷'] || 0)
+    return (this.effects['敏捷'] || 0);
   }
 
   addBackupSkill (skill) {

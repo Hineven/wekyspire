@@ -10,6 +10,7 @@ import './assets/common.css'
 import SkillManager from './data/skillManager.js'
 import { initAnimationDispatcher } from './data/animationDispatcher.js'
 import {initGameFlowListeners} from "./game";
+import AbilityManager from "./data/abilityManager";
 
 // 创建路由
 const routes = [
@@ -37,10 +38,15 @@ initAnimationDispatcher();
 SkillManager.loadAllSkills().then(skillManager => {
   // 将skillManager实例添加到全局属性中，以便在应用中使用
   app.config.globalProperties.$skillManager = skillManager;
-  
+
+  // 加载所有ability
+  AbilityManager.loadAllAbilities().then(abilityManager => {
+    app.config.globalProperties.$abilityManager = abilityManager;
+    app.mount('#app');
+  });
   // 挂载应用
-  app.mount('#app');
 });
+
 
 // 初始化后端游戏流程在backendEventBus上的监听器
 initGameFlowListeners();

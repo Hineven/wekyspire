@@ -1,26 +1,33 @@
-import { Breakthrough, Strengthen, Growth, Cultivation, Exercise, MindExercise, TurtoiseExercise,
-   BitterCultivation, BitterBodyCultivation, SpecialDefenseCultivation,
-    DefenseCultivation, ExpertExercise, WellRest, NapRest } from './ability.js';
+import {Ability} from './ability.js';
 
 // 能力管理器类
 class AbilityManager {
   constructor() {
     this.abilities = [];
-    // 初始化时注册预定义能力
-    this.registerAbility(Breakthrough);
-    this.registerAbility(Strengthen);
-    this.registerAbility(Growth);
-    this.registerAbility(Cultivation);
-    this.registerAbility(NapRest);
-    this.registerAbility(WellRest);
-    this.registerAbility(Exercise);
-    this.registerAbility(MindExercise);
-    this.registerAbility(TurtoiseExercise);
-    this.registerAbility(ExpertExercise);
-    this.registerAbility(BitterCultivation);
-    this.registerAbility(BitterBodyCultivation);
-    this.registerAbility(DefenseCultivation);
-    this.registerAbility(SpecialDefenseCultivation);
+  }
+
+  static async loadAllAbilities() {
+    // 动态导入所有文件
+    const abilityModules = [
+      await import('./abilities/basic.js'),
+    ];
+    const abilityManager = this.getInstance();
+    // 遍历所有模块并注册其中的技能
+    for (const module of abilityModules) {
+      // 遍历模块中的所有导出
+      for (const [key, AbilityClass] of Object.entries(module)) {
+        // 检查是否为Ability类的子类
+        if (typeof AbilityClass === 'function' && AbilityClass !== Ability && AbilityClass.prototype instanceof Ability) {
+          try {
+            abilityManager.registerAbility(AbilityClass);
+          } catch (error) {
+            console.error(`Failed to register ability: ${key}`, error);
+          }
+        }
+      }
+    }
+
+    return abilityManager;
   }
   
   // 注册能力

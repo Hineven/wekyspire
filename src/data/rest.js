@@ -16,7 +16,7 @@ export function spawnSkillRewards() {
     if(nextTier) tier = nextTier;
   }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.skillSlots, tier, true // 生成高质量奖励
+    3, gameState.player.leino, gameState.player.skillSlots, tier, true // 生成高质量奖励
   );
 }
 

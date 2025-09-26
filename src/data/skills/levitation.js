@@ -7,7 +7,7 @@ import Skill from '../skill';
 // 浮空，获得3层/effect{闪避}'
 export class FloatingI extends Skill {
   constructor() {
-    super('浮空I', 'levitation', 3, 1, 1, 1, "浮空");
+    super('浮空I', 'air', 3, 1, 1, 1, "浮空");
     this.baseColdDownTurns = 5;
     this.upgradeTo = "浮空II";
   }
@@ -30,7 +30,7 @@ export class FloatingI extends Skill {
 // 浮空，获得4层/effect{闪避}'
 export class FloatingII extends Skill {
   constructor() {
-    super('浮空II', 'levitation', 5, 1, 1, 1, "浮空");
+    super('浮空II', 'air', 5, 1, 1, 1, "浮空");
     this.baseColdDownTurns = 3;
   }
 
@@ -52,7 +52,7 @@ export class FloatingII extends Skill {
 // 获得飞行和2层虚弱
 export class Flying extends Skill {
   constructor() {
-    super('飞行', 'levitation', 5, 3, 1, 1);
+    super('飞行', 'air', 5, 3, 1, 1);
   }
 
   get manaCost() {
@@ -78,7 +78,7 @@ export class Flying extends Skill {
 // 获得3层/effect{飞行}和-2层集中
 export class AntiGravity extends Skill {
   constructor() {
-    super('反重力', 'levitation', 7, 3, 1, 1);
+    super('反重力', 'air', 7, 3, 1, 1);
   }
 
   get manaCost() {

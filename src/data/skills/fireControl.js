@@ -5,7 +5,7 @@ import Skill from "../skill";
 // 控火术：灼烧（B-)
 export class FireControlI extends Skill {
   constructor() {
-    super('控火术:灼烧', 'fire-control', 3, 1, 1, 1, "控火术");
+    super('控火术:灼烧', 'fire', 3, 1, 1, 1, "控火术");
     this.baseColdDownTurns = 4;
     this.upgradeTo = "控火术:炙燃";
   }
@@ -35,7 +35,7 @@ export class FireControlI extends Skill {
 // 控火术：炙燃(B+)
 export class FireControlII extends Skill {
   constructor() {
-    super('控火术:炙燃', 'fire-control', 5, 3, 1, 1, "控火术");
+    super('控火术:炙燃', 'fire', 5, 3, 1, 1, "控火术");
     this.baseColdDownTurns = 5;
     this.upgradeTo = "控火术:焚灭";
   }
@@ -70,7 +70,7 @@ export class FireControlII extends Skill {
 // 控火术：焚灭(A)
 export class FireControlIII extends Skill {
   constructor() {
-    super('控火术:焚灭', 'fire-control', 7, 3, 1, "控火术");
+    super('控火术:焚灭', 'fire', 7, 3, 1, "控火术");
     this.baseColdDownTurns = 6;
     this.upgradeTo = "无上神焰";
   }
@@ -107,7 +107,7 @@ export class FireControlIII extends Skill {
 // 控火术: 暖身（C+）
 export class FireControlAssistI extends Skill {
   constructor() {
-    super('控火术:暖身', 'fire-control', 2, 0, 1, 1, "控火术");
+    super('控火术:暖身', 'fire', 2, 0, 1, 1, "控火术");
     this.baseColdDownTurns = 3;
     this.upgradeTo = "控火术:护体";
   }
@@ -127,7 +127,7 @@ export class FireControlAssistI extends Skill {
 // 控火术: 护体（B）
 export class FireControlAssistII extends Skill {
   constructor() {
-    super('控火术:护体', 'fire-control', 4, 1, 1, 1, "控火术");
+    super('控火术:护体', 'fire', 4, 1, 1, 1, "控火术");
     this.baseColdDownTurns = 3;
     this.upgradeTo = ["控火术:集中", "控火术:净化"];
   }
@@ -175,7 +175,7 @@ export class FireControlAssistIII1 extends Skill {
 // 控火术: 净化（A）
 export class FireControlAssistIII2 extends Skill {
   constructor() {
-    super('控火术:净化', 'fire-control', 7, 3, 1, 1, "控火术");
+    super('控火术:净化', 'fire', 7, 3, 1, 1, "控火术");
     this.upgradeTo = "无上神焰";
   }
 
@@ -210,7 +210,7 @@ export class FireControlAssistIII2 extends Skill {
 // 无上神焰(S)
 export class AuthenticFireControl extends Skill {
   constructor() {
-    super('无上神焰', 'fire-control', 9, 1, 1, Infinity, "控火术");
+    super('无上神焰', 'fire', 9, 1, 1, Infinity, "控火术");
     this.subtitle = "登峰造极";
     this.mode = 'idle';
   }

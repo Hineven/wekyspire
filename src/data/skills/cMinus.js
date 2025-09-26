@@ -7,7 +7,7 @@ import { addBattleLog } from '../battleLogUtils.js';
 // 蓄力一击技能
 export class ChargePunch extends Skill {
   constructor() {
-    super('蓄力一击', 'magic', 2, 1, 1, 1, '蓄力一击');
+    super('蓄力一击', 'normal', 2, 1, 1, 1, '蓄力一击');
     this.mode = 'idle';
     this.chargedDamage = 0;
     this.baseColdDownTurns = 1;
@@ -61,7 +61,7 @@ export class ChargePunch extends Skill {
 // 增强I技能
 export class StrengthenI extends Skill {
   constructor() {
-    super('增强I', 'magic', 3, 1, 1, 1, "增强");
+    super('增强I', 'normal', 3, 1, 1, 1, "增强");
   }
   
   get baseMaxStacks() {
@@ -95,7 +95,7 @@ export class StrengthenI extends Skill {
 // 锻造技能
 export class Forge extends Skill {
   constructor() {
-    super('锻造', 'magic', 2, 0, 1, 1, "锻造");
+    super('锻造', 'normal', 2, 0, 1, 1, "锻造");
   }
 
   get coldDownTurns () {
@@ -127,7 +127,7 @@ export class Forge extends Skill {
 // 敌人失去/named{灵能}层/effect{力量}和/effect{坚固}，不超过2
 export class WeakenI extends Skill {
   constructor() {
-    super('削弱I', 'magic', 3, 1, 1, 1, "削弱");
+    super('削弱I', 'normal', 3, 1, 1, 1, "削弱");
   }
   get baseMaxStacks() {
     return Math.max(this.power + 2, 1);
@@ -161,7 +161,7 @@ export class WeakenI extends Skill {
 // 获得3/effect{力量}
 export class TransformSword extends Skill {
   constructor() {
-    super('化形为剑', 'magic', 3, 1, 1, 1, "化形为剑");
+    super('化形为剑', 'normal', 3, 1, 1, 1, "化形为剑");
   }
   get stacks() {
     return Math.max(3 + this.power, 1);
@@ -181,7 +181,7 @@ export class TransformSword extends Skill {
 // 获得4格挡
 export class RockFormationI extends Skill {
   constructor() {
-    super('成岩I', 'magic', 3, 1, 1, 1, "成岩");
+    super('成岩I', 'normal', 3, 1, 1, 1, "成岩");
     this.baseColdDownTurns = 4;
   }
   get stacks() {
@@ -200,7 +200,7 @@ export class RockFormationI extends Skill {
 // 让右邻变为消耗，左邻补充一次充能
 export class EvilSacrifice extends Skill {
   constructor() {
-    super('邪恶献祭', 'magic', 3, 0, 1, 1, "邪恶献祭");
+    super('邪恶献祭', 'normal', 3, 0, 1, 1, "邪恶献祭");
   }
   use(player, enemy, stage) {
     // 找到左边的技能
