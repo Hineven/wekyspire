@@ -79,34 +79,6 @@ export class Player extends Unit {
     this.backupSkills.push(skill);
   }
 
-  // 随机移除stacks层效果
-  removeEffects(stacks) {
-    const effectNames = Object.keys(this.effects);
-    for (let i = 0; i < stacks; i++) {
-      if (effectNames.length === 0) break;
-      const randomIndex = Math.floor(Math.random() * effectNames.length);
-      const effectName = effectNames[randomIndex];
-      this.removeEffect(effectName, 1);
-      // 如果效果层数为0，移除效果名称
-      if (!this.effects[effectName]) {
-        effectNames.splice(randomIndex, 1);
-      }
-    }
-  }
-
-  // 随机移除负面效果
-  // mode: 'random' 随机移除, 'highest-stack' 优先层数最高的
-  // 'highest-stack-kind' 种类移除，优先层数最高种类
-  // 'ramdom-kind' 种类移除，随机种类
-  removeNegativeEffets(count, mode = 'random') {
-    // TODO
-  }
-
-
-  clearNegativeEffects () {
-    // TODO
-  }
-
   consumeActionPoints (amount) {
     this.remainingActionPoints -= amount;
     this.remainingActionPoints = Math.max(this.remainingActionPoints, 0);
@@ -127,28 +99,5 @@ export class Player extends Unit {
   gainActionPoint (amount) {
     this.remainingActionPoints += amount;
     this.remainingActionPoints = Math.min(this.remainingActionPoints, this.maxActionPoints);
-  }
-}
-
-// 导出玩家管理器
-export class PlayerManager {
-  static getInstance() {
-    if (!PlayerManager.instance) {
-      PlayerManager.instance = new PlayerManager();
-    }
-    return PlayerManager.instance;
-  }
-  
-  constructor() {
-    this.player = new Player();
-  }
-  
-  getPlayer() {
-    return this.player;
-  }
-  
-  resetPlayer() {
-    this.player = new Player();
-    return this.player;
   }
 }

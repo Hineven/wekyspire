@@ -173,7 +173,7 @@ export class SuperSiphonWeky extends Skill {
 // 索取
 export class WeakExploitWeky extends Skill {
   constructor() {
-    super('索取', 'normal', 1, 0, 4, 1, '压榨');
+    super('索取', 'normal', 1, 0, 2, 2, '压榨');
     this.upgradeTo = '压榨';
   }
 
@@ -204,7 +204,7 @@ export class WeakExploitWeky extends Skill {
 // 压榨
 export class ExploitWeky extends Skill {
   constructor() {
-    super('压榨', 'normal', 3, 0, 5, 1, '压榨');
+    super('压榨', 'normal', 3, 0, 2, 2, '压榨');
   }
 
   get stack() {

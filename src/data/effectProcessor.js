@@ -51,6 +51,12 @@ export function processStartOfTurnEffects(target) {
     }
     target.addEffect('肌肉记忆', -1);
   }
+
+  // 飞行效果
+  if (target.effects['飞行'] > 0) {
+    target.addEffect('闪避', 1);
+    addEffectLog(`${target.name}通过/effect{飞行}获得了1层/effect{闪避}！`);
+  }
   
   // 最后再处理眩晕效果
   if (target.effects['眩晕'] > 0) {
@@ -86,7 +92,7 @@ export function processEndOfTurnEffects(target) {
   // 处理中毒效果
   if (target.effects['中毒'] > 0) {
     const damage = target.effects['中毒'];
-    dealDamage(null, target, damage, false);
+    dealDamage(null, target, damage, true);
     target.addEffect('中毒', -1);
     addEffectLog(`${target.name}受到/effect{中毒}影响，受到${damage}伤害！`);
   }
@@ -173,6 +179,11 @@ export function processEndOfTurnEffects(target) {
   if (target.effects['易伤'] > 0) {
     target.addEffect('易伤', -1);
   }
+
+  // 虚弱效果
+  if (target.effects['虚弱'] > 0) {
+    target.addEffect('虚弱', -1);
+  }
 }
 
 /**
@@ -225,18 +236,13 @@ export function processAttackTakenEffects(target, damage) {
  * @param {number} damage - 伤害值
  * @returns {number} 处理后的伤害值
  */
-export function processDamageTakenEffects(target, damage) {
-  let finalDamage = damage;
-  
-  return finalDamage;
-}
-
-/**
- * 处理受到伤害时触发的效果
- * @param {Object} target - 目标对象（玩家或敌人）
- * @param {number} damage - 伤害值
- */
-export function processDamageDealtEffects(target, damage) {
+export function processDamageTakenEffects(target, passThroughDamage, hpDamage) {
+  // 处理飞行效果
+  if (target.effects['飞行'] > 0) {
+    if(hpDamage > 0) {
+      target.removeEffect('飞行', 1);
+    }
+  }
   // 处理暴怒效果
   if (target.effects['暴怒'] > 0) {
     const stacks = target.effects['暴怒'];

@@ -1,8 +1,7 @@
 // battleUtil.js - 提供战斗中的攻击结算、治疗结算等修改战斗状态相关助手函数，以供技能、敌人和效果结算逻辑调用
 
 import {
-  processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects,
-  processDamageDealtEffects
+  processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
 
@@ -18,8 +17,6 @@ function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker 
     mitigatedDamage -= shieldDamage;
     hpDamage = mitigatedDamage;
     target.hp = Math.max(target.hp - mitigatedDamage, 0);
-
-    processDamageDealtEffects(target, hpDamage);
 
     if (mitigatedDamage > 0) {
       if (mode === 'attack') {
@@ -49,6 +46,9 @@ function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker 
     }
   }
 
+  // 所有伤害结算完毕，处理受到伤害时的效果
+  processDamageTakenEffects(target, passThoughDamage, hpDamage)
+
   if (target.hp <= 0) {
     addDeathLog(`${target.name} 被击败了！`);
     return { dead: true, passThoughDamage, hpDamage };
@@ -68,8 +68,6 @@ export function launchAttack (attacker, target, damage) {
   }
   // 处理受到攻击时的效果
   finalDamage = processAttackTakenEffects(target, finalDamage);
-  // 处理受到伤害时的效果
-  finalDamage = processDamageTakenEffects(target, finalDamage);
   // 固定防御减免
   finalDamage = Math.max(finalDamage - target.defense, 0);
 
@@ -87,8 +85,6 @@ export function launchAttack (attacker, target, damage) {
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
 export function dealDamage (source, target, damage, penetrateDefense = false) {
   let finalDamage = damage;
-  // 处理受到伤害时的效果
-  finalDamage = processDamageTakenEffects(target, finalDamage);
   // 固定防御减免
   if(!penetrateDefense) finalDamage = Math.max(finalDamage - target.defense, 0);
 
