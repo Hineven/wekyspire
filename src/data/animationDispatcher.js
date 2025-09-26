@@ -1,7 +1,7 @@
 // 动画系统（animationDispatcher）— 设计说明与用法
 //
 // 核心目标
-// - 以“队列 + 节拍”的方式，把后端状态（backendGameState）的变化按动画节奏映射到显示层（displayGameState）。
+// - 以“队列 + 节拍”的方式，把后端状态（backendGameState）的变化按动画节奏排序并映射到显示层（displayGameState），完成前端动画播放和后端逻辑计算节奏的分离。
 // - 保证每一次关键状态变化（S 子集）都有独立的可控展示顺序；纯 UI 动作（如日志、声音）也在同一队列中顺序播放。
 //
 // 核心机制
@@ -288,7 +288,7 @@ function captureSnapshot() {
 
 function scheduleNext(delay) {
   if(delay > 0) {
-    setTimeout(processQueue, delay);
+    setTimeout(()=>{stalling = false; processQueue();}, delay);
   } else processQueue();
 }
 
@@ -296,7 +296,6 @@ function processQueue() {
   if (processing) return;
   if (queue.length === 0) return;
   processing = true;
-  stalling = false;
   const item = queue.shift();
   try {
     switch (item.kind) {
@@ -308,14 +307,16 @@ function processQueue() {
         break;
       case 'delay':
         // 纯延时，不做任何应用
-        stalling = true; // 在此期间，不启动额外processQueue
         break;
       default:
         break;
     }
   } finally {
+    // 在等待下一次调度期间阻止立即触发的 tryStartProcessQueue
+    const delay = item.duration ?? defaultStepMs;
+    stalling = delay > 0;
     processing = false;
-    scheduleNext(item.duration ?? defaultStepMs);
+    scheduleNext(delay);
   }
 }
 
@@ -355,6 +356,10 @@ function handleUIAction(item) {
     case 'clearBattleLogUI':
       // 清空战斗日志作为UI动作排队处理
       frontendEventBus.emit('clear-battle-log');
+      break;
+    case 'animateCardPlay':
+      // 触发编排器执行卡牌播放序列（时序由队列duration控制）
+      frontendEventBus.emit('animate-card-play', payload || {});
       break;
   }
 }

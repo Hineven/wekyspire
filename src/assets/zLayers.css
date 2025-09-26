@@ -1,0 +1,29 @@
+/* Centralized z-index map (higher = on top)
+   Order (top → bottom): Dialog > Cutscene > BossShowup > Particles > Regular content
+   Regular overlays (slot/ability overlays) are below particles.
+   AnimationOverlay (card ghosts) is above regular overlays but below particles.
+*/
+:root {
+  /* Regular content baseline */
+  --z-base: 0;
+
+  /* Regular overlays (selection panels, dim overlays) */
+  --z-overlay: 1200;
+  --z-overlay-content: 1210; /* overlay inner content if needed */
+
+  /* Tooltips in regular UI (above base/overlay, below particles) */
+  --z-tooltip: 1300;
+
+  /* Card animation overlay (ghosts) */
+  --z-animation: 1500;
+
+  /* Effects */
+  --z-particles: 2000;
+
+  /* Cinematic layers */
+  --z-boss: 2500;
+  --z-cutscene: 3000;
+  --z-dialog: 3500;
+  --z-message: 3600; /* ephemeral popup messages above dialog */
+}
+

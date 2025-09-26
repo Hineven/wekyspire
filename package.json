@@ -10,7 +10,8 @@
   "dependencies": {
     "mitt": "^3.0.1",
     "vue": "^3.2.0",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "gsap": "^3.13.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.0.0",

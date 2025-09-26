@@ -116,11 +116,33 @@ export class GuardShield extends Skill {
   }
 }
 
+// 格挡
+// 获得1格挡
+export class BlockShield extends Skill {
+  constructor() {
+    super('格挡', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 1;
+  }
+
+  get stack () {
+    return Math.max(1 + this.power, 1);
+  }
+
+  use(player, enemy) {
+    player.addEffect('格挡', this.stack);
+    return true;
+  }
+
+  regenerateDescription(player) {
+    return `获得${this.stack}层/effect{格挡}`;
+  }
+}
+
 // 灵能盾
 // 获得13+【2x灵能】点护盾，1层警戒
 export class PsychicShield extends Skill {
   constructor() {
-    super('灵能盾', 'normal', 0, 0, 1, 1);
+    super('灵能盾', 'normal', 0, 1, 1, 1);
     this.baseColdDownTurns = 4;
   }
 

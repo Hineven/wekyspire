@@ -228,6 +228,7 @@ export default {
   height: 100%;
   width: 100%;
   background-size: cover;
+  overflow: hidden;
 }
 
 .remi-present-rest-screen {

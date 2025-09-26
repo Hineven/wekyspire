@@ -291,34 +291,33 @@ function fillFrontierSkills(player) {
 
 // 处理技能使用后的逻辑
 function handleSkillAfterUse(skill) {
-  // 如果技能剩余使用次数为0
-  if (skill.remainingUses <= 0) {
-    // 查找技能在前台技能列表中的位置
-    const index = gameState.player.frontierSkills.findIndex(s => s === skill);
-    if (index !== -1) {
-      // 从前台技能列表中移除
-      gameState.player.frontierSkills.splice(index, 1);
-      
-      if (skill.coldDownTurns !== 0) {
-        // 如果是可充能技能，移动到后备技能列表尾部
-        gameState.player.backupSkills.push(skill);
-        addSystemLog(`/blue{${skill.name}} 进入后备。`);
-      } else {
-        // 如果是不可充能技能，直接从技能列表中移除
-        const skillsIndex = gameState.player.skills.findIndex(s => s === skill);
-        if (skillsIndex !== -1) {
-          gameState.player.skills.splice(skillsIndex, 1);
-        }
-        addSystemLog(`/blue{${skill.name}} 已耗尽。`);
+
+  // 查找技能在前台技能列表中的位置
+  const index = gameState.player.frontierSkills.findIndex(s => s === skill);
+  if (index !== -1) {
+    // 从前台技能列表中移除
+    gameState.player.frontierSkills.splice(index, 1);
+
+    if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity) {
+      // 如果是可充能/无限使用技能，移动到后备技能列表尾部
+      gameState.player.backupSkills.push(skill);
+      addSystemLog(`/blue{${skill.name}} 进入后备。`);
+    } else {
+      // 如果是不可充能技能，直接从技能列表中移除
+      const skillsIndex = gameState.player.skills.findIndex(s => s === skill);
+      if (skillsIndex !== -1) {
+        gameState.player.skills.splice(skillsIndex, 1);
       }
-      
-      // 触发技能列表更新事件
-      backendEventBus.emit(EventNames.Player.FRONTIER_UPDATED, {
-        frontierSkills: gameState.player.frontierSkills,
-        backupSkills: gameState.player.backupSkills
-      });
+      addSystemLog(`/blue{${skill.name}} 已耗尽。`);
     }
+
+    // 触发技能列表更新事件
+    backendEventBus.emit(EventNames.Player.FRONTIER_UPDATED, {
+      frontierSkills: gameState.player.frontierSkills,
+      backupSkills: gameState.player.backupSkills
+    });
   }
+
 }
 
 // 克隆技能对象

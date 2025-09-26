@@ -95,7 +95,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 900; /* 低于DialogScreen的1000 */
+  z-index: var(--z-cutscene);
 }
 
 .fade-enter-active, .fade-leave-active {

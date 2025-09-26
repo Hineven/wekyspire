@@ -21,14 +21,17 @@ class SkillManager {
     const skillModules = [
       await import('./skills/basic.js'),
       await import('./skills/blast.js'),
-      await import('./skills/heal.js'),
-      // await import('./skills/remi.js'),
       await import('./skills/cMinus.js'),
-      await import('./skills/punchKicks.js'),
-      await import('./skills/fireAssist.js'),
-      await import('./skills/shielding.js'),
       await import('./skills/concentration.js'),
-      // await import('./skills/firecontrol.js'),
+      await import('./skills/fireAssist.js'),
+      await import('./skills/fireControl.js'),
+      await import('./skills/heal.js'),
+      await import('./skills/levitation.js'),
+      await import('./skills/punchKicks.js'),
+      await import('./skills/refuelWeky.js'),
+      await import('./skills/shielding.js'),
+      await import('./skills/speedThinking.js'),
+      // await import('./skills/remi.js'),
       // await import('./skills/lumi.js')
     ];
     
@@ -69,12 +72,14 @@ class SkillManager {
   }
   
   // 获取随机技能
-  getRandomSkills(count, playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+  getRandomSkills(count, playerLeino= ['normal'], playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+    // console.log(playerLeino);
     const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
       // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
       return {
         name: name,
+        type: tempSkill.type,
         series: tempSkill.skillSeriesName,
         tier: tempSkill.tier,
         spawnWeight: tempSkill.spawnWeight
@@ -96,7 +101,7 @@ class SkillManager {
       skill.tier <= playerTier
     );
 
-    // —— 新逻辑：收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——
+    // —— 收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——
     const upgradeTargetNames = new Set();
     const upgradeSourceMap = new Map(); // targetName -> sourceSkillName
     for(const ownedSkill of playerSkills) {
@@ -136,9 +141,12 @@ class SkillManager {
     const weightedSkills = availableSkills.map(skill => {
       const tierDifference = playerTier - skill.tier;
       let modifyFactor = 1;
-      
+
+      // 高等级技能出现权重降低
       if (skill.tier >= 8) modifyFactor *= 0.7;
       if (skill.tier >= 5) modifyFactor *= 0.8;
+
+      // 等级太低的技能出现权重大幅降低
       if (tierDifference > 7) {
         modifyFactor = 0.15;
       }  else if (tierDifference > 6) {
@@ -146,6 +154,7 @@ class SkillManager {
       } else if (tierDifference > 5) {
         modifyFactor = 0.70;
       }
+
       // 增加当前等阶的技能出现权重
       if(tierDifference < 1) modifyFactor *= 1.2;
 
@@ -153,19 +162,23 @@ class SkillManager {
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
 
+      // 特殊的，关于技能属性和灵脉属性对权重进行修正
+      if(playerLeino.findIndex(type => type === skill.type) !== -1) {
+        modifyFactor *= 2; // 技能属性匹配，权重翻倍
+      } else {
+        // 否然默认权重仅有 1/10
+        modifyFactor *= 0.1;
+        // 对于相对玩家的高阶异属性灵脉技能，根本无法学习
+        if(tierDifference < 2) modifyFactor = 0;
+      }
+
       // 升级候选技能稍微再提升一点（避免被其它随机权重稀释）
-      if(skill.isUpgradeCandidate) modifyFactor *= 1.5;
+      if(skill.isUpgradeCandidate) modifyFactor *= 2;
 
       return {
         ...skill,
         weight: skill.spawnWeight * modifyFactor
       };
-    });
-    // 减少已获得技能的出现权重（x0.2） — 这里理论上已过滤，不再需要，但保留以防未来逻辑调整
-    weightedSkills.forEach(skill => {
-      if (playerSkillNames.includes(skill.name)) {
-        skill.weight *= 0.2;
-      }
     });
     
     const selectedSkills = [];

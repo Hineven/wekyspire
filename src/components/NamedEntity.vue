@@ -120,7 +120,7 @@ export default {
 </style>
 
 <style>
-/* 全局样式，确保tooltip显示在最上层 */
+/* 全局样式，确保tooltip在常规内容上方但低于特效/对话等 */
 .named-entity-tooltip {
   position: fixed;
   background-color: rgba(0, 0, 0, 0.8);
@@ -128,7 +128,7 @@ export default {
   padding: 10px;
   border-radius: 4px;
   font-size: 14px;
-  z-index: 10000;
+  z-index: var(--z-tooltip);
   max-width: 300px;
   word-wrap: break-word;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);

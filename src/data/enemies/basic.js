@@ -161,8 +161,8 @@ export class BuzzlingBugs extends Enemy {
     // 2. 攻击，造成4 x 攻击力伤害。
     let actions = [
       () => {
-        // 高飞，获得 4 层闪避。
-        this.addEffect('闪避', 4);
+        // 高飞，获得 1 层闪避。
+        this.addEffect('闪避', 1);
         addEnemyActionLog(`${this.name} 高高飞起，你很难碰到他们！`);
         advanceAction = 1;
         return {};

@@ -67,7 +67,7 @@ export default {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1100; /* 高于DialogScreen的1000 */
+  z-index: var(--z-message);
   display: flex;
   flex-direction: column-reverse; /* 新消息显示在上面 */
   align-items: center;

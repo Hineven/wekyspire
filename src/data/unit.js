@@ -42,4 +42,29 @@ export default class Unit {
   applyHeal(heal) {
     applyHealToTarget(this, heal);
   }
+
+
+  // 随机移除stacks层效果
+  removeEffects(stacks) {
+    const effectNames = Object.keys(this.effects);
+    for (let i = 0; i < stacks; i++) {
+      if (effectNames.length === 0) break;
+      const randomIndex = Math.floor(Math.random() * effectNames.length);
+      const effectName = effectNames[randomIndex];
+      this.removeEffect(effectName, 1);
+    }
+  }
+
+  // 随机移除负面效果
+  // mode: 'random' 随机移除, 'highest-stack' 优先层数最高的
+  // 'highest-stack-kind' 种类移除，优先层数最高种类
+  // 'ramdom-kind' 种类移除，随机种类
+  removeNegativeEffects(count, mode = 'random') {
+    // TODO
+  }
+
+
+  clearNegativeEffects () {
+    // TODO
+  }
 }

@@ -5,11 +5,11 @@ import {launchAttack, dealDamage, gainShield, drawSkillCard} from '../battleUtil
 export class PunchKick extends Skill {
   
   constructor() {
-    super('拳打脚踢', 'normal', 0, 0, 1, Infinity, '拳打脚踢', 1);
+    super('拳打脚踢', 'normal', 0, 0, 2, Infinity, '拳打脚踢', 1);
   }
   
   get damage () {
-    return Math.max(4 + 2 * this.power, 3);
+    return Math.max(9 + 2 * this.power, 3);
   }
 
   // 使用技能

@@ -26,6 +26,13 @@ function startGame() {
   slots[3] = initialSkill4;
   backendGameState.player.skillSlots = slots;
 
+  console.log(backendGameState.player.skillSlots);
+
+  // 升满级调试
+  // while(backendGameState.player.tier < 9) {
+  //   upgradePlayerTier(backendGameState.player);
+  // }
+
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.START_BATTLE);
 }
@@ -45,11 +52,13 @@ export function initGameFlowListeners() {
   });
 
   // 玩家使用技能（由前端仅发事件，不直接调用函数）
-  backendEventBus.on(EventNames.Player.USE_SKILL, (skill_index_in_frontier_skills ) => {
-    const skill = gameState.player.frontierSkills[skill_index_in_frontier_skills];
+  backendEventBus.on(EventNames.Player.USE_SKILL, (uniqueID) => {
+    const skill = gameState.player.frontierSkills.find(s => s.uniqueID === uniqueID);
+    console.log('使用技能：', skill);
     if (skill) useSkill(skill);
     else {
-      console.warn(`技能使用失败：前台技能列表中未找到第 ${skill_index_in_frontier_skills} 个技能`);
+      console.warn(`技能使用失败：前台技能列表中未找到id为 ${uniqueID} 的技能`);
+      console.log(gameState.player.frontierSkills);
     }
   });
 

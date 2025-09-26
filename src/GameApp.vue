@@ -45,6 +45,9 @@
     
     <!-- 消息弹出框界面 -->
     <MessagePopupScreen />
+
+    <!-- 全局动画覆盖层（全游戏共享） -->
+    <AnimationOverlay ref="animationOverlay" />
   </div>
 </template>
 
@@ -59,9 +62,11 @@ import CutsceneScreen from './components/CutsceneScreen.vue'
 import AudioControllerScreen from './components/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
+import AnimationOverlay from './components/AnimationOverlay.vue'
 
 import frontendEventBus from './frontendEventBus.js'
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
+import orchestrator from './utils/animationOrchestrator.js';
 
 export default {
   name: 'App',
@@ -75,7 +80,8 @@ export default {
     CutsceneScreen,
     AudioControllerScreen,
     ParticleEffectManager,
-    MessagePopupScreen
+    MessagePopupScreen,
+    AnimationOverlay
   },
   computed: {
     isPlayerTurn() {
@@ -91,6 +97,13 @@ export default {
     // 当显示层的故事模式开关变化时，同步给对话系统
     'gameState.isRemiPresent'(val) {
       dialogues.setIsRemiPresent(val);
+    }
+  },
+  mounted() {
+    // 初始化全局动画编排器：注入全局Overlay引用
+    const overlayRefs = this.$refs.animationOverlay?.getRefs?.();
+    if (overlayRefs) {
+      orchestrator.init(overlayRefs);
     }
   },
   methods: {
