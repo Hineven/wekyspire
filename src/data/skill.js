@@ -2,7 +2,7 @@
 class Skill {
   constructor(name, type, tier, baseManaCost, baseActionPointCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
-    this.type = type; // 技能类型：'普通'（非魔法）, '木', '火', '光', '水', '通用'（通用类魔法）, '特殊'，'诅咒'（负面技能卡）
+    this.type = type; // 技能所属灵脉。特别地：'normal'（都可用）,'curse'（诅咒）
     this.tier = tier; // 技能等阶
     // 随机生成一个唯一ID。注意！前后台技能的id可能不同。
     this.uniqueID = Math.random().toString(36).substring(2, 10);

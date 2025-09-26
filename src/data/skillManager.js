@@ -73,11 +73,13 @@ class SkillManager {
   
   // 获取随机技能
   getRandomSkills(count, playerLeino= ['normal'], playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+    // console.log(playerLeino);
     const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
       // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
       return {
         name: name,
+        type: tempSkill.type,
         series: tempSkill.skillSeriesName,
         tier: tempSkill.tier,
         spawnWeight: tempSkill.spawnWeight
@@ -160,9 +162,8 @@ class SkillManager {
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
 
-      // console.log(playerLeino);
       // 特殊的，关于技能属性和灵脉属性对权重进行修正
-      if(playerLeino.findIndex(skill.type) !== -1) {
+      if(playerLeino.findIndex(type => type === skill.type) !== -1) {
         modifyFactor *= 2; // 技能属性匹配，权重翻倍
       } else {
         // 否然默认权重仅有 1/10

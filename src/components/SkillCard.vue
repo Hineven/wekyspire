@@ -74,6 +74,11 @@ export default {
     previewMode: {
       type: Boolean,
       default: false
+    },
+    // 新增：当为 true 时，点击卡牌不触发本地 CSS 激活动画（交由全局 overlay/GSAP 处理）
+    suppressActivationAnimationOnClick: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -172,9 +177,10 @@ export default {
     },
     onClick(event) {
       if (!this.disabled) {
-        // 播放技能激活动画
-        this.playActivationAnimation();
-        
+        // 仅当未开启抑制时才播放本地 CSS 激活动画
+        if (!this.suppressActivationAnimationOnClick) {
+          this.playActivationAnimation();
+        }
         this.$emit('skill-card-clicked', this.skill, event);
       }
     },
@@ -303,7 +309,7 @@ export default {
 
 <style scoped>
 .skill-card-panel {
-  z-index: 1;
+  position: absolute;
   width: 150px;
   padding: 15px;
   border-radius: 8px;
@@ -342,7 +348,6 @@ export default {
   right: 5px;
   font-weight: bold;
   font-size: 18px;
-  z-index: 2;
   padding: 2px 6px;
   border-radius: 4px;
   background-color: rgba(255, 255, 255, 0.8);
@@ -354,7 +359,6 @@ export default {
   left: 5px;
   display: flex;
   align-items: center;
-  z-index: 2;
   background-color: rgba(255, 255, 255, 0.8);
   padding: 2px 6px;
   border-radius: 4px;
@@ -381,7 +385,6 @@ export default {
   left: 5px;
   display: flex;
   align-items: center;
-  z-index: 2;
   background-color: rgba(255, 255, 255, 0.8);
   padding: 2px 6px;
   border-radius: 4px;
@@ -404,7 +407,6 @@ export default {
   right: 5px;
   display: flex;
   align-items: center;
-  z-index: 2;
   padding: 2px 6px;
   color: rgba(200, 200, 200, 0.7);
   font-size: 12px;
@@ -417,8 +419,8 @@ export default {
 }
 
 .skill-card {
-  width: 192px;
-  height: 260px;
+  width: 198px;
+  height: 266px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -426,8 +428,6 @@ export default {
   align-items: center;
   /* transition: all 0.3s ease; */
   position: relative;
-  transition: all 0.3s ease;
-
   border: 3px solid #eee;
   border-radius: 5px;
 }
@@ -438,7 +438,7 @@ export default {
 }
 
 .skill-card.disabled {
-  opacity: 0.5;
+  filter: brightness(50%);
   cursor: not-allowed;
   transform: none;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);

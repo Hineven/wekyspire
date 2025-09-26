@@ -207,7 +207,7 @@ export default {
   width: 100%;
   height: 100%;
   pointer-events: none; /* 确保粒子不影响用户交互 */
-  z-index: 2; /* 设置较低的z-index，让技能卡片能够遮住粒子，但是不能低于Enemy和Player panel。 */
+  z-index: var(--z-particles);
   overflow: hidden; /* 防止粒子溢出 */
 }
 

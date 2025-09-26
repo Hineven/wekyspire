@@ -48,7 +48,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000; /* 确保在战斗和休整界面之上 */
+  z-index: var(--z-boss);
 }
 
 .boss-cover-image {

@@ -7,6 +7,7 @@ import TestEffectDisplay from './components/TestEffectDisplay.vue'
 import NamedEntityTest from './components/NamedEntityTest.vue'
 import './assets/main.css'
 import './assets/common.css'
+import './assets/zLayers.css'
 import SkillManager from './data/skillManager.js'
 import { initAnimationDispatcher } from './data/animationDispatcher.js'
 import {initGameFlowListeners} from "./game";

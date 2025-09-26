@@ -71,7 +71,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 900; /* 确保在对话界面之下 */
+  z-index: var(--z-overlay);
 }
 
 .skill-slot-selection-panel {

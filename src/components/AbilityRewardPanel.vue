@@ -189,7 +189,7 @@ button:hover {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 901; /* 高于主覆盖层 */
+  z-index: var(--z-overlay);
 }
 
 /* 选中效果覆盖层淡入淡出动画 */
@@ -208,7 +208,7 @@ button:hover {
 /* 选中能力卡发光效果 */
 .selected-glow {
   position: relative;
-  z-index: 902; /* 高于选中效果覆盖层 */
+  z-index: var(--z-overlay-content);
 }
 
 .selected-glow.tier-1 {

@@ -271,7 +271,7 @@ export default {
   font-weight: bold;
   font-size: 24px;
   pointer-events: none;
-  z-index: 1000;
+  z-index: var(--z-tooltip);
   animation: damageFloat 1s ease-out forwards;
 }
 
@@ -293,7 +293,7 @@ export default {
   color: white;
   padding: 15px;
   border-radius: 8px;
-  z-index: 1000;
+  z-index: var(--z-tooltip);
   min-width: 250px;
   max-width: 400px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
