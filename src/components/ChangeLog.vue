@@ -90,8 +90,7 @@ export default {
   },
   async mounted() {
     try {
-      const base = (import.meta?.env?.BASE_URL) || '/';
-      const res = await fetch(base.replace(/\/$/, '/') + 'changelog.md', { cache: 'no-cache' });
+      const res = await fetch('changelog.md', { cache: 'no-cache' });
       if (!res.ok) {
         this.error = `HTTP ${res.status}`;
         return;

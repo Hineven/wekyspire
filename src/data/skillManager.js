@@ -162,11 +162,10 @@ class SkillManager {
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
 
-      // FIXME 暂时关闭了此修正
-      if(false) {
+      if(true) {
         // 特殊的，关于技能属性和灵脉属性对权重进行修正
         if (playerLeino.findIndex(type => type === skill.type) !== -1) {
-          if (skill.type !== 'normal') modifyFactor *= 2; // 技能属性匹配，权重翻倍
+          if (skill.type !== 'normal') modifyFactor *= 3; // 技能属性匹配，权重翻3倍
         } else {
           // 否然默认权重仅有 1/10
           modifyFactor *= 0.1;

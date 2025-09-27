@@ -211,7 +211,7 @@ export class EvilSacrifice extends Skill {
     // 找到右边的技能
     const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
     if(rightSkill) {
-      rightSkill.coldDownTurns = ()=>{return 0;};
+      rightSkill.baseColdDownTurns = 0;
     }
   }
   regenerateDescription(player) {
