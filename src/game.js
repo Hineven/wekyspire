@@ -6,27 +6,18 @@ import { startBattle, useSkill, dropSkill, endPlayerTurn } from './data/battle.j
 import {
   claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
-import {upgradePlayerTier} from "./data/player";
 
 function startGame() {
   // 触发开场事件（通过对话模块触发后端事件，总线隔离）
   dialogues.triggerBeforeGameStart();
 
-  // 为玩家添加初始技能到技能槽（写入后端状态）
+  // 为玩家添加初始技能到养成技能列表（写入后端状态）
   const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
   const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
 
-  // 以一次性替换数组的方式写入，减少深度watch触发次数
-  const slots = backendGameState.player.skillSlots.slice();
-  slots[0] = initialSkill1;
-  slots[1] = initialSkill2;
-  slots[2] = initialSkill3;
-  slots[3] = initialSkill4;
-  backendGameState.player.skillSlots = slots;
-
-  // console.log(backendGameState.player.skillSlots);
+  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4];
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {

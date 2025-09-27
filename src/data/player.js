@@ -1,4 +1,3 @@
-import SkillManager from './skillManager.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import Unit from './unit.js'
 
@@ -60,8 +59,11 @@ export class Player extends Unit {
     this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
     this.tier = 0; // 等阶
-    this.skillSlots = Array(10).fill(null); // 技能槽，这是一个养成概念，和战斗无关。玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills，作为玩家在战场上的技能。
-    this.skills = []; // 场上技能。skills仅在战斗时有效，用于存储当前战斗中玩家拥有的技能。在战斗开始前由skillSlots生成，在战斗结束后清空。
+    // 技能养成：玩家拥有的总技能上限与顺序（替代 skillSlots）
+    this.maxSkills = 10; // 玩家拥有的总技能上限
+    this.cultivatedSkills = []; // 已培养技能（顺序即为战斗中的默认顺序）
+    // 场上技能与战斗列表
+    this.skills = []; // 场上技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.maxFrontierSkills = 6; // 最大前台技能数量

@@ -5,7 +5,7 @@
       
       <div class="content-wrapper">
         <!-- 左侧固定大小面板容器 -->
-        <div class="left-panel-container">
+        <div class="left-panel-container" :class="{ 'two-panels': currentRewardPanel === 'shop' }">
           <!-- 金钱奖励面板 -->
           <MoneyRewardPanel
             :is-visible="currentRewardPanel === 'money'"
@@ -35,13 +35,20 @@
             @close="closeAbilityRewardPanel"
           />
           
-          <!-- 商店面板 -->
-          <ShopPanel
-        :is-visible="currentRewardPanel === 'shop'"
-        :shop-items="gameState.shopItems"
-        :game-state="gameState"
-        @close="closeShopPanel"
-      />
+          <!-- 商店 + 准备面板并列显示 -->
+          <div v-if="currentRewardPanel === 'shop'" class="shop-prep-wrapper">
+            <ShopPanel
+              :is-visible="true"
+              :shop-items="gameState.shopItems"
+              :game-state="gameState"
+              @close="closeShopPanel"
+            />
+            <PreparationPanel
+              :slots="slotsView"
+              :max-slots="gameState.player.maxSkills"
+              @update-slots="onUpdatePreparation"
+            />
+          </div>
         </div>
         
         <!-- 右侧玩家状态面板 -->
@@ -50,7 +57,7 @@
       
       <SkillSlotSelectionPanel
         :is-visible="skillSlotSelectionPanelVisible"
-        :skill-slots="gameState.player.skillSlots"
+        :skill-slots="slotsView"
         :skill="claimingSkill"
         @select-slot="onSkillSlotSelected"
         @close="closeSkillSlotSelectionPanel"
@@ -68,6 +75,7 @@ import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
+import PreparationPanel from './PreparationPanel.vue';
 import frontendEventBus from "../frontendEventBus";
 import backendEventBus, { EventNames } from "../backendEventBus";
 
@@ -81,7 +89,8 @@ export default {
     ShopPanel,
     PlayerStatusPanel,
     MoneyRewardPanel,
-    BreakthroughRewardPanel
+    BreakthroughRewardPanel,
+    PreparationPanel
   },
   props: {
     gameState: {
@@ -96,6 +105,18 @@ export default {
       claimingSkill: null,
       rewardPanels: [],
       currentRewardIndex: 0
+    }
+  },
+  computed: {
+    // 生成一个固定长度为 maxSkills 的视图数组，来自 cultivatedSkills，空位用 null 填充
+    slotsView() {
+      const max = this.gameState.player.maxSkills || 0;
+      const arr = Array.isArray(this.gameState.player.cultivatedSkills)
+        ? this.gameState.player.cultivatedSkills.slice()
+        : [];
+      while (arr.length < max) arr.push(null);
+      if (arr.length > max) arr.length = max;
+      return arr;
     }
   },
   mounted() {
@@ -173,7 +194,7 @@ export default {
     onSkillRewardSelected(currentSkill) {
       // 简化后的自动升级逻辑：如果奖励技能带有 upgradedFrom，直接替换来源技能
       if(currentSkill.isUpgradeCandidate && currentSkill.upgradedFrom) {
-        const slots = this.gameState.player.skillSlots;
+        const slots = this.slotsView;
         const sourceSlotIndex = slots.findIndex(s => s && s.name === currentSkill.upgradedFrom);
         if(sourceSlotIndex !== -1) {
           const oldSkill = slots[sourceSlotIndex];
@@ -217,6 +238,12 @@ export default {
     closeShopPanel() {
       // 结束休整阶段，开始下一场战斗（后端流程监听）
       backendEventBus.emit(EventNames.Rest.FINISH);
+    },
+    onUpdatePreparation(newSlots) {
+      // 将拖拽后的顺序回写到 cultivatedSkills（保持长度不超过 maxSkills）
+      const max = this.gameState.player.maxSkills || 0;
+      const arr = Array.isArray(newSlots) ? newSlots.slice(0, max) : [];
+      this.gameState.player.cultivatedSkills = arr;
     }
 
   }
@@ -257,8 +284,18 @@ export default {
 
 .left-panel-container {
   width: 800px;
-  height: 220px;
+  min-height: 220px;
   position: relative;
   flex-shrink: 0;
+}
+
+.left-panel-container.two-panels .shop-prep-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.shop-prep-wrapper > * {
+  flex: 1;
 }
 </style>

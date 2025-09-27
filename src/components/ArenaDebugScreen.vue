@@ -73,31 +73,12 @@
         <button @click="applyPlayerConfig">应用角色配置</button>
       </div>
       
-      <!-- 配置敌人 -->
-      <div class="cheat-section">
-        <h3>敌人配置</h3>
-        <div class="config-item">
-          <label>敌人类型:</label>
-          <select v-model="selectedEnemyType">
-            <option value="史莱姆">史莱姆</option>
-            <option value="魔化瑞米">瑞米</option>
-            <option value="雪狼">雪狼</option>
-            <option value="MEFM-3">MEFM-3</option>
-          </select>
-        </div>
-        <div class="config-item">
-          <label>战斗强度:</label>
-          <input v-model.number="battleIntensity" type="number" min="1" />
-        </div>
-        <button @click="generateEnemy">生成敌人</button>
-      </div>
-      
       <!-- 配置技能 -->
       <div class="cheat-section">
         <h3>技能配置</h3>
         <div class="skill-slots">
-          <div v-for="(slot, index) in player.skillSlots" :key="index" class="skill-slot">
-            <label>技能槽 {{ index + 1 }}:</label>
+          <div v-for="(_, index) in debugSlotsView" :key="index" class="skill-slot">
+            <label>技能位 {{ index + 1 }}:</label>
             <select v-model="selectedSkills[index]">
               <option value="">空</option>
               <option v-for="skillName in availableSkills" :key="skillName" :value="skillName">
@@ -118,7 +99,6 @@ import BattleScreen from './BattleScreen.vue';
 import { Player } from '../data/player.js';
 import EnemyFactory from '../data/enemyFactory.js';
 import SkillManager from '../data/skillManager.js';
-import { startBattle } from '../data/battle.js';
 import frontendEventBus from '../frontendEventBus.js';
 
 export default {
@@ -138,6 +118,13 @@ export default {
       availableSkills: []
     };
   },
+  computed: {
+    debugSlotsView() {
+      const arr = Array.isArray(this.player.cultivatedSkills) ? this.player.cultivatedSkills.slice() : [];
+      while (arr.length < 5) arr.push(null);
+      return arr.slice(0, 5);
+    }
+  },
   mounted() {
     // 初始化敌人
     this.generateEnemy();
@@ -152,8 +139,9 @@ export default {
      // 初始化玩家
      initializePlayer() {
        const player = new Player();
-       // 确保skillSlots正确初始化
-       player.skillSlots = Array(5).fill(null);
+       // 初始化培养技能（替代 skillSlots）
+       player.maxSkills = Math.max(player.maxSkills || 10, 5);
+       player.cultivatedSkills = Array(5).fill(null);
        // 给很高数值
        player.hp = 1000;
        player.maxHp = 1000;
@@ -215,24 +203,26 @@ export default {
       frontendEventBus.emit('close-arena-debug');
     },
     
-    // 应用技能到技能槽
+    // 应用技能到培养技能序列
     applySkillToSlot(index) {
       const skillManager = SkillManager.getInstance();
+      const arr = Array.isArray(this.player.cultivatedSkills) ? this.player.cultivatedSkills.slice() : [];
+      while (arr.length <= index) arr.push(null);
       if (this.selectedSkills[index]) {
         try {
-          const skill = skillManager.createSkill(this.selectedSkills[index]);
-          this.player.skillSlots[index] = skill;
+          arr[index] = skillManager.createSkill(this.selectedSkills[index]);
         } catch (error) {
           console.error('Failed to create skill:', error);
         }
       } else {
-        this.player.skillSlots[index] = null;
+        arr[index] = null;
       }
+      this.player.cultivatedSkills = arr;
     },
     
     // 清空所有技能
     clearAllSkills() {
-      this.player.skillSlots = Array(5).fill(null);
+      this.player.cultivatedSkills = Array(5).fill(null);
       this.selectedSkills = Array(5).fill('');
     }
   }

@@ -16,7 +16,7 @@ export function spawnSkillRewards() {
     if(nextTier) tier = nextTier;
   }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.leino, gameState.player.skillSlots, tier, true // 生成高质量奖励
+    3, gameState.player.leino, gameState.player.cultivatedSkills, tier, true // 生成高质量奖励
   );
 }
 
@@ -33,11 +33,10 @@ export function spawnRewards() {
   gameState.rewards.money = Math.floor(Math.random() * 20) + 10;
 
   // 突破奖励
-  const haveBreakthroughReward = (
-    gameState.battleCount == 2 || gameState.enemy.isBoss
+  gameState.rewards.breakthrough = (
+    gameState.battleCount === 2 || gameState.enemy.isBoss
   );
-  gameState.rewards.breakthrough = haveBreakthroughReward;
-  
+
   // 总是生成技能奖励
   spawnSkillRewards();
 
@@ -71,7 +70,27 @@ export function claimMoney() {
 
 // 领取技能奖励
 export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
-  gameState.player.skillSlots[slotIndex] = skill;
+  // 计算可用容量（最多 maxSkills 个）
+  const capacity = gameState.player.maxSkills || 0;
+  if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = 0;
+  if (slotIndex >= capacity) slotIndex = capacity - 1;
+
+  // 确保 cultivatedSkills 作为一个稀疏列表（允许 null 作为空位）
+  const arr = Array.isArray(gameState.player.cultivatedSkills)
+    ? gameState.player.cultivatedSkills.slice()
+    : [];
+
+  // 如果超出当前长度，用 null 填充直到 slotIndex
+  while (arr.length < capacity && arr.length <= slotIndex) arr.push(null);
+
+  // 放置/替换技能
+  arr[slotIndex] = skill;
+
+  // 截断到容量上限
+  if (arr.length > capacity) arr.length = capacity;
+
+  gameState.player.cultivatedSkills = arr;
+
   if(clearRewardsFlag) {
     gameState.rewards.skills = [];
   }

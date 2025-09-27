@@ -2,11 +2,9 @@
 
 import EnemyFactory from './enemyFactory.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
-import { reactive } from 'vue'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects } from './effectProcessor.js'
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
-import { clearRewards, spawnRewards } from './rest.js'
 import { enqueueUI, enqueueDelay } from './animationDispatcher.js'
 
 // 开始战斗
@@ -25,7 +23,7 @@ export function startBattle() {
   });
   
   // 从技能槽克隆技能到战斗技能数组
-  gameState.player.skills = gameState.player.skillSlots
+  gameState.player.skills = gameState.player.cultivatedSkills
     .filter(skill => skill !== null)
     .map(skill => cloneSkill(skill));
 
