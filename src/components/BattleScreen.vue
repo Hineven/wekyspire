@@ -89,6 +89,7 @@ export default {
   flex-direction: column;
   padding: 20px;
   box-sizing: border-box;
+  position: relative;
 }
 
 /* 顶部状态面板区域 */

@@ -3,6 +3,7 @@
     class="effect-icon"
     :style="{ color: effectColor }"
     @mouseenter="showTooltip"
+    @mousemove="onMouseMove"
     @mouseleave="hideTooltip"
     :class="{ 'scale-animation': isScaling }"
   >
@@ -14,6 +15,7 @@
 
 <script>
 import effectDescriptions from '../data/effectDescription.js';
+import frontendEventBus from '../frontendEventBus.js';
 
 export default {
   name: 'EffectIcon',
@@ -33,14 +35,6 @@ export default {
   },
   data() {
     return {
-      tooltip: {
-        show: false,
-        text: '',
-        name: '',
-        color: '',
-        x: 0,
-        y: 0
-      },
       isScaling: false
     };
   },
@@ -82,51 +76,19 @@ export default {
       return 'gray'; 
     },
     showTooltip(event) {
-      // 获取效果名称和描述
-      const effectInfo = effectDescriptions[this.effectName] || {};
-      const effectDisplayName = effectInfo.name || this.effectName;
-      const effectDescription = effectInfo.description || '未知效果';
-      const effectColor = effectInfo.color || '#000000';
-      
-      // 设置tooltip内容，包含效果名称和描述
-      this.tooltip.text = effectDescription;
-      this.tooltip.name = effectDisplayName;
-      this.tooltip.color = effectColor;
-      this.tooltip.x = event.clientX;
-      this.tooltip.y = event.clientY;
-      
-      // 创建并显示tooltip元素
-      this.createTooltip();
+      frontendEventBus.emit('tooltip:show', {
+        name: this.effectDisplayName,
+        text: this.effectDescription,
+        color: this.effectColor,
+        x: event.clientX,
+        y: event.clientY
+      });
+    },
+    onMouseMove(event) {
+      frontendEventBus.emit('tooltip:move', { x: event.clientX, y: event.clientY });
     },
     hideTooltip() {
-      // 移除tooltip元素
-      this.removeTooltip();
-    },
-    createTooltip() {
-      // 移除已存在的tooltip
-      this.removeTooltip();
-      
-      // 创建tooltip元素
-      const tooltipElement = document.createElement('div');
-      tooltipElement.className = 'effect-tooltip';
-      tooltipElement.innerHTML = `
-        <div class="tooltip-name" style="color: ${this.tooltip.color}">${this.tooltip.name}</div>
-        <div class="tooltip-description">${this.tooltip.text}</div>
-      `;
-      tooltipElement.style.left = this.tooltip.x + 'px';
-      tooltipElement.style.top = this.tooltip.y + 'px';
-      
-      // 添加到body中
-      document.body.appendChild(tooltipElement);
-      
-      // 保存引用以便后续移除
-      this.tooltip.element = tooltipElement;
-    },
-    removeTooltip() {
-      if (this.tooltip.element && this.tooltip.element.parentNode) {
-        this.tooltip.element.parentNode.removeChild(this.tooltip.element);
-        this.tooltip.element = null;
-      }
+      frontendEventBus.emit('tooltip:hide');
     }
   },
   mounted() {
@@ -136,8 +98,8 @@ export default {
     }
   },
   beforeUnmount() {
-    // 组件销毁前移除tooltip
-    this.removeTooltip();
+    // 组件销毁前，确保隐藏全局tooltip
+    frontendEventBus.emit('tooltip:hide');
   }
 };
 </script>
@@ -160,33 +122,5 @@ export default {
   0% { transform: scale(1); }
   50% { transform: scale(1.3); }
   100% { transform: scale(1); }
-}
-</style>
-
-<style>
-/* 全局样式，确保tooltip显示在最上层 */
-.effect-tooltip {
-  position: fixed;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 10px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: bold;
-  z-index: 10000;
-  max-width: 300px;
-  word-wrap: break-word;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.effect-tooltip .tooltip-name {
-  font-weight: bold;
-  margin-bottom: 5px;
-  font-size: 16px;
-}
-
-.effect-tooltip .tooltip-description {
-  font-size: 14px;
-  color: white;
 }
 </style>

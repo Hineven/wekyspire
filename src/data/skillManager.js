@@ -162,14 +162,17 @@ class SkillManager {
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
 
-      // 特殊的，关于技能属性和灵脉属性对权重进行修正
-      if(playerLeino.findIndex(type => type === skill.type) !== -1) {
-        modifyFactor *= 2; // 技能属性匹配，权重翻倍
-      } else {
-        // 否然默认权重仅有 1/10
-        modifyFactor *= 0.1;
-        // 对于相对玩家的高阶异属性灵脉技能，根本无法学习
-        if(tierDifference < 2) modifyFactor = 0;
+      // FIXME 暂时关闭了此修正
+      if(false) {
+        // 特殊的，关于技能属性和灵脉属性对权重进行修正
+        if (playerLeino.findIndex(type => type === skill.type) !== -1) {
+          if (skill.type !== 'normal') modifyFactor *= 2; // 技能属性匹配，权重翻倍
+        } else {
+          // 否然默认权重仅有 1/10
+          modifyFactor *= 0.1;
+          // 对于相对玩家的高阶异属性灵脉技能，根本无法学习
+          if (tierDifference < 2) modifyFactor = 0;
+        }
       }
 
       // 升级候选技能稍微再提升一点（避免被其它随机权重稀释）

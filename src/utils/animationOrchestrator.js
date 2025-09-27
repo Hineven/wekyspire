@@ -6,6 +6,7 @@
 
 import frontendEventBus from '../frontendEventBus.js';
 import gsap from 'gsap';
+import { getCardEl } from './cardDomRegistry.js';
 
 const defaultEase = 'power2.out';
 
@@ -183,6 +184,15 @@ const orchestrator = {
       });
     });
   },
+  async seqExhaustBurn(startEl, { durationMs = 500, scaleUp = 1.15, shakeDeg = 8 } = {}) {
+    // 简化的“焚毁/放逐”序列：微放大 + 轻微摇晃 + 淡出
+    return this.playCardSequence(startEl, [
+      { scale: scaleUp, duration: durationMs * 0.35, ease: 'power2.out' },
+      { rotate: shakeDeg, duration: durationMs * 0.15, ease: 'power1.inOut' },
+      { rotate: -shakeDeg, duration: durationMs * 0.15, ease: 'power1.inOut' },
+      { rotate: 0, opacity: 0, duration: durationMs * 0.35, ease: 'power1.in' }
+    ], { hideStart: false });
+  },
 
   // 兼容旧接口
   async flyCardToCenterThenToDeck({ startEl, hideStart = true, centerScale = 1.2, centerHoldMs = 350, totalMs = 900 }) {
@@ -211,4 +221,45 @@ frontendEventBus.on('animate-card-play', async (payload = {}) => {
   } catch (_) {}
 });
 
+// Helper to animate by id (backend-driven)
+async function animateById({ id, kind, options = {}, steps, hideStart }) {
+  let el = getCardEl(id);
+  // Retry resolve up to ~10 times with short delay if not found yet
+  for (let i = 0; !el && i < 10; i++) {
+    await new Promise(r => setTimeout(r, 30));
+    el = getCardEl(id);
+  }
+  if (!el) return;
+  if (Array.isArray(steps) && steps.length) {
+    await orchestrator.playCardSequence(el, steps, { hideStart: hideStart !== false });
+    return;
+  }
+  switch (kind) {
+    case 'appearFromDeck':
+      await orchestrator.seqAppearFromDeckToEl(el, { ...options, id });
+      break;
+    case 'centerThenDeck':
+      await orchestrator.seqPlayToCenterThenDeck(el, options || {});
+      break;
+    case 'flyToCenter':
+      await orchestrator.seqFlyToCenter(el, options || {});
+      break;
+    case 'flyToDeckFade':
+      await orchestrator.seqFlyToDeckFade(el, options || {});
+      break;
+    case 'exhaust':
+      await orchestrator.seqExhaustBurn(el, options || {});
+      break;
+    default:
+      await orchestrator.seqFlyToCenter(el, options || {});
+  }
+}
+
+frontendEventBus.on('animate-card-by-id', async (payload = {}) => {
+  try {
+    await animateById(payload || {});
+  } catch (_) {}
+});
+
+export { animateById };
 export default orchestrator;

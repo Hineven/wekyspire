@@ -105,6 +105,9 @@ export function useSkill(skill) {
   // 使用技能逻辑
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
+  // 让前端播放技能卡片的使用动画
+  enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'centerThenDeck'});
+
   // 通知UI层锁定控制面板
   enqueueUI('lockControl');
 
