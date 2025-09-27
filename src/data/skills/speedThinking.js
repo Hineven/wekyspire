@@ -11,14 +11,14 @@ export class FastThinking extends Skill {
   }
 
   get coldDownTurns() {
-    return Math.max(0, this.baseColdDownTurns - this.power);
+    return Math.max(0, super.coldDownTurns - this.power);
   }
 
   findSkillToColdDown (player) {
     let coldDownSkill = null;
     let minDistance = Infinity;
     player.frontierSkills.forEach(skill => {
-      if (skill.canColdDown()) {
+      if (skill !== this && skill.canColdDown()) {
         const distance = Math.abs(skill.getInBattleIndex(player) - this.getInBattleIndex(player));
         if (distance < minDistance) {
           minDistance = distance;
@@ -141,10 +141,11 @@ export class MuscleMemory extends Skill {
 export class InstinctiveReflex extends Skill {
   constructor() {
     super('本能反射', 'normal', 7, 0, 1, 1);
+    this.baseColdDownTurns = 7;
   }
 
   get coldDownTurns() {
-    if(this.power > 0) return Math.max(7 - this.power * 2, 1);
+    if(this.power > 0) return Math.max(super.coldDownTurns - this.power * 2, 1);
     return 0;
   }
 

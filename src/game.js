@@ -26,7 +26,7 @@ function startGame() {
   slots[3] = initialSkill4;
   backendGameState.player.skillSlots = slots;
 
-  console.log(backendGameState.player.skillSlots);
+  // console.log(backendGameState.player.skillSlots);
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {

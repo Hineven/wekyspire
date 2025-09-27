@@ -35,7 +35,7 @@ class AbilityManager {
   // 注册能力
   registerAbility(AbilityClass) {
     const ability = new AbilityClass();
-    this.abilities.push({ name: ability.name, AbilityClass, tier: ability.tier, spawnWeight: ability.spawnWeight });
+    this.abilities.push({ name: ability.name, AbilityClass, tier: ability.tier});
   }
   
   // 获取所有能力
@@ -65,7 +65,7 @@ class AbilityManager {
     const allAbilities = this.abilities.map(a => ({
       name: a.name,
       tier: a.tier,
-      spawnWeight: a.spawnWeight
+      spawnWeight: (new a.AbilityClass()).spawnWeight
     }));
     
     // 根据abundance、spawnWeight和tier计算每个能力的权重
