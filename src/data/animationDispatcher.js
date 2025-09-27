@@ -349,17 +349,19 @@ function handleUIAction(item) {
       break;
     case 'addBattleLog':
     case 'addBattleLogUI':
-      // 将战斗日志作为UI动作排队到事件总线
       frontendEventBus.emit('add-battle-log', payload || {});
       break;
     case 'clearBattleLog':
     case 'clearBattleLogUI':
-      // 清空战斗日志作为UI动作排队处理
       frontendEventBus.emit('clear-battle-log');
       break;
     case 'animateCardPlay':
-      // 触发编排器执行卡牌播放序列（时序由队列duration控制）
+      // 旧接口：仍保留向后兼容
       frontendEventBus.emit('animate-card-play', payload || {});
+      break;
+    case 'animateCardById':
+      // 新接口：由后端（调度层）提供 id/kind/options/steps/hideStart，统一在此桥接
+      frontendEventBus.emit('animate-card-by-id', payload || {});
       break;
   }
 }
@@ -419,3 +421,10 @@ export function stopAnimationDispatcher() {
   // 清理仅通过 clearQueue + 停止watch 外部控制；这里不保留interval
   // 已无interval，留空即可
 }
+
+// 提供一个便捷桥接：当界面请求“新卡进入手牌”时，由调度器统一入队动画，确保与状态切片/节拍一致
+frontendEventBus.on('request-card-appear', ({ id } = {}) => {
+  if (id == null) return;
+  // 若有未同步变更，duration>0 时会自动切片一次状态
+  enqueueUI('animateCardById', { id, kind: 'appearFromDeck', options: { id, durationMs: 450, startScale: 0.6, fade: true } }, { duration: 450 });
+});

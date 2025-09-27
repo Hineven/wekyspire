@@ -1,14 +1,14 @@
 <template>
   <div id="game-app">
+    <transition name="screen-transition" mode="out-in">
     <!-- 开始游戏界面 -->
     <StartScreen 
       v-if="gameState.gameStage === 'start'"
       :game-state="gameState"
     />
-    
     <!-- 战斗界面 -->
     <BattleScreen 
-      v-if="gameState.gameStage === 'battle'"
+      v-else-if="gameState.gameStage === 'battle'"
       :player="gameState.player"
       :enemy="gameState.enemy"
       :is-control-disabled="gameState.controlDisableCount > 0"
@@ -17,16 +17,16 @@
     />
     <!-- 休整界面 -->
     <RestScreen 
-      v-if="gameState.gameStage === 'rest'"
+      v-else-if="gameState.gameStage === 'rest'"
       :game-state="gameState"
     />
-
     <!-- 结束界面 -->
     <EndScreen 
-      v-if="gameState.gameStage === 'end'" 
+      v-else-if="gameState.gameStage === 'end'"
       :is-victory="gameState.isVictory"
       @restart-game="restartGame"
     />
+    </transition>
     
     <!-- 对话界面 -->
     <DialogScreen />
@@ -48,6 +48,9 @@
 
     <!-- 全局动画覆盖层（全游戏共享） -->
     <AnimationOverlay ref="animationOverlay" />
+
+    <!-- 全局唯一悬浮提示框 -->
+    <FloatingTooltip />
   </div>
 </template>
 
@@ -63,8 +66,8 @@ import AudioControllerScreen from './components/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
 import AnimationOverlay from './components/AnimationOverlay.vue'
+import FloatingTooltip from './components/FloatingTooltip.vue'
 
-import frontendEventBus from './frontendEventBus.js'
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 import orchestrator from './utils/animationOrchestrator.js';
 
@@ -81,7 +84,8 @@ export default {
     AudioControllerScreen,
     ParticleEffectManager,
     MessagePopupScreen,
-    AnimationOverlay
+    AnimationOverlay,
+    FloatingTooltip
   },
   computed: {
     isPlayerTurn() {
@@ -91,12 +95,6 @@ export default {
   data() {
     return {
       gameState: gameState
-    }
-  },
-  watch: {
-    // 当显示层的故事模式开关变化时，同步给对话系统
-    'gameState.isRemiPresent'(val) {
-      dialogues.setIsRemiPresent(val);
     }
   },
   mounted() {
@@ -127,6 +125,13 @@ export default {
   user-select: none;
   position: relative;
   height:100vh;
+}
+
+.screen-transition-enter-active, .screen-transition-leave-active {
+  transition: opacity 0.5s;
+}
+.screen-transition-enter-from, .screen-transition-leave-to {
+  opacity: 0;
 }
 
 </style>

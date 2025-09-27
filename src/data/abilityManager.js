@@ -10,6 +10,7 @@ class AbilityManager {
     // 动态导入所有文件
     const abilityModules = [
       await import('./abilities/basic.js'),
+      await import('./abilities/leino.js'),
     ];
     const abilityManager = this.getInstance();
     // 遍历所有模块并注册其中的技能
@@ -19,6 +20,7 @@ class AbilityManager {
         // 检查是否为Ability类的子类
         if (typeof AbilityClass === 'function' && AbilityClass !== Ability && AbilityClass.prototype instanceof Ability) {
           try {
+            console.log('Registering ability:', key);
             abilityManager.registerAbility(AbilityClass);
           } catch (error) {
             console.error(`Failed to register ability: ${key}`, error);

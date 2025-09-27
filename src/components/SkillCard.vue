@@ -75,6 +75,10 @@ export default {
       type: Boolean,
       default: false
     },
+    canClick: {
+      type: Boolean,
+      default: true
+    },
     // 新增：当为 true 时，点击卡牌不触发本地 CSS 激活动画（交由全局 overlay/GSAP 处理）
     suppressActivationAnimationOnClick: {
       type: Boolean,
@@ -112,7 +116,8 @@ export default {
       const borderColor = this.adjustColorBrightness(color, -40);
       return {
         backgroundColor: backgroundColor,
-        borderColor: borderColor
+        borderColor: borderColor,
+        cursor: (!this.disabled && this.canClick) ? 'pointer' : 'not-allowed'
       };
     },
     skillBackgroundColor() {
@@ -176,7 +181,7 @@ export default {
       return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
     },
     onClick(event) {
-      if (!this.disabled) {
+      if (!this.disabled && this.canClick) {
         // 仅当未开启抑制时才播放本地 CSS 激活动画
         if (!this.suppressActivationAnimationOnClick) {
           this.playActivationAnimation();
@@ -313,7 +318,6 @@ export default {
   width: 150px;
   padding: 15px;
   border-radius: 8px;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -421,7 +425,6 @@ export default {
 .skill-card {
   width: 198px;
   height: 266px;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   justify-content: center;
