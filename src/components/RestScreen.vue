@@ -44,8 +44,7 @@
               @close="closeShopPanel"
             />
             <PreparationPanel
-              :slots="slotsView"
-              :max-slots="gameState.player.maxSkills"
+              :skills="gameState.player.cultivatedSkills"
               @update-slots="onUpdatePreparation"
             />
           </div>
@@ -55,12 +54,12 @@
         <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
       </div>
       
-      <SkillSlotSelectionPanel
-        :is-visible="skillSlotSelectionPanelVisible"
-        :skill-slots="slotsView"
+      <SkillSelectionPanel
+        :is-visible="skillSelectionPanelVisible"
+        :skills="this.gameState.player.cultivatedSkills"
         :skill="claimingSkill"
-        @select-slot="onSkillSlotSelected"
-        @close="closeSkillSlotSelectionPanel"
+        @select-skill="onSkillSelected"
+        @close="closeSkillSelectionPanel"
       />
     </div>
   </div>
@@ -70,7 +69,7 @@
 import ColoredText from './ColoredText.vue';
 import AbilityRewardPanel from './AbilityRewardPanel.vue';
 import SkillRewardPanel from './SkillRewardPanel.vue';
-import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
+import SkillSelectionPanel from './SkillSelectionPanel.vue';
 import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
@@ -85,7 +84,7 @@ export default {
     ColoredText,
     AbilityRewardPanel,
     SkillRewardPanel,
-    SkillSlotSelectionPanel,
+    SkillSelectionPanel,
     ShopPanel,
     PlayerStatusPanel,
     MoneyRewardPanel,
@@ -101,22 +100,10 @@ export default {
   data() {
     return {
       currentRewardPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
-      skillSlotSelectionPanelVisible: false,
+      skillSelectionPanelVisible: false,
       claimingSkill: null,
       rewardPanels: [],
       currentRewardIndex: 0
-    }
-  },
-  computed: {
-    // 生成一个固定长度为 maxSkills 的视图数组，来自 cultivatedSkills，空位用 null 填充
-    slotsView() {
-      const max = this.gameState.player.maxSkills || 0;
-      const arr = Array.isArray(this.gameState.player.cultivatedSkills)
-        ? this.gameState.player.cultivatedSkills.slice()
-        : [];
-      while (arr.length < max) arr.push(null);
-      if (arr.length > max) arr.length = max;
-      return arr;
     }
   },
   mounted() {
@@ -194,7 +181,7 @@ export default {
     onSkillRewardSelected(currentSkill) {
       // 简化后的自动升级逻辑：如果奖励技能带有 upgradedFrom，直接替换来源技能
       if(currentSkill.isUpgradeCandidate && currentSkill.upgradedFrom) {
-        const slots = this.slotsView;
+        const slots = this.gameState.player.cultivatedSkills;
         const sourceSlotIndex = slots.findIndex(s => s && s.name === currentSkill.upgradedFrom);
         if(sourceSlotIndex !== -1) {
           const oldSkill = slots[sourceSlotIndex];
@@ -211,21 +198,32 @@ export default {
           return;
         }
       }
-      // 回退：未能自动升级则进入槽位选择
+      // 回退：未能自动升级则自动增添到末尾
+      if(this.gameState.player.cultivatedSkills.length < this.gameState.player.maxSkills) {
+        // 直接添加到末尾
+        backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
+          skill: currentSkill,
+          slotIndex: -1,
+          clearRewards: false
+        });
+        this.closeSkillRewardPanel();
+        return;
+      }
+      // 如果技能栏已满，则弹出技能选择面板，替换一个技能
       this.claimingSkill = currentSkill;
-      setTimeout(() => { this.skillSlotSelectionPanelVisible = true; }, 300);
+      setTimeout(() => { this.skillSelectionPanelVisible = true; }, 300);
     },
-    closeSkillSlotSelectionPanel() {
-      this.skillSlotSelectionPanelVisible = false;
+    closeSkillSelectionPanel() {
+      this.skillSelectionPanelVisible = false;
     },
-    onSkillSlotSelected(slotIndex) {
+    onSkillSelected(slotIndex) {
       backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
         skill: this.claimingSkill,
         slotIndex,
         clearRewards: false
       });
       // 关闭面板
-      this.closeSkillSlotSelectionPanel();
+      this.closeSkillSelectionPanel();
       this.closeSkillRewardPanel();
     },
     onAbilityRewardSelected(ability) {
@@ -289,7 +287,7 @@ export default {
   flex-shrink: 0;
 }
 
-.left-panel-container.two-panels .shop-prep-wrapper {
+.left-panel-container.two-panels {
   display: flex;
   gap: 12px;
   align-items: flex-start;

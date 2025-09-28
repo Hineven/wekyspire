@@ -9,13 +9,13 @@
           :preview-mode="true"
           />
           <p>选择一个技能槽来安装新技能</p>
-          <div class="skill-slots">
-            <SkillSlot
-              v-for="(slot, index) in skillSlots"
+          <div class="skills">
+            <SkillCard
+              v-for="(skill, index) in skills"
               :key="index"
-              :skill="slot"
-              :index="index"
-              @slot-clicked="selectSlot"
+              :skill="skill"
+              :preview-mode="true"
+              @slot-clicked="selectSkill"
             />
           </div>
           <button @click="closePanel">取消</button>
@@ -26,13 +26,11 @@
 </template>
 
 <script>
-import SkillSlot from './SkillSlot.vue';
 import SkillCard from './SkillCard.vue';
 
 export default {
   name: 'SkillSlotSelectionPanel',
   components: {
-    SkillSlot,
     SkillCard
   },
   props: {
@@ -40,7 +38,7 @@ export default {
       type: Object,
       default: null
     },
-    skillSlots: {
+    skills: {
       type: Array,
       required: true
     },
@@ -50,8 +48,8 @@ export default {
     }
   },
   methods: {
-    selectSlot(index) {
-      this.$emit('select-slot', index);
+    selectSkill(index) {
+      this.$emit('select-skill', index);
     },
     closePanel() {
       this.$emit('close');
