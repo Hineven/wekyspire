@@ -37,19 +37,21 @@
           
           <!-- 商店 + 准备面板并列显示 -->
           <ShopPanel
-            v-if="currentPanel === 'shop'"
+            :isVisible="currentPanel === 'shop'"
             :shop-items="gameState.shopItems"
             :game-state="gameState"
             @close="closeShopPanel"
           />
         </div>
         
-        <!-- 右侧玩家状态面板 -->
-        <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
-
-        <button @click="preparationPanelVisible = !preparationPanelVisible" style="position: absolute; top: 10px; right: 10px; z-index: 10;">
-          {{ preparationPanelVisible ? '隐藏' : '显示' }} 准备面板
-        </button>
+        <!-- 右侧：玩家状态 + 常驻控制面板 -->
+        <div class="right-panel-container">
+          <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
+          <RestControlPanel
+            :preparation-panel-visible="preparationPanelVisible"
+            @toggle-preparation-panel="preparationPanelVisible = !preparationPanelVisible"
+          />
+        </div>
 
         <SkillSelectionPanel
           :is-visible="skillSelectionPanelVisible"
@@ -81,6 +83,7 @@ import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
 import PreparationPanel from './PreparationPanel.vue';
+import RestControlPanel from './RestControlPanel.vue';
 import frontendEventBus from "../frontendEventBus";
 import backendEventBus, { EventNames } from "../backendEventBus";
 
@@ -95,7 +98,8 @@ export default {
     PlayerStatusPanel,
     MoneyRewardPanel,
     BreakthroughRewardPanel,
-    PreparationPanel
+    PreparationPanel,
+    RestControlPanel
   },
   props: {
     gameState: {
@@ -298,6 +302,15 @@ export default {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+}
+
+.right-panel-container {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  flex-shrink: 0;
 }
 
 </style>

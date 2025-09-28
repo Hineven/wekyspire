@@ -43,6 +43,7 @@ export default {
   watch: {
     skills: {
       immediate: true,
+      deep: true,
       handler(newVal) {
         const arr = Array.isArray(newVal) ? newVal.filter(Boolean) : [];
         this.internalSkills = arr;
@@ -97,7 +98,9 @@ export default {
 }
 
 .hand-host {
+  padding-top: 40px;
   min-height: 280px;
+  overflow: hidden;
   border-radius: 8px;
 }
 

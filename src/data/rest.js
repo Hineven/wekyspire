@@ -70,25 +70,18 @@ export function claimMoney() {
 // 领取技能奖励
 export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
   // 计算可用容量（最多 maxSkills 个）
-  const capacity = gameState.player.maxSkills || 0;
-  if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = 0;
+  const capacity = Math.min(gameState.player.maxSkills || 0, gameState.player.cultivatedSkills.length + 1);
+  if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = gameState.player.cultivatedSkills.length;
   if (slotIndex >= capacity) slotIndex = capacity - 1;
 
-  // 确保 cultivatedSkills 作为一个稀疏列表（允许 null 作为空位）
-  const arr = Array.isArray(gameState.player.cultivatedSkills)
-    ? gameState.player.cultivatedSkills.slice()
-    : [];
-
-  // 如果超出当前长度，用 null 填充直到 slotIndex
-  while (arr.length < capacity && arr.length <= slotIndex) arr.push(null);
-
+  console.log('领取技能奖励：', skill, '放置于槽位', slotIndex, '（容量', capacity, '）');
   // 放置/替换技能
-  arr[slotIndex] = skill;
-
-  // 截断到容量上限
-  if (arr.length > capacity) arr.length = capacity;
-
-  gameState.player.cultivatedSkills = arr;
+  if(slotIndex >= gameState.player.cultivatedSkills.length) {
+    gameState.player.cultivatedSkills.push(skill);
+  } else {
+    gameState.player.cultivatedSkills[slotIndex] = skill;
+  }
+  console.log(gameState.player.cultivatedSkills);
 
   if(clearRewardsFlag) {
     gameState.rewards.skills = [];
@@ -142,10 +135,7 @@ export function reorderSkills(skillUniqueIDs) {
   const reordered = skillUniqueIDs.map(id =>
     skills.find(skill => skill && skill.uniqueID === id) || null
   );
-  // 保持容量一致
-  while (reordered.length < (gameState.player.maxSkills || 0)) {
-    reordered.push(null);
-  }
   gameState.player.cultivatedSkills = reordered;
+  console.log('技能顺序已更新：', reordered);
   backendEventBus.emit(EventNames.Player.SKILLS_REORDERED, reordered);
 }

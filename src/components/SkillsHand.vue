@@ -12,9 +12,9 @@
       <SkillCard
         :skill="skill"
         :player="player"
-        :disabled="draggable || !canUseSkill(skill) || !isPlayerTurn || isControlDisabled"
+        :disabled="!draggable && (!canUseSkill(skill) || !isPlayerTurn || isControlDisabled)"
         :player-mana="(player && player.mana != null) ? player.mana : Infinity"
-        :can-click="!draggable && isPlayerTurn && !isControlDisabled && canUseSkill(skill)"
+        :can-click="draggable || (isPlayerTurn && !isControlDisabled && canUseSkill(skill))"
         :suppress-activation-animation-on-click="true"
         :ref="el => setCardRef(el, skill.uniqueID)"
         @skill-card-clicked="onSkillCardClicked"

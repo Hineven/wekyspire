@@ -23,6 +23,7 @@ export function startBattle() {
   });
   
   // 从技能槽克隆技能到战斗技能数组
+  console.log('Starting battle with cultivated skills:', gameState.player.cultivatedSkills);
   gameState.player.skills = gameState.player.cultivatedSkills
     .filter(skill => skill !== null)
     .map(skill => cloneSkill(skill));
