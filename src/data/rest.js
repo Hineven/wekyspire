@@ -116,6 +116,7 @@ export function claimBreakthroughReward() {
   backendEventBus.emit(EventNames.Player.TIER_UPGRADED, gameState.player);
 }
 
+
 // 购买物品（后端结算）
 export function purchaseItem(item) {
   if (!item) return false;
@@ -133,4 +134,18 @@ export function refreshShopItems() {
   const itemManager = new ItemManager();
   gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
   backendEventBus.emit(EventNames.Rest.SHOP_REFRESHED, gameState.shopItems);
+}
+
+export function reorderSkills(skillUniqueIDs) {
+  // 根据传入的技能唯一ID数组，重新排序玩家的 cultivatedSkills
+  const skills = gameState.player.cultivatedSkills || [];
+  const reordered = skillUniqueIDs.map(id =>
+    skills.find(skill => skill && skill.uniqueID === id) || null
+  );
+  // 保持容量一致
+  while (reordered.length < (gameState.player.maxSkills || 0)) {
+    reordered.push(null);
+  }
+  gameState.player.cultivatedSkills = reordered;
+  backendEventBus.emit(EventNames.Player.SKILLS_REORDERED, reordered);
 }

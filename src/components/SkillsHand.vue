@@ -3,7 +3,7 @@
     <div
       v-for="(skill, idx) in visibleSkills"
       :key="skill.uniqueID"
-      class="skill-wrapper"
+      :class="['skill-wrapper', {'instant': idx === dragIndex}]"
       :style="wrapperStyle(idx, skill)"
       @mouseenter="onHoverStart(idx)"
       @mouseleave="onHoverEnd(idx)"
@@ -76,15 +76,15 @@ export default {
     // 基于容器/悬浮/拖拽插槽来计算每张卡的位置
     layout() {
       const n = this.visibleSkills.length;
-      const W = Math.max(0, this.containerWidth || 0);
-      const cw = Math.max(1, this.cardWidth || 198);
+      const containerWidth = Math.max(0, this.containerWidth || 0);
+      const cardWidth = Math.max(1, this.cardWidth || 198);
       if (n === 0) return [];
 
       // 基本参数
       const DEFAULT_GAP = 15;
       const MIN_STEP = 30; // 每张至少露出 30px
-      const MIN_GAP = -cw + MIN_STEP; // 允许的最小间距（强叠压）
-      const INSERT_EXTRA = Math.max(60, Math.floor(cw * 0.9));
+      const MIN_GAP = -cardWidth + MIN_STEP; // 允许的最小间距（强叠压）
+      const INSERT_EXTRA = Math.max(60, Math.floor(cardWidth * 0.9));
 
       // 悬浮扩缝（对间）
       const pairExtra = new Array(Math.max(0, n - 1)).fill(0);
@@ -99,18 +99,27 @@ export default {
           if (leftPair >= 0) pairExtra[leftPair] += inc;
           if (rightPair < pairExtra.length) pairExtra[rightPair] += inc;
         }
+        for (let i = 0; i < pairExtra.length; i++) {
+          // 不允许正间距，仅在叠压时或距离鼠标悬浮卡牌极近时撑开
+          const maxAllowed = (i === i0 - 1 || i === i0) ? DEFAULT_GAP : 0;
+          pairExtra[i] = Math.min(pairExtra[i], maxAllowed);
+        }
       }
 
       // 拖拽插槽扩缝（含首尾）
       let leadingExtra = 0;
       let trailingExtra = 0;
       if (this.isDragging && this.insertionIndex >= 0) {
-        if (this.insertionIndex === 0) {
+        console.log('插槽位置', this.insertionIndex);
+        pairExtra[this.dragIndex] = -cardWidth; // 被拖拽卡不占间距
+        const offset = this.insertionIndex < this.dragIndex ? 0 : 1;
+        const idx = this.insertionIndex + offset;
+        if (idx === 0) {
           leadingExtra += INSERT_EXTRA;
-        } else if (this.insertionIndex >= n) {
+        } else if (idx >= n) {
           trailingExtra += INSERT_EXTRA;
         } else {
-          pairExtra[this.insertionIndex - 1] += INSERT_EXTRA;
+          pairExtra[idx-1] += INSERT_EXTRA;
         }
       }
 
@@ -121,14 +130,15 @@ export default {
       if (n === 1) {
         baseGap = 0;
       } else {
-        baseGap = (W - n * cw - extraSum) / (n - 1);
+        // 在叠压时，baseGap可能为负数
+        baseGap = (containerWidth - n * cardWidth - extraSum) / (n - 1);
         baseGap = clamp(baseGap, MIN_GAP, DEFAULT_GAP);
       }
 
       // 每对实际间距
       const pairGap = pairExtra.map(ex => baseGap + ex);
-      const totalWidth = n * cw + pairGap.reduce((a, b) => a + b, 0) + leadingExtra + trailingExtra;
-      const leftPad = Math.max(0, (W - totalWidth) / 2) + leadingExtra;
+      const totalWidth = n * cardWidth + pairGap.reduce((a, b) => a + b, 0) + leadingExtra + trailingExtra;
+      const leftPad = Math.max(0, (containerWidth - totalWidth) / 2) + leadingExtra;
 
       const out = new Array(n);
       let x = leftPad;
@@ -138,7 +148,7 @@ export default {
           z: 10 + i + (i === this.hoveredIndex ? 1000 : 0),
           scale: (!this.isDragging && i === this.hoveredIndex) ? 1.08 : 1.0,
         };
-        x += cw;
+        x += cardWidth;
         if (i < pairGap.length) x += pairGap[i];
       }
       return out;
@@ -325,7 +335,7 @@ export default {
       const l = this.layout[idx] || { x: 0, z: 1, scale: 1 };
       const hidden = !!this.appearing[skill.uniqueID];
       const isDragged = this.isDragging && idx === this.dragIndex;
-      const tx = isDragged ? (l.x + this.dragDeltaX) : l.x;
+      const tx = isDragged ? (this.draggedOriginalX + this.dragDeltaX) : l.x;
       const ty = isDragged ? -20 : 0;
       const sc = isDragged ? 1.08 : l.scale;
       const z = isDragged ? 5000 : l.z;
@@ -346,7 +356,7 @@ export default {
   position: relative;
   width: 100%;
   /* 高度匹配卡片高度（考虑浮起放大，预留余量） */
-  min-height: 280px;
+  min-height: 300px;
 }
 .skills-hand-root.dragging {
   user-select: none;
@@ -358,5 +368,10 @@ export default {
   /* 平滑移动/缩放过渡 */
   transition: transform 120ms ease, z-index 120ms ease, visibility 0ms linear;
   will-change: transform;
+}
+
+.skill-wrapper.instant {
+  /* 拖拽时取消过渡，避免卡顿 */
+  transition: none;
 }
 </style>

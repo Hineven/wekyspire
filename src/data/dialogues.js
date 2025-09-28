@@ -193,7 +193,7 @@ function getEventBeforeBattle(battleCount, player, enemy) {
 }
 
 function getTierUpgradedDialog(player) {
-  if(player.tier == getPlayerTierFromTierIndex(1).tier) {
+  if(player.tier === getPlayerTierFromTierIndex(1).tier) {
     // 第一次升级，瑞米提供关于升级的提示和教程
     return [
       {
@@ -233,7 +233,7 @@ function getTierUpgradedDialog(player) {
 
 function getSkillUseDialog(player, skill, result) {
   if(!result) return;
-  if(skill.name == '瑞米召唤术') {
+  if(skill.name === '瑞米召唤术') {
     return [
       {
         character: '瑞米',

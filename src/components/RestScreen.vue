@@ -5,23 +5,23 @@
       
       <div class="content-wrapper">
         <!-- 左侧固定大小面板容器 -->
-        <div class="left-panel-container" :class="{ 'two-panels': currentRewardPanel === 'shop' }">
+        <div class="left-panel-container" :class="{ 'two-panels': currentPanel === 'shop' }">
           <!-- 金钱奖励面板 -->
           <MoneyRewardPanel
-            :is-visible="currentRewardPanel === 'money'"
+            :is-visible="currentPanel === 'money'"
             :amount="gameState.rewards.money"
             @claimed="onMoneyRewardClaimed"
           />
           
           <!-- 突破奖励面板 -->
           <BreakthroughRewardPanel
-            :is-visible="currentRewardPanel === 'breakthrough'"
+            :is-visible="currentPanel === 'breakthrough'"
             @claimed="onBreakthroughRewardClaimed"
           />
           
           <!-- 技能奖励面板 -->
           <SkillRewardPanel
-            :is-visible="currentRewardPanel === 'skill'"
+            :is-visible="currentPanel === 'skill'"
             :skills="gameState.rewards.skills"
             @close="closeSkillRewardPanel"
             @selected-skill-reward="onSkillRewardSelected"
@@ -29,38 +29,44 @@
           
           <!-- 能力奖励面板 -->
           <AbilityRewardPanel
-            :is-visible="currentRewardPanel === 'ability'"
+            :is-visible="currentPanel === 'ability'"
             :abilities="gameState.rewards.abilities"
             @selected-ability-reward="onAbilityRewardSelected"
             @close="closeAbilityRewardPanel"
           />
           
           <!-- 商店 + 准备面板并列显示 -->
-          <div v-if="currentRewardPanel === 'shop'" class="shop-prep-wrapper">
-            <ShopPanel
-              :is-visible="true"
-              :shop-items="gameState.shopItems"
-              :game-state="gameState"
-              @close="closeShopPanel"
-            />
-            <PreparationPanel
-              :skills="gameState.player.cultivatedSkills"
-              @update-slots="onUpdatePreparation"
-            />
-          </div>
+          <ShopPanel
+            v-if="currentPanel === 'shop'"
+            :shop-items="gameState.shopItems"
+            :game-state="gameState"
+            @close="closeShopPanel"
+          />
         </div>
         
         <!-- 右侧玩家状态面板 -->
         <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
+
+        <button @click="preparationPanelVisible = !preparationPanelVisible" style="position: absolute; top: 10px; right: 10px; z-index: 10;">
+          {{ preparationPanelVisible ? '隐藏' : '显示' }} 准备面板
+        </button>
+
+        <SkillSelectionPanel
+          :is-visible="skillSelectionPanelVisible"
+          :skills="this.gameState.player.cultivatedSkills"
+          :skill="claimingSkill"
+          @select-skill="onSkillSelected"
+          @close="closeSkillSelectionPanel"
+        />
+
+        <PreparationPanel
+            :is-visible="preparationPanelVisible"
+            :skills="gameState.player.cultivatedSkills"
+            @apply="onApplySkillOrderChanges"
+            @close="preparationPanelVisible = false"
+        />
+
       </div>
-      
-      <SkillSelectionPanel
-        :is-visible="skillSelectionPanelVisible"
-        :skills="this.gameState.player.cultivatedSkills"
-        :skill="claimingSkill"
-        @select-skill="onSkillSelected"
-        @close="closeSkillSelectionPanel"
-      />
     </div>
   </div>
 </template>
@@ -99,10 +105,11 @@ export default {
   },
   data() {
     return {
-      currentRewardPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
+      currentPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
       skillSelectionPanelVisible: false,
+      preparationPanelVisible: false,
       claimingSkill: null,
-      rewardPanels: [],
+      sequentialPanels: [],
       currentRewardIndex: 0
     }
   },
@@ -124,39 +131,39 @@ export default {
   },
   methods: {
     initRewardPanels() {
-      this.rewardPanels = [];
+      this.sequentialPanels = [];
       
       // 按顺序添加奖励面板
       if (this.gameState.rewards.money > 0) {
-        this.rewardPanels.push('money');
+        this.sequentialPanels.push('money');
       }
       
       if (this.gameState.rewards.breakthrough) {
-        this.rewardPanels.push('breakthrough');
+        this.sequentialPanels.push('breakthrough');
       }
       
       if (this.gameState.rewards.skills.length > 0) {
-        this.rewardPanels.push('skill');
+        this.sequentialPanels.push('skill');
       }
       
       if (this.gameState.rewards.abilities.length > 0) {
-        this.rewardPanels.push('ability');
+        this.sequentialPanels.push('ability');
       }
       
       // 总是添加商店面板
-      this.rewardPanels.push('shop'); 
+      this.sequentialPanels.push('shop');
     },
     
     showNextRewardPanel() {
       // 先隐藏当前面板
-      this.currentRewardPanel = 'none';
+      this.currentPanel = 'none';
       // 稍等片刻后，再显示下一个面板
       setTimeout(()=> {
-        if (this.currentRewardIndex < this.rewardPanels.length) {
-          this.currentRewardPanel = this.rewardPanels[this.currentRewardIndex];
+        if (this.currentRewardIndex < this.sequentialPanels.length) {
+          this.currentPanel = this.sequentialPanels[this.currentRewardIndex];
         } else {
           // 所有奖励面板都已显示完毕
-          this.currentRewardPanel = '';
+          this.currentPanel = '';
         }
       }, 500);
     },
@@ -237,11 +244,11 @@ export default {
       // 结束休整阶段，开始下一场战斗（后端流程监听）
       backendEventBus.emit(EventNames.Rest.FINISH);
     },
-    onUpdatePreparation(newSlots) {
-      // 将拖拽后的顺序回写到 cultivatedSkills（保持长度不超过 maxSkills）
-      const max = this.gameState.player.maxSkills || 0;
-      const arr = Array.isArray(newSlots) ? newSlots.slice(0, max) : [];
-      this.gameState.player.cultivatedSkills = arr;
+    onApplySkillOrderChanges(newSkills) {
+      // 将拖拽后的顺序回写到 cultivatedSkills
+      const skillIDs = newSkills.map(s => s.uniqueID);
+      // 通知后端更新
+      backendEventBus.emit(EventNames.Rest.REORDER_SKILLS, { skillIDs });
     }
 
   }
@@ -293,7 +300,4 @@ export default {
   align-items: flex-start;
 }
 
-.shop-prep-wrapper > * {
-  flex: 1;
-}
 </style>

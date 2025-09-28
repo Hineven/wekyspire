@@ -36,6 +36,7 @@ export const EventNames = {
     CLAIM_SKILL: 'rest-claim-skill',
     CLAIM_ABILITY: 'rest-claim-ability',
     CLAIM_BREAKTHROUGH: 'rest-claim-breakthrough',
+    REORDER_SKILLS: 'rest-reorder-skills',
     PURCHASE_ITEM: 'rest-purchase-item',
     SHOP_REFRESHED: 'rest-shop-refreshed',
     FINISH: 'rest-finish',

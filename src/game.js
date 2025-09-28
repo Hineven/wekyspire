@@ -4,7 +4,7 @@ import SkillManager from './data/skillManager.js'
 import {backendGameState as gameState, backendGameState} from './data/gameState.js'
 import { startBattle, useSkill, dropSkill, endPlayerTurn } from './data/battle.js'
 import {
-  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, purchaseItem, spawnRewards, clearRewards
+  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
 
 function startGame() {
@@ -98,6 +98,9 @@ export function initGameFlowListeners() {
   });
   backendEventBus.on(EventNames.Rest.CLAIM_BREAKTHROUGH, () => {
     claimBreakthroughReward();
+  });
+  backendEventBus.on(EventNames.Rest.REORDER_SKILLS, ({skillIDs}) => {
+    reorderSkills(skillIDs);
   });
   backendEventBus.on(EventNames.Rest.PURCHASE_ITEM, ({ item }) => {
     const ok = purchaseItem(item);
