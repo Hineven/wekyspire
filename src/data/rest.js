@@ -52,8 +52,7 @@ export function spawnRewards() {
     gameState.rewards.abilities = [];
   }
   // 生成商店物品
-  const itemManager = new ItemManager();
-  gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
+  refreshShopItems();
   
   // 发送事件
   backendEventBus.emit(EventNames.Rest.REWARDS_SPAWNED, gameState.rewards);
@@ -65,7 +64,7 @@ export function claimMoney() {
   const amount = gameState.rewards.money;
   gameState.rewards.money = 0;
   // 发送事件（已领取）
-  backendEventBus.emit(EventNames.Rest.MONEY_CLAIMED, amount);
+  backendEventBus.emit(EventNames.Player.MONEY_CLAIMED, amount);
 }
 
 // 领取技能奖励
@@ -106,7 +105,7 @@ export function claimAbilityReward(ability, clearRewardsFlag) {
     gameState.rewards.abilities = [];
   }
   // 发送玩家领取能力奖励事件（已领取）
-  backendEventBus.emit(EventNames.Rest.ABILITY_CLAIMED, { ability: ability });
+  backendEventBus.emit(EventNames.Player.ABILITY_CLAIMED, { ability: ability });
 }
 
 // 领取突破奖励（新加：由UI调用，而不是在UI组件中直接变更display层）
@@ -133,5 +132,5 @@ export function purchaseItem(item) {
 export function refreshShopItems() {
   const itemManager = new ItemManager();
   gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
-  backendEventBus.emit(EventNames.Rest.REFRESH_SHOP, gameState.shopItems);
+  backendEventBus.emit(EventNames.Rest.SHOP_REFRESHED, gameState.shopItems);
 }

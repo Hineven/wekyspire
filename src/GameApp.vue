@@ -108,7 +108,6 @@ export default {
     restartGame() {
       // 重置两份游戏状态
       resetAllGameStates();
-
     },
   }
 }

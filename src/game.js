@@ -25,7 +25,7 @@ function startGame() {
   // }
 
   // 以事件驱动开始第一场战斗
-  backendEventBus.emit(EventNames.Game.START_BATTLE);
+  backendEventBus.emit(EventNames.Game.ENTER_BATTLE_STAGE);
 }
 
 export function initGameFlowListeners() {
@@ -33,12 +33,12 @@ export function initGameFlowListeners() {
   dialogues.registerListeners();
 
   // 游戏开始
-  backendEventBus.on(EventNames.Game.START, () => {
+  backendEventBus.on(EventNames.Game.GAME_START, () => {
     startGame();
   });
 
   // 开始战斗（统一入口）
-  backendEventBus.on(EventNames.Game.START_BATTLE, () => {
+  backendEventBus.on(EventNames.Game.ENTER_BATTLE_STAGE, () => {
     startBattle();
   });
 
@@ -64,7 +64,7 @@ export function initGameFlowListeners() {
   });
 
   // 战斗结束后的流程编排（胜利进入休整；失败进入结束）
-  backendEventBus.on(EventNames.Game.AFTER_BATTLE, ({ isVictory }) => {
+  backendEventBus.on(EventNames.Game.POST_BATTLE, ({ isVictory }) => {
     // 结算战斗结果
     if (isVictory) {
       // 计算奖励
@@ -82,7 +82,7 @@ export function initGameFlowListeners() {
       backendEventBus.emit(EventNames.Game.GAME_OVER, { reason: 'defeat' });
     } else {
       // 胜利：已在 battle.js 中设置 gameStage='rest' 并生成奖励；等待休整结束
-      backendEventBus.emit(EventNames.Game.ENTER_REST);
+      backendEventBus.emit(EventNames.Game.ENTER_REST_STAGE);
     }
   });
 
@@ -112,6 +112,6 @@ export function initGameFlowListeners() {
 
   // 休整结束后继续下一场战斗
   backendEventBus.on(EventNames.Rest.END, () => {
-    backendEventBus.emit(EventNames.Game.START_BATTLE);
+    backendEventBus.emit(EventNames.Game.ENTER_BATTLE_STAGE);
   });
 }

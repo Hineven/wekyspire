@@ -16,7 +16,7 @@ export function startBattle() {
   generateEnemy(gameState);
 
   // 战前事件
-  backendEventBus.emit(EventNames.Game.BEFORE_BATTLE, {
+  backendEventBus.emit(EventNames.Game.PRE_BATTLE, {
     battleCount: gameState.battleCount,
     player: gameState.player,
     enemy: gameState.enemy
@@ -140,7 +140,7 @@ export function useSkill(skill) {
     stage ++;
   }
 
-  backendEventBus.emit(EventNames.Player.AFTER_SKILL_USE, { player: gameState.player, skill: skill });
+  backendEventBus.emit(EventNames.Player.SKILL_USED, { player: gameState.player, skill: skill });
   handleSkillAfterUse(skill);
 
   // UI解锁
@@ -267,7 +267,7 @@ export function endBattle(isVictory) {
   enqueueUI('unlockControl');
 
   // 战斗结束事件
-  backendEventBus.emit(EventNames.Game.AFTER_BATTLE, {
+  backendEventBus.emit(EventNames.Game.POST_BATTLE, {
     battleCount : gameState.battleCount,
     player: gameState.player,
     enemy: gameState.enemy,
