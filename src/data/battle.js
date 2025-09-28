@@ -6,6 +6,7 @@ import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivat
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
 import { enqueueUI, enqueueDelay } from './animationDispatcher.js'
+import {dropSkillCard} from "./battleUtils";
 
 // 开始战斗
 export function startBattle() {
@@ -150,17 +151,11 @@ export function useSkill(skill) {
 
 
 // 玩家放弃最左侧技能
-export function dropSkill() {
+export function dropLeftmostSkill() {
   // 消耗1个行动力
   gameState.player.consumeActionPoints(1);
   // 从前台技能中移除最左侧技能
-  const droppedSkill = gameState.player.frontierSkills.shift();
-  if (droppedSkill) {
-    // 左侧技能进入后备技能
-    gameState.player.backupSkills.push(droppedSkill);
-    // 触发技能丢弃事件
-    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
-  }
+  dropSkillCard(gameState.player, gameState.player.frontierSkills[0].uniqueID);
 }
 
 // 敌人回合

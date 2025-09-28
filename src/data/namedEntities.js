@@ -119,6 +119,11 @@ const namedEntities = {
     icon: '🛡️',
     color: 'blue',
     description: '护盾优先抵消伤害，回合开始时消失。'
+  },
+  '焚毁': {
+    icon: '🔥',
+    color: 'red',
+    description: '焚毁会从一场战斗中永久移除一个技能。'
   }
 };
 

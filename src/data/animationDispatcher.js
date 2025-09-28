@@ -426,5 +426,5 @@ export function stopAnimationDispatcher() {
 frontendEventBus.on('request-card-appear', ({ id } = {}) => {
   if (id == null) return;
   // 若有未同步变更，duration>0 时会自动切片一次状态
-  enqueueUI('animateCardById', { id, kind: 'appearFromDeck', options: { id, durationMs: 450, startScale: 0.6, fade: true } }, { duration: 450 });
+  enqueueUI('animateCardById', { id, kind: 'appearFromDeck', options: { id, durationMs: 450, startScale: 0.6, fade: true } }, { duration: 0 });
 });

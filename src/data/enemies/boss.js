@@ -85,7 +85,7 @@ export class MEFM3 extends Enemy {
 // 卡姆拉 Boss敌人
 export class Karmura extends Enemy {
   constructor(battleIntensity) {
-    const hp = 30 + 9 * battleIntensity;
+    const hp = 20 + 8 * battleIntensity;
     const attack = Math.round((6 + battleIntensity) * 0.6);
     super(
       '卡姆拉', hp, attack, 1, 0,

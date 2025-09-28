@@ -224,6 +224,7 @@ export default {
     },
     animateAppearFromDeck(id) {
       frontendEventBus.emit('request-card-appear', { id });
+      // Fallback: 动画开始后 1.5 秒强制移除 appearing 状态，以防动画出现问题导致卡牌不显示
       setTimeout(() => { if (this.appearing[id]) delete this.appearing[id]; }, 1500);
     },
     canUseSkill(skill) {

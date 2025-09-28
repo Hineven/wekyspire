@@ -19,6 +19,7 @@ export const EventNames = {
     FRONTIER_UPDATED: 'player-frontier-skills-updated',
     TIER_UPGRADED: 'player-tier-upgraded',
     ABILITY_CLAIMED: 'player-ability-claimed',
+    SKILL_BURNT: 'player-skill-burnt',
     MONEY_CLAIMED: 'player-money-claimed',
     SKILL_USED: 'player-skill-used',
     SKILL_DROPPED: 'player-skill-dropped',

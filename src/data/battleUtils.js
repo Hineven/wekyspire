@@ -146,3 +146,35 @@ export function drawSkillCard(player, number = 1) {
     player.frontierSkills.push(firstSkill);
   }
 }
+
+export function dropSkillCard(player, skillID) {
+  const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  if (index !== -1) {
+    const [droppedSkill] = player.frontierSkills.splice(index, 1);
+    player.backupSkills.push(droppedSkill);
+    // 触发技能丢弃事件
+    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+  } else {
+    console.warn(`技能 ${skillName} 不在前台技能列表中，无法丢弃。`);
+  }
+}
+
+export function burnSkillCard(player, skillID) {
+  if(!skillID) {
+    console.warn('未指定技能ID，无法焚烧技能。');
+    return;
+  }
+  const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  if (index !== -1) {
+    const [exhaustedSkill] = player.frontierSkills.splice(index, 1);
+    // 从玩家技能列表中移除该技能
+    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+    if (skillListIndex !== -1) {
+      player.skills.splice(skillListIndex, 1);
+    }
+    // 触发技能焚毁事件
+    backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
+  } else {
+    console.warn(`技能 ${skillName} 不在前台技能列表中，无法焚烧。`);
+  }
+}

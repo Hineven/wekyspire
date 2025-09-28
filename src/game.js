@@ -2,7 +2,7 @@ import backendEventBus, { EventNames } from "./backendEventBus";
 import * as dialogues from './data/dialogues'
 import SkillManager from './data/skillManager.js'
 import {backendGameState as gameState, backendGameState} from './data/gameState.js'
-import { startBattle, useSkill, dropSkill, endPlayerTurn } from './data/battle.js'
+import { startBattle, useSkill, dropLeftmostSkill, endPlayerTurn } from './data/battle.js'
 import {
   claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
@@ -55,7 +55,7 @@ export function initGameFlowListeners() {
 
   // 玩家丢弃最左侧技能
   backendEventBus.on(EventNames.Player.DROP_SKILL, () => {
-    dropSkill();
+    dropLeftmostSkill();
   });
 
   // 玩家结束回合
