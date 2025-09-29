@@ -1,8 +1,7 @@
 // 火属辅助类技能
 
 import Skill from '../skill.js';
-import {launchAttack, dealDamage, gainShield, dropSkillCard, burnSkillCard, drawSkillCard} from '../battleUtils.js';
-import { addBattleLog } from '../battleLogUtils.js';
+import {applyHeal, burnSkillCard, dealDamage, drawSkillCard, dropSkillCard, launchAttack} from '../battleUtils.js';
 import {enqueueDelay} from "../animationDispatcher";
 
 // 无缘烈焰（C-）
@@ -115,18 +114,18 @@ export class SearingHeat extends Skill {
   }
 }
 
-// 烫手（C-）
-// 获得3层燃烧，抽4张牌
-export class HotHands extends Skill {
+// 火花（C-)
+// 获得2层燃烧，抽1张牌
+export class Spark extends Skill {
   constructor() {
-    super('烫手', 'fire', 1, 0, 1, 1);
-    this.baseColdDownTurns = 3;
+    super('火花', 'fire', 1, 0, 1, 1);
+    this.baseColdDownTurns = 2;
   }
   get cards() {
-    return Math.max(4 + this.power, 1);
+    return Math.max(1 + this.power, 1);
   }
   get stacks() {
-    return 3;
+    return 2;
   }
   use(player, enemy, stage) {
     if(stage === 0) {
@@ -182,6 +181,56 @@ export class Firework extends Skill {
   }
 }
 
+// 温暖拥抱（C-）
+// 受3伤害，将你一半燃烧赋予对手
+export class WarmHug extends Skill {
+  constructor() {
+    super('温暖拥抱', 'fire', 1, 0, 1, 2);
+  }
+
+  get damage () {
+    return 3 - 3 * this.power;
+  }
+  getStacks(player) {
+    const stacks = player.effects['燃烧'] || 0;
+    const baseTransferStacks = Math.ceil(stacks / 2);
+    return Math.max(0, baseTransferStacks);
+  }
+
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      if(this.damage > 0) {
+        dealDamage(player, player, this.damage);
+      } else if(this.damage < 0) {
+        applyHeal(player, this.damage);
+      }
+      enqueueDelay(500);
+      return false;
+    } else {
+      const stacks = this.getStacks(player);
+      player.removeEffect('燃烧', Math.min(stacks, player.effects['燃烧'] || 0));
+      enemy.addEffect('燃烧', stacks);
+      enqueueDelay(500);
+      return true;
+    }
+  }
+
+  get damageText () {
+    if(this.damage > 0) {
+      return `受到${this.damage}点伤害，`;
+    } else if(this.damage < 0) {
+      return `治疗${-this.damage}，`;
+    } else return '';
+  }
+
+  regenerateDescription(player) {
+    if(player) {
+      return `${this.damageText}转移${this.getStacks(player)}层/effect{燃烧}给对手`;
+    }
+    return `${this.damageText}转移你一半燃烧给对手`;
+  }
+}
+
 // 散火（C-）
 // 丢弃前方所有牌，并失去所有燃烧
 export class DisperseFire extends Skill {
@@ -214,7 +263,7 @@ export class DisperseFire extends Skill {
     }
   }
   regenerateDescription(player) {
-    return `丢弃所有牌，失去所有/effect{燃烧}`;
+    return `丢弃/named{前方}所有牌，失去所有/effect{燃烧}`;
   }
 }
 
@@ -267,6 +316,73 @@ export class ScorchingCurse extends Skill {
       return `/named{焚毁}/named{最近}的技能，赋予敌人${this.getStacks(player)}层/effect{燃烧}`;
     }
     return `/named{焚毁}/named{最近}的技能，赋予敌人【7+/named{灵能}】层/effect{燃烧}`;
+  }
+}
+
+// 耐热（C+）
+// 获得5层火焰抗性
+export class HeatResistance extends Skill {
+  constructor() {
+    super('耐热', 'fire', 2, 2, 1, 1);
+  }
+  get stacks() {
+    return Math.max(5 + 2 * this.power, 1);
+  }
+  use(player, enemy, stage) {
+    player.addEffect('火焰抗性', this.stacks);
+    return true;
+  }
+  regenerateDescription(player) {
+    return `获得${this.stacks}层/effect{火焰抗性}`;
+  }
+}
+
+// 烫手（C+）
+// 获得5层燃烧，抽4张牌
+export class HotHands extends Skill {
+  constructor() {
+    super('烫手', 'fire', 2, 0, 1, 1);
+    this.baseColdDownTurns = 3;
+  }
+  get cards() {
+    return Math.max(4 + 2 * this.power, 1);
+  }
+  get stacks() {
+    return 5;
+  }
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      player.addEffect('燃烧', this.stacks);
+      return false;
+    } else {
+      for(let i = 0; i < this.cards; i ++) {
+        drawSkillCard(player)
+        enqueueDelay(400);
+      }
+      return true;
+    }
+  }
+  regenerateDescription(player) {
+    return `获得${this.stacks}层/effect{燃烧}，抽${this.cards}张牌`;
+  }
+}
+
+
+// 吸热（C+）
+// 获得2层吸热
+export class HeatAbsorptionI extends Skill {
+  constructor() {
+    super('吸热', 'fire', 2, 1, 1, 1, '吸热');
+  }
+  get stacks() {
+    return Math.max(2 + this.power, 1);
+  }
+  use(player, enemy, stage) {
+    player.addEffect('吸热', this.stacks);
+    return false;
+  }
+  regenerateDescription(player) {
+    return `获得${this.stacks}层/effect{吸热}`;
   }
 }
 

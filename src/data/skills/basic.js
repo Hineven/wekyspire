@@ -31,7 +31,6 @@ export class RollPunch extends Skill {
 export class Roll extends Skill {
   constructor() {
     super('打滚', 'normal', 0, 0, 1, 1, '打滚', 1);
-    this.maxUses = 1;
     this.baseColdDownTurns = 4;
   }
 

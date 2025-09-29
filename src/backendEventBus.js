@@ -13,9 +13,6 @@ export const EventNames = {
     GAME_OVER: 'game-over',
   },
   Player: {
-    USE_SKILL: 'player-use-skill',
-    DROP_SKILL: 'player-drop-skill',
-    END_TURN: 'player-end-turn',
     FRONTIER_UPDATED: 'player-frontier-skills-updated',
     TIER_UPGRADED: 'player-tier-upgraded',
     ABILITY_CLAIMED: 'player-ability-claimed',
@@ -25,11 +22,21 @@ export const EventNames = {
     SKILL_DROPPED: 'player-skill-dropped',
     SKILL_REWARD_CLAIMED: 'player-skill-claimed'
   },
+  Battle: {
+    // Used to schedule battle phases, not intended to be listened
+    BATTLE_START: 'battle-battle-start',
+    PLAYER_TURN: 'battle-player-turn',
+    PLAYER_USE_SKILL: 'battle-player-use-skill',
+    PLAYER_DROP_SKILL: 'battle-player-drop-skill',
+    PLAYER_END_TURN: 'player-end-turn',
+    ENEMY_TURN: 'battle-enemy-turn',
+    // Except this one
+    BATTLE_VICTORY: 'battle-victory'
+  },
   Enemy: {
     TURN_START: 'enemy-turn-start',
     ACTION_END: 'enemy-action-end',
     TURN_END: 'enemy-turn-end',
-    BATTLE_VICTORY: 'battle-victory'
   },
   Rest: {
     REWARDS_SPAWNED: 'rewards-spawned',

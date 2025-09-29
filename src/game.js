@@ -2,7 +2,10 @@ import backendEventBus, { EventNames } from "./backendEventBus";
 import * as dialogues from './data/dialogues'
 import SkillManager from './data/skillManager.js'
 import {backendGameState as gameState, backendGameState} from './data/gameState.js'
-import { startBattle, useSkill, dropLeftmostSkill, endPlayerTurn } from './data/battle.js'
+import {
+  enterBattleStage,
+  initializeBattleFlowListeners
+} from './data/battle.js'
 import {
   claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards
 } from './data/rest.js'
@@ -39,29 +42,10 @@ export function initGameFlowListeners() {
 
   // 开始战斗（统一入口）
   backendEventBus.on(EventNames.Game.ENTER_BATTLE_STAGE, () => {
-    startBattle();
+    enterBattleStage();
   });
 
-  // 玩家使用技能（由前端仅发事件，不直接调用函数）
-  backendEventBus.on(EventNames.Player.USE_SKILL, (uniqueID) => {
-    const skill = gameState.player.frontierSkills.find(s => s.uniqueID === uniqueID);
-    console.log('使用技能：', skill);
-    if (skill) useSkill(skill);
-    else {
-      console.warn(`技能使用失败：前台技能列表中未找到id为 ${uniqueID} 的技能`);
-      console.log(gameState.player.frontierSkills);
-    }
-  });
-
-  // 玩家丢弃最左侧技能
-  backendEventBus.on(EventNames.Player.DROP_SKILL, () => {
-    dropLeftmostSkill();
-  });
-
-  // 玩家结束回合
-  backendEventBus.on(EventNames.Player.END_TURN, () => {
-    endPlayerTurn();
-  });
+  initializeBattleFlowListeners();
 
   // 战斗结束后的流程编排（胜利进入休整；失败进入结束）
   backendEventBus.on(EventNames.Game.POST_BATTLE, ({ isVictory }) => {
@@ -70,20 +54,26 @@ export function initGameFlowListeners() {
       // 计算奖励
       clearRewards();
       spawnRewards();
-      gameState.gameStage = 'rest';
       gameState.isVictory = true;
     } else {
       // 玩家失败
       gameState.isVictory = false;
-      gameState.gameStage = 'end';
     }
     if (!isVictory) {
       // 失败：宣告游戏结束（UI 监听 game-over 做收尾）
       backendEventBus.emit(EventNames.Game.GAME_OVER, { reason: 'defeat' });
     } else {
-      // 胜利：已在 battle.js 中设置 gameStage='rest' 并生成奖励；等待休整结束
+      // z胜利：进入休整阶段
       backendEventBus.emit(EventNames.Game.ENTER_REST_STAGE);
     }
+  });
+
+  backendEventBus.on(EventNames.Game.GAME_OVER, () => {
+    gameState.gameStage = 'end';
+  });
+
+  backendEventBus.on(EventNames.Game.ENTER_REST_STAGE, () => {
+    gameState.gameStage = 'rest';
   });
 
   // 休整阶段：事件驱动的后端结算与流程推进
@@ -105,8 +95,7 @@ export function initGameFlowListeners() {
   backendEventBus.on(EventNames.Rest.PURCHASE_ITEM, ({ item }) => {
     const ok = purchaseItem(item);
     if (ok) {
-      // 刷新商店物品，由后端生成，显示层通过投影自动更新
-      spawnRewards();
+      // TODO 刷新商店物品
     }
   });
   backendEventBus.on(EventNames.Rest.FINISH, () => {

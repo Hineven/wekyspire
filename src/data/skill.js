@@ -1,6 +1,6 @@
 // 技能抽象类
 class Skill {
-  constructor(name, type, tier, baseManaCost, baseActionPointCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
+  constructor(name, type, tier, baseManaCost, baseActionPointCost, baseMaxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
     this.type = type; // 技能所属灵脉。特别地：'normal'（都可用）,'curse'（诅咒）
     this.tier = tier; // 技能等阶
@@ -11,7 +11,7 @@ class Skill {
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.baseManaCost = baseManaCost || 0; // 魏启消耗
     this.baseActionPointCost = baseActionPointCost || 1; // 行动点消耗，默认为1
-    this.maxUses = maxUses || 1; // 最大充能次数，inf代表无需充能，可以随便用
+    this.baseMaxUses = baseMaxUses || 1; // 基础最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
     this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称。如果有多个升级方向，则为数组。
@@ -22,6 +22,10 @@ class Skill {
 
   get manaCost () {
     return Math.max(this.baseManaCost, 0);
+  }
+
+  get maxUses () {
+    return this.baseMaxUses;
   }
 
   get actionPointCost () {

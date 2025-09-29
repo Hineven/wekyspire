@@ -238,7 +238,7 @@ export default {
         const actionPointCost = skill.actionPointCost;
         const mouseX = event.clientX;
         const mouseY = event.clientY;
-        backendEventBus.emit(EventNames.Player.USE_SKILL, skill.uniqueID);
+        backendEventBus.emit(EventNames.Battle.PLAYER_USE_SKILL, skill.uniqueID);
         this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },

@@ -14,6 +14,11 @@ export class Ability {
   apply(player) {
     // 子类需要实现具体逻辑
   }
+
+  deapply(player) {
+    // 子类需要实现具体逻辑
+  }
+
   get spawnWeight() {
     return this.baseSpawnWeight;
   }

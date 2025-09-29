@@ -69,6 +69,7 @@ export class Player extends Unit {
     this.maxFrontierSkills = 8; // 最大前台技能数量
     // effects 由 Unit 初始化
     this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
+    this.abilities = []; // 玩家能力列表
   }
 
   // 计算属性
