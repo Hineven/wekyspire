@@ -355,13 +355,15 @@ function handleUIAction(item) {
     case 'clearBattleLogUI':
       frontendEventBus.emit('clear-battle-log');
       break;
-    case 'animateCardPlay':
-      // 旧接口：仍保留向后兼容
-      frontendEventBus.emit('animate-card-play', payload || {});
-      break;
     case 'animateCardById':
-      // 新接口：由后端（调度层）提供 id/kind/options/steps/hideStart，统一在此桥接
+      // 由后端（调度层）提供 id/kind/options/steps/hideStart，统一在此桥接
       frontendEventBus.emit('animate-card-by-id', payload || {});
+      break;
+    case 'clearCardAnimations':
+      frontendEventBus.emit('clear-card-animations');
+      break;
+    default:
+      console.warn(`animationDispatcher遇到了未知动画指令名称: ${name}`);
       break;
   }
 }
@@ -415,11 +417,6 @@ export function initAnimationDispatcher({ stepMs = 0 } = {}) {
     },
     { deep: true, flush: 'sync' }
   );
-}
-
-export function stopAnimationDispatcher() {
-  // 清理仅通过 clearQueue + 停止watch 外部控制；这里不保留interval
-  // 已无interval，留空即可
 }
 
 // 提供一个便捷桥接：当界面请求“新卡进入手牌”时，由调度器统一入队动画，确保与状态切片/节拍一致

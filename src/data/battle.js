@@ -6,7 +6,7 @@ import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivat
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
 import { enqueueUI, enqueueDelay } from './animationDispatcher.js'
-import {dropSkillCard} from "./battleUtils";
+import {burnSkillCard, dropSkillCard} from "./battleUtils";
 
 // 开始战斗
 export function startBattle() {
@@ -100,20 +100,7 @@ export function startPlayerTurn() {
   // 玩家操作通过BattleScreen组件的事件处理
 }
 
-// 使用技能
-export function useSkill(skill) {
-  // 使用技能逻辑
-  addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
-
-  // 让前端播放技能卡片的使用动画
-  enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'centerThenDeck'});
-
-  // 通知UI层锁定控制面板
-  enqueueUI('lockControl');
-
-  // 资源结算（后端状态）
-  skill.consumeResources(gameState.player);
-  
+export function activateSkill (skill) {
   // 技能发动时结算效果（后端状态）
   processSkillActivationEffects(gameState.player);
 
@@ -124,22 +111,49 @@ export function useSkill(skill) {
 
     // 先检查玩家死亡
     if (gameState.player.hp <= 0) {
-      addDeathLog(`你 被击败了！`);
-      endBattle(false);
-      enqueueUI('unlockControl');
       // 提前退出结算
       return;
     }
     // 然后再检查敌人死亡
     if (gameState.enemy.hp <= 0) {
-      addDeathLog(`${gameState.enemy.name} 被击败了！`);
-      endBattle(true);
-      enqueueUI('unlockControl');
       // 提前退出结算
       return;
     }
     if(result === true) break;
     stage ++;
+  }
+}
+
+// 使用技能
+export function useSkill(skill) {
+  // 使用技能逻辑
+  addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
+
+  // 技能脱手发动动画（卡牌移动到中央）
+  enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'flyToCenter'});
+
+  // 通知UI层锁定控制面板
+  enqueueUI('lockControl');
+
+  // 资源结算（后端状态）
+  skill.consumeResources(gameState.player);
+  
+  // 触发技能发动前效果
+  activateSkill(skill);
+
+  // 先检查玩家死亡
+  if (gameState.player.hp <= 0) {
+    endBattle(false);
+    enqueueUI('unlockControl');
+    // 提前退出结算
+    return;
+  }
+  // 然后再检查敌人死亡
+  if (gameState.enemy.hp <= 0) {
+    endBattle(true);
+    enqueueUI('unlockControl');
+    // 提前退出结算
+    return;
   }
 
   backendEventBus.emit(EventNames.Player.SKILL_USED, { player: gameState.player, skill: skill });
@@ -237,6 +251,7 @@ export function startNextTurn(gameState) {
 
 // 结束战斗
 export function endBattle(isVictory) {
+
   // 清空玩家身上的所有效果
   gameState.player.effects = {};
   // 清空玩家身上的护盾
@@ -259,6 +274,10 @@ export function endBattle(isVictory) {
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
   enqueueDelay(3000);
+
+  // 清理掉卡牌ghost
+  enqueueUI('clearCardAnimations');
+
   // 解锁操作面板
   enqueueUI('unlockControl');
 
@@ -292,20 +311,15 @@ function handleSkillAfterUse(skill) {
   // 查找技能在前台技能列表中的位置
   const index = gameState.player.frontierSkills.findIndex(s => s === skill);
   if (index !== -1) {
-    // 从前台技能列表中移除
-    gameState.player.frontierSkills.splice(index, 1);
 
     if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity) {
       // 如果是可充能/无限使用技能，移动到后备技能列表尾部
-      gameState.player.backupSkills.push(skill);
-      addSystemLog(`/blue{${skill.name}} 进入后备。`);
+      // enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'flyToDeckFade'});
+      dropSkillCard(gameState.player, skill.uniqueID);
+      // addSystemLog(`/blue{${skill.name}} 进入后备。`);
     } else {
-      // 如果是不可充能技能，直接从技能列表中移除
-      const skillsIndex = gameState.player.skills.findIndex(s => s === skill);
-      if (skillsIndex !== -1) {
-        gameState.player.skills.splice(skillsIndex, 1);
-      }
-      addSystemLog(`/blue{${skill.name}} 已耗尽。`);
+      // 如果是不可充能技能，焚毁
+      burnSkillCard(gameState.player, skill.uniqueID);
     }
 
     // 触发技能列表更新事件

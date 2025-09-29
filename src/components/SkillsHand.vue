@@ -190,7 +190,8 @@ export default {
     visibleIds: {
       immediate: true,
       handler(newIds, oldIds) {
-        if (!oldIds || oldIds.length === 0) {
+        // 仅在初次（immediate）触发时跳过动画；后续即使 oldIds 为空数组也应触发“从空到有”的入场动画
+        if (oldIds == null) {
           this.prevIds = [...newIds];
           return;
         }
@@ -231,7 +232,7 @@ export default {
       return skill && typeof skill.canUse === 'function' && skill.canUse(this.player) && skill.usesLeft !== 0;
     },
     onSkillCardClicked(skill, event) {
-      if (this.draggable) return; // 休整时禁用点选
+      if (this.draggable || this.isControlDisabled || !this.isPlayerTurn) return; // 休整/不可控制/非玩家会和时禁用技能使用
       if (this.canUseSkill(skill)) {
         const manaCost = skill.manaCost;
         const actionPointCost = skill.actionPointCost;

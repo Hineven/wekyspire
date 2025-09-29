@@ -60,13 +60,13 @@ export class Player extends Unit {
     this.money = 0;
     this.tier = 0; // 等阶
     // 技能养成：玩家拥有的总技能上限与顺序（替代 skillSlots）
-    this.maxSkills = 10; // 玩家拥有的总技能上限
+    this.maxSkills = 20; // 玩家拥有的总技能上限
     this.cultivatedSkills = []; // 已培养技能（顺序即为战斗中的默认顺序）
     // 场上技能与战斗列表
     this.skills = []; // 场上技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
-    this.maxFrontierSkills = 6; // 最大前台技能数量
+    this.maxFrontierSkills = 8; // 最大前台技能数量
     // effects 由 Unit 初始化
     this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
   }
