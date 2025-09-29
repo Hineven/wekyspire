@@ -4,18 +4,20 @@
       <transition name="panel-scale">
         <div class="skill-slot-selection-panel" v-if="isVisible">
           <h2>选择技能槽</h2>
+          <div class="skill-preview">
           <SkillCard
           :skill="skill"
+          :can-click="false"
           :preview-mode="true"
-          />
-          <p>选择一个技能槽来安装新技能</p>
-          <div class="skill-slots">
-            <SkillSlot
-              v-for="(slot, index) in skillSlots"
+          /></div>
+          <p class="tooltip">选择一个技能替换为新技能</p>
+          <div class="skills">
+            <SkillCard
+              v-for="(skill, index) in skills"
               :key="index"
-              :skill="slot"
-              :index="index"
-              @slot-clicked="selectSlot"
+              :skill="skill"
+              :preview-mode="true"
+              @skill-card-clicked="selectSkill"
             />
           </div>
           <button @click="closePanel">取消</button>
@@ -26,13 +28,11 @@
 </template>
 
 <script>
-import SkillSlot from './SkillSlot.vue';
 import SkillCard from './SkillCard.vue';
 
 export default {
   name: 'SkillSlotSelectionPanel',
   components: {
-    SkillSlot,
     SkillCard
   },
   props: {
@@ -40,7 +40,7 @@ export default {
       type: Object,
       default: null
     },
-    skillSlots: {
+    skills: {
       type: Array,
       required: true
     },
@@ -50,8 +50,9 @@ export default {
     }
   },
   methods: {
-    selectSlot(index) {
-      this.$emit('select-slot', index);
+    selectSkill(skill) {
+      const index = this.skills.findIndex(s => s.uniqueID === skill.uniqueID);
+      this.$emit('select-skill', index);
     },
     closePanel() {
       this.$emit('close');
@@ -75,20 +76,38 @@ export default {
 }
 
 .skill-slot-selection-panel {
-  border: 1px solid #ccc;
   padding: 20px;
-  background-color: #f9f9f9;
-  max-width: 80%;
   max-height: 80%;
   overflow: visible;
 }
 
-.skill-slots {
+.skill-slot-selection-panel h2 {
+  color: white;
+}
+
+.skill-preview {
+  margin: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.tooltip {
+  color: white;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.skills {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  margin: 20px 0;
+  margin: auto;
+  max-width: 80%;
+  padding: 20px;
   justify-content: center;
+  overflow: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.5) transparent;
 }
 
 button {

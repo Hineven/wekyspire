@@ -5,23 +5,23 @@
       
       <div class="content-wrapper">
         <!-- 左侧固定大小面板容器 -->
-        <div class="left-panel-container">
+        <div class="left-panel-container" :class="{ 'two-panels': currentPanel === 'shop' }">
           <!-- 金钱奖励面板 -->
           <MoneyRewardPanel
-            :is-visible="currentRewardPanel === 'money'"
+            :is-visible="currentPanel === 'money'"
             :amount="gameState.rewards.money"
             @claimed="onMoneyRewardClaimed"
           />
           
           <!-- 突破奖励面板 -->
           <BreakthroughRewardPanel
-            :is-visible="currentRewardPanel === 'breakthrough'"
+            :is-visible="currentPanel === 'breakthrough'"
             @claimed="onBreakthroughRewardClaimed"
           />
           
           <!-- 技能奖励面板 -->
           <SkillRewardPanel
-            :is-visible="currentRewardPanel === 'skill'"
+            :is-visible="currentPanel === 'skill'"
             :skills="gameState.rewards.skills"
             @close="closeSkillRewardPanel"
             @selected-skill-reward="onSkillRewardSelected"
@@ -29,32 +29,46 @@
           
           <!-- 能力奖励面板 -->
           <AbilityRewardPanel
-            :is-visible="currentRewardPanel === 'ability'"
+            :is-visible="currentPanel === 'ability'"
             :abilities="gameState.rewards.abilities"
             @selected-ability-reward="onAbilityRewardSelected"
             @close="closeAbilityRewardPanel"
           />
           
-          <!-- 商店面板 -->
+          <!-- 商店 + 准备面板并列显示 -->
           <ShopPanel
-        :is-visible="currentRewardPanel === 'shop'"
-        :shop-items="gameState.shopItems"
-        :game-state="gameState"
-        @close="closeShopPanel"
-      />
+            :isVisible="currentPanel === 'shop'"
+            :shop-items="gameState.shopItems"
+            :game-state="gameState"
+            @close="closeShopPanel"
+          />
         </div>
         
-        <!-- 右侧玩家状态面板 -->
-        <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
+        <!-- 右侧：玩家状态 + 常驻控制面板 -->
+        <div class="right-panel-container">
+          <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
+          <RestControlPanel
+            :preparation-panel-visible="preparationPanelVisible"
+            @toggle-preparation-panel="preparationPanelVisible = !preparationPanelVisible"
+          />
+        </div>
+
+        <SkillSelectionPanel
+          :is-visible="skillSelectionPanelVisible"
+          :skills="this.gameState.player.cultivatedSkills"
+          :skill="claimingSkill"
+          @select-skill="onSkillSelected"
+          @close="closeSkillSelectionPanel"
+        />
+
+        <PreparationPanel
+            :is-visible="preparationPanelVisible"
+            :skills="gameState.player.cultivatedSkills"
+            @apply="onApplySkillOrderChanges"
+            @close="preparationPanelVisible = false"
+        />
+
       </div>
-      
-      <SkillSlotSelectionPanel
-        :is-visible="skillSlotSelectionPanelVisible"
-        :skill-slots="gameState.player.skillSlots"
-        :skill="claimingSkill"
-        @select-slot="onSkillSlotSelected"
-        @close="closeSkillSlotSelectionPanel"
-      />
     </div>
   </div>
 </template>
@@ -63,11 +77,13 @@
 import ColoredText from './ColoredText.vue';
 import AbilityRewardPanel from './AbilityRewardPanel.vue';
 import SkillRewardPanel from './SkillRewardPanel.vue';
-import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
+import SkillSelectionPanel from './SkillSelectionPanel.vue';
 import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import MoneyRewardPanel from './MoneyRewardPanel.vue';
 import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
+import PreparationPanel from './PreparationPanel.vue';
+import RestControlPanel from './RestControlPanel.vue';
 import frontendEventBus from "../frontendEventBus";
 import backendEventBus, { EventNames } from "../backendEventBus";
 
@@ -77,11 +93,13 @@ export default {
     ColoredText,
     AbilityRewardPanel,
     SkillRewardPanel,
-    SkillSlotSelectionPanel,
+    SkillSelectionPanel,
     ShopPanel,
     PlayerStatusPanel,
     MoneyRewardPanel,
-    BreakthroughRewardPanel
+    BreakthroughRewardPanel,
+    PreparationPanel,
+    RestControlPanel
   },
   props: {
     gameState: {
@@ -91,10 +109,11 @@ export default {
   },
   data() {
     return {
-      currentRewardPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
-      skillSlotSelectionPanelVisible: false,
+      currentPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
+      skillSelectionPanelVisible: false,
+      preparationPanelVisible: false,
       claimingSkill: null,
-      rewardPanels: [],
+      sequentialPanels: [],
       currentRewardIndex: 0
     }
   },
@@ -116,39 +135,39 @@ export default {
   },
   methods: {
     initRewardPanels() {
-      this.rewardPanels = [];
+      this.sequentialPanels = [];
       
       // 按顺序添加奖励面板
       if (this.gameState.rewards.money > 0) {
-        this.rewardPanels.push('money');
+        this.sequentialPanels.push('money');
       }
       
       if (this.gameState.rewards.breakthrough) {
-        this.rewardPanels.push('breakthrough');
+        this.sequentialPanels.push('breakthrough');
       }
       
       if (this.gameState.rewards.skills.length > 0) {
-        this.rewardPanels.push('skill');
+        this.sequentialPanels.push('skill');
       }
       
       if (this.gameState.rewards.abilities.length > 0) {
-        this.rewardPanels.push('ability');
+        this.sequentialPanels.push('ability');
       }
       
       // 总是添加商店面板
-      this.rewardPanels.push('shop'); 
+      this.sequentialPanels.push('shop');
     },
     
     showNextRewardPanel() {
       // 先隐藏当前面板
-      this.currentRewardPanel = 'none';
+      this.currentPanel = 'none';
       // 稍等片刻后，再显示下一个面板
       setTimeout(()=> {
-        if (this.currentRewardIndex < this.rewardPanels.length) {
-          this.currentRewardPanel = this.rewardPanels[this.currentRewardIndex];
+        if (this.currentRewardIndex < this.sequentialPanels.length) {
+          this.currentPanel = this.sequentialPanels[this.currentRewardIndex];
         } else {
           // 所有奖励面板都已显示完毕
-          this.currentRewardPanel = '';
+          this.currentPanel = '';
         }
       }, 500);
     },
@@ -173,7 +192,7 @@ export default {
     onSkillRewardSelected(currentSkill) {
       // 简化后的自动升级逻辑：如果奖励技能带有 upgradedFrom，直接替换来源技能
       if(currentSkill.isUpgradeCandidate && currentSkill.upgradedFrom) {
-        const slots = this.gameState.player.skillSlots;
+        const slots = this.gameState.player.cultivatedSkills;
         const sourceSlotIndex = slots.findIndex(s => s && s.name === currentSkill.upgradedFrom);
         if(sourceSlotIndex !== -1) {
           const oldSkill = slots[sourceSlotIndex];
@@ -190,21 +209,32 @@ export default {
           return;
         }
       }
-      // 回退：未能自动升级则进入槽位选择
+      // 回退：未能自动升级则自动增添到末尾
+      if(this.gameState.player.cultivatedSkills.length < this.gameState.player.maxSkills) {
+        // 直接添加到末尾
+        backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
+          skill: currentSkill,
+          slotIndex: -1,
+          clearRewards: false
+        });
+        this.closeSkillRewardPanel();
+        return;
+      }
+      // 如果技能栏已满，则弹出技能选择面板，替换一个技能
       this.claimingSkill = currentSkill;
-      setTimeout(() => { this.skillSlotSelectionPanelVisible = true; }, 300);
+      setTimeout(() => { this.skillSelectionPanelVisible = true; }, 300);
     },
-    closeSkillSlotSelectionPanel() {
-      this.skillSlotSelectionPanelVisible = false;
+    closeSkillSelectionPanel() {
+      this.skillSelectionPanelVisible = false;
     },
-    onSkillSlotSelected(slotIndex) {
+    onSkillSelected(slotIndex) {
       backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
         skill: this.claimingSkill,
         slotIndex,
         clearRewards: false
       });
       // 关闭面板
-      this.closeSkillSlotSelectionPanel();
+      this.closeSkillSelectionPanel();
       this.closeSkillRewardPanel();
     },
     onAbilityRewardSelected(ability) {
@@ -217,6 +247,12 @@ export default {
     closeShopPanel() {
       // 结束休整阶段，开始下一场战斗（后端流程监听）
       backendEventBus.emit(EventNames.Rest.FINISH);
+    },
+    onApplySkillOrderChanges(newSkills) {
+      // 将拖拽后的顺序回写到 cultivatedSkills
+      const skillIDs = newSkills.map(s => s.uniqueID);
+      // 通知后端更新
+      backendEventBus.emit(EventNames.Rest.REORDER_SKILLS, { skillIDs });
     }
 
   }
@@ -257,8 +293,24 @@ export default {
 
 .left-panel-container {
   width: 800px;
-  height: 220px;
+  min-height: 220px;
   position: relative;
   flex-shrink: 0;
 }
+
+.left-panel-container.two-panels {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.right-panel-container {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
 </style>

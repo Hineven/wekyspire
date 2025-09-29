@@ -130,13 +130,13 @@ export default {
           ],
           interval: 3500,
           onEnd: ()=>{
-            backendEventBus.emit(EventNames.Game.START);
+            backendEventBus.emit(EventNames.Game.GAME_START);
             this.isGameStarting = false;
           }
         })}, 4000);
       } else {
         // 不搞些花里胡哨的，直接开始
-        backendEventBus.emit(EventNames.Game.START);
+        backendEventBus.emit(EventNames.Game.GAME_START);
       }
     },
     

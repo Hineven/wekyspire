@@ -1,11 +1,11 @@
 import Skill from '../skill.js';
-import {launchAttack, dealDamage, gainShield, drawSkillCard} from '../battleUtils.js';
+import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard} from '../battleUtils.js';
 
 // 拳打脚踢技能
 export class PunchKick extends Skill {
   
   constructor() {
-    super('拳打脚踢', 'normal', 0, 0, 2, Infinity, '拳打脚踢', 1);
+    super('拳打脚踢', 'normal', 0, 0, 2, Infinity);
   }
   
   get damage () {

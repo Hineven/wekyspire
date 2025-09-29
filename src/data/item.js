@@ -55,7 +55,8 @@ class SkillSlot extends Item {
   }
 
   purchase(player) {
-    player.skillSlots.push(null);
+    // 增加玩家可拥有的技能上限
+    player.maxSkills = (player.maxSkills || 0) + 1;
     super.purchase(player); // 减少库存
   }
 }

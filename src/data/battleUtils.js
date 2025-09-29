@@ -4,6 +4,8 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
+import {enqueueUI} from "./animationDispatcher";
+import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
 function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker = null, source = null } = {}) {
@@ -142,7 +144,59 @@ export function drawSkillCard(player, number = 1) {
       // addBattleLog('你的后备技能已空，无法抽取更多卡牌！');
       break;
     }
+    // 对于入手而言，动画是自动编排的，所以这里无需手动触发
+
     const firstSkill = player.backupSkills.shift();
     player.frontierSkills.push(firstSkill);
+
   }
+}
+
+export function dropSkillCard(player, skillID) {
+  const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  if (index !== -1) {
+    // 播放动画
+    enqueueUI('animateCardById', {id: skillID, kind: 'drop'});
+    // 执行逻辑
+    const [droppedSkill] = player.frontierSkills.splice(index, 1);
+    player.backupSkills.push(droppedSkill);
+    // 触发技能丢弃事件
+    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+  } else {
+    console.warn(`技能 ${skillID} 不在前台技能列表中，无法丢弃。`);
+  }
+}
+
+export function burnSkillCard(player, skillID) {
+  if(!skillID) {
+    console.warn('未指定技能ID，无法焚烧技能。');
+    return;
+  }
+  const frontierIndex = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  const backupIndex = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
+  if(frontierIndex === -1 && backupIndex === -1) {
+    console.warn(`技能ID为 ${skillID} 的技能不在前台或后备技能列表中，无法焚烧。`);
+    return;
+  }
+  // 播放动画
+  enqueueUI('animateCardById', {id: skillID, kind: 'burn'});
+  let exhaustedSkill = null;
+  if (frontierIndex !== -1) {
+    exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];
+    // 从玩家技能列表中移除该技能
+    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+    if (skillListIndex !== -1) {
+      player.skills.splice(skillListIndex, 1);
+    }
+  }
+  if (backupIndex !== -1) {
+    exhaustedSkill = player.backupSkills.splice(backupIndex, 1)[0];
+    // 从玩家技能列表中移除该技能
+    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+    if (skillListIndex !== -1) {
+      player.skills.splice(skillListIndex, 1);
+    }
+  }
+  // 触发技能焚毁事件
+  backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
 }

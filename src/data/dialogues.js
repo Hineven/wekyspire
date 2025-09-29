@@ -193,7 +193,7 @@ function getEventBeforeBattle(battleCount, player, enemy) {
 }
 
 function getTierUpgradedDialog(player) {
-  if(player.tier == getPlayerTierFromTierIndex(1).tier) {
+  if(player.tier === getPlayerTierFromTierIndex(1).tier) {
     // 第一次升级，瑞米提供关于升级的提示和教程
     return [
       {
@@ -233,7 +233,7 @@ function getTierUpgradedDialog(player) {
 
 function getSkillUseDialog(player, skill, result) {
   if(!result) return;
-  if(skill.name == '瑞米召唤术') {
+  if(skill.name === '瑞米召唤术') {
     return [
       {
         character: '瑞米',
@@ -269,21 +269,21 @@ function getSkillUseDialog(player, skill, result) {
 // 初始化函数，在游戏开始时调用一次，注意eventBus监听
 function registerListeners() {
   // 注册事件监听（使用后端事件总线）
-  backendEventBus.on(EventNames.Game.BEFORE_BATTLE, (params) => {
+  backendEventBus.on(EventNames.Game.PRE_BATTLE, (params) => {
     const {battleCount, player, enemy} = params;
     const sequence = getEventBeforeBattle(battleCount, player, enemy);
     if(sequence && isRemiPresent) {
       enqueueUI('displayDialog', sequence);
     }
   });
-  backendEventBus.on(EventNames.Game.AFTER_BATTLE, (params) => {
+  backendEventBus.on(EventNames.Game.POST_BATTLE, (params) => {
     const {battleCount, player, enemy, isVictory} = params;
     const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
     if(sequence && isRemiPresent) {
       enqueueUI('displayDialog', sequence);
     }
   });
-  backendEventBus.on(EventNames.Game.BEFORE_GAME_START, () => {
+  backendEventBus.on(EventNames.Game.PRE_GAME_START, () => {
     const openingDialog = getOpeningDialog();
     if(openingDialog && isRemiPresent) {
       enqueueUI('displayDialog', openingDialog);
@@ -318,7 +318,7 @@ function registerListeners() {
   });
 
   // 监听玩家使用技能事件
-  backendEventBus.on(EventNames.Player.AFTER_SKILL_USE, (params) => {
+  backendEventBus.on(EventNames.Player.SKILL_USED, (params) => {
     const {player, skill, result} = params;
     const sequence = getSkillUseDialog(player, skill, result);
     if(sequence && isRemiPresent) {
@@ -328,16 +328,16 @@ function registerListeners() {
 }
 
 function unregisterListeners () {
-  backendEventBus.off(EventNames.Game.BEFORE_BATTLE);
-  backendEventBus.off(EventNames.Game.AFTER_BATTLE);
-  backendEventBus.off(EventNames.Game.BEFORE_GAME_START);
+  backendEventBus.off(EventNames.Game.PRE_BATTLE);
+  backendEventBus.off(EventNames.Game.POST_BATTLE);
+  backendEventBus.off(EventNames.Game.PRE_GAME_START);
   backendEventBus.off(EventNames.Player.SKILL_REWARD_CLAIMED);
   backendEventBus.off(EventNames.Player.TIER_UPGRADED);
-  backendEventBus.off(EventNames.Player.AFTER_SKILL_USE);
+  backendEventBus.off(EventNames.Player.SKILL_USED);
 }
 
 export function triggerBeforeGameStart() {
-  backendEventBus.emit(EventNames.Game.BEFORE_GAME_START);
+  backendEventBus.emit(EventNames.Game.PRE_GAME_START);
 }
 
 // 导出注册函数

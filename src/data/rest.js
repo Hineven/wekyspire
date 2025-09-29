@@ -16,7 +16,7 @@ export function spawnSkillRewards() {
     if(nextTier) tier = nextTier;
   }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.leino, gameState.player.skillSlots, tier, true // 生成高质量奖励
+    3, gameState.player.leino, gameState.player.cultivatedSkills, tier, true // 生成高质量奖励
   );
 }
 
@@ -33,11 +33,10 @@ export function spawnRewards() {
   gameState.rewards.money = Math.floor(Math.random() * 20) + 10;
 
   // 突破奖励
-  const haveBreakthroughReward = (
-    gameState.battleCount == 2 || gameState.enemy.isBoss
+  gameState.rewards.breakthrough = (
+    gameState.battleCount === 2 || gameState.enemy.isBoss
   );
-  gameState.rewards.breakthrough = haveBreakthroughReward;
-  
+
   // 总是生成技能奖励
   spawnSkillRewards();
 
@@ -53,8 +52,7 @@ export function spawnRewards() {
     gameState.rewards.abilities = [];
   }
   // 生成商店物品
-  const itemManager = new ItemManager();
-  gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
+  refreshShopItems();
   
   // 发送事件
   backendEventBus.emit(EventNames.Rest.REWARDS_SPAWNED, gameState.rewards);
@@ -66,12 +64,25 @@ export function claimMoney() {
   const amount = gameState.rewards.money;
   gameState.rewards.money = 0;
   // 发送事件（已领取）
-  backendEventBus.emit(EventNames.Rest.MONEY_CLAIMED, amount);
+  backendEventBus.emit(EventNames.Player.MONEY_CLAIMED, amount);
 }
 
 // 领取技能奖励
 export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
-  gameState.player.skillSlots[slotIndex] = skill;
+  // 计算可用容量（最多 maxSkills 个）
+  const capacity = Math.min(gameState.player.maxSkills || 0, gameState.player.cultivatedSkills.length + 1);
+  if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = gameState.player.cultivatedSkills.length;
+  if (slotIndex >= capacity) slotIndex = capacity - 1;
+
+  console.log('领取技能奖励：', skill, '放置于槽位', slotIndex, '（容量', capacity, '）');
+  // 放置/替换技能
+  if(slotIndex >= gameState.player.cultivatedSkills.length) {
+    gameState.player.cultivatedSkills.push(skill);
+  } else {
+    gameState.player.cultivatedSkills[slotIndex] = skill;
+  }
+  console.log(gameState.player.cultivatedSkills);
+
   if(clearRewardsFlag) {
     gameState.rewards.skills = [];
   }
@@ -87,7 +98,7 @@ export function claimAbilityReward(ability, clearRewardsFlag) {
     gameState.rewards.abilities = [];
   }
   // 发送玩家领取能力奖励事件（已领取）
-  backendEventBus.emit(EventNames.Rest.ABILITY_CLAIMED, { ability: ability });
+  backendEventBus.emit(EventNames.Player.ABILITY_CLAIMED, { ability: ability });
 }
 
 // 领取突破奖励（新加：由UI调用，而不是在UI组件中直接变更display层）
@@ -97,6 +108,7 @@ export function claimBreakthroughReward() {
   upgradePlayerTier(gameState.player);
   backendEventBus.emit(EventNames.Player.TIER_UPGRADED, gameState.player);
 }
+
 
 // 购买物品（后端结算）
 export function purchaseItem(item) {
@@ -114,5 +126,16 @@ export function purchaseItem(item) {
 export function refreshShopItems() {
   const itemManager = new ItemManager();
   gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
-  backendEventBus.emit(EventNames.Rest.REFRESH_SHOP, gameState.shopItems);
+  backendEventBus.emit(EventNames.Rest.SHOP_REFRESHED, gameState.shopItems);
+}
+
+export function reorderSkills(skillUniqueIDs) {
+  // 根据传入的技能唯一ID数组，重新排序玩家的 cultivatedSkills
+  const skills = gameState.player.cultivatedSkills || [];
+  const reordered = skillUniqueIDs.map(id =>
+    skills.find(skill => skill && skill.uniqueID === id) || null
+  );
+  gameState.player.cultivatedSkills = reordered;
+  console.log('技能顺序已更新：', reordered);
+  backendEventBus.emit(EventNames.Player.SKILLS_REORDERED, reordered);
 }
