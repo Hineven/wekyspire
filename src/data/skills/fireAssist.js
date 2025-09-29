@@ -33,6 +33,7 @@ export class UnreasonableFire extends Skill {
       return false;
     } else if(stage === 1){
       player.addEffect('燃烧', this.selfStacks);
+      enqueueDelay(500);
       return false;
     } else {
       enemy.addEffect('燃烧', this.enemyStacks);
@@ -101,6 +102,7 @@ export class SearingHeat extends Skill {
       launchAttack(player, enemy, this.getDamage(player));
       return false;
     } else {
+      enqueueDelay(500);
       player.addEffect('燃烧', this.stacks);
       return true;
     }
@@ -133,7 +135,7 @@ export class HotHands extends Skill {
     } else {
       for(let i = 0; i < this.cards; i ++) {
         drawSkillCard(player)
-        enqueueDelay(200);
+        enqueueDelay(400);
       }
       return true;
     }
@@ -180,6 +182,42 @@ export class Firework extends Skill {
   }
 }
 
+// 散火（C-）
+// 丢弃前方所有牌，并失去所有燃烧
+export class DisperseFire extends Skill {
+  constructor() {
+    super('散火', 'fire', 1, 0, 1, 1);
+    this.baseColdDownTurns = 3;
+  }
+
+  get coldDownTurns() {
+    return Math.max(super.coldDownTurns - this.power, 1);
+  }
+
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      while (player.frontierSkills.length > 0) {
+        const skill = player.frontierSkills[0];
+        if(skill === this) {
+          break;
+        }
+        dropSkillCard(player, skill.uniqueID);
+        enqueueDelay(300);
+      }
+      return false;
+    } else {
+      const burnEffect = player.effects['燃烧'];
+      if (burnEffect) {
+        player.removeEffect('燃烧', burnEffect);
+      }
+      return true;
+    }
+  }
+  regenerateDescription(player) {
+    return `丢弃所有牌，失去所有/effect{燃烧}`;
+  }
+}
+
 // 炽热诅咒（C+）
 // 烧掉最近的卡，赋予敌人【7+灵能】层燃烧
 export class ScorchingCurse extends Skill {
@@ -216,9 +254,9 @@ export class ScorchingCurse extends Skill {
     if(stage === 0) {
       const closestSkillID = this.getClosestSkill(player)?.uniqueID;
       burnSkillCard(player, closestSkillID, true);
-      enqueueDelay(200);
       return false;
     } else {
+      enqueueDelay(500);
       enemy.addEffect('燃烧', this.getStacks(player));
       return true;
     }
@@ -242,13 +280,11 @@ export class FireAssistance extends Skill {
     return Math.max(3 - this.power, 1);
   }
   use(player, enemy, stage) {
-    if (stage === 0) {
-      const burnEffect = player.effects['燃烧'];
-      if (burnEffect) {
-        const convertableStacks = Math.ceil(burnEffect.stacks / this.conversionRate);
-        player.removeEffect('燃烧', burnEffect);
-        player.addEffect('集中', convertableStacks);
-      }
+    const burnEffect = player.effects['燃烧'];
+    if (burnEffect) {
+      const convertableStacks = Math.ceil(burnEffect.stacks / this.conversionRate);
+      player.removeEffect('燃烧', burnEffect);
+      player.addEffect('集中', convertableStacks);
     }
     return true;
   }
@@ -273,6 +309,7 @@ export class DevotionCurse extends Skill {
   use(player, enemy, stage) {
     if(stage === 0) {
         player.addEffect('集中', this.stacks);
+        enqueueDelay(500);
         return false;
     } else {
         player.addEffect('燃心', 1);
@@ -304,6 +341,7 @@ export class DualExtinction extends Skill {
   use(player, enemy, stage) {
     if(stage === 0) {
       player.addEffect('燃烧', this.getStacks(player));
+      enqueueDelay(500);
       return false;
     } else {
       enemy.addEffect('燃烧', this.getStacks(player));
@@ -371,6 +409,7 @@ export class FlameableAmmo extends Skill {
   use (player, enemy, stage) {
     if(stage === 0) {
         player.addEffect('高燃弹药', this.stacks);
+        enqueueDelay(500);
         return this.power >= 0;
     } else {
         player.addEffect('燃烧', this.burnStacks);

@@ -312,8 +312,8 @@ function handleSkillAfterUse(skill) {
   const index = gameState.player.frontierSkills.findIndex(s => s === skill);
   if (index !== -1) {
 
-    if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity) {
-      // 如果是可充能/无限使用技能，移动到后备技能列表尾部
+    if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity || skill.remainingUses > 0) {
+      // 如果是可充能/无限使用技能，或者充能有剩余，移动到后备技能列表尾部
       // enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'flyToDeckFade'});
       dropSkillCard(gameState.player, skill.uniqueID);
       // addSystemLog(`/blue{${skill.name}} 进入后备。`);

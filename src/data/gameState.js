@@ -3,8 +3,6 @@
 import { reactive } from 'vue';
 import { Player } from './player.js';
 import SkillManager from './skillManager.js';
-import AbilityManager from './abilityManager.js';
-import ItemManager from './itemManager.js';
 
 // 工厂方法：创建一个“干净”的游戏状态对象（非响应式）
 export function createGameState() {
