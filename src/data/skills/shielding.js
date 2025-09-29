@@ -1,5 +1,6 @@
 import Skill from '../skill.js';
 import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
+import {enqueueDelay} from "../animationDispatcher";
 
 // 紧急护盾技能
 // 获得14点护盾，每次使用后，冷却时间增1
@@ -72,19 +73,24 @@ export class ChargeShield extends Skill {
   get damage () {
     return Math.max(3 + this.power, 1);
   }
+
+  getShieldAmount(player) {
+    return 2 + player.attack;
+  }
   
   use(player, enemy, stage) {
-    if(stage == 0) {
-        dealDamage(player, enemy, this.damage);
-        return false;
+    if(stage === 0) {
+      dealDamage(player, enemy, this.damage);
+      enqueueDelay(500);
+      return false;
     }
-    gainShield(player, player, 2 + player.attack);
+    gainShield(player, player, this.getShieldAmount(player));
     return true;
   }
   
   regenerateDescription(player) {
     if(player) {
-      return `造成${this.damage}伤害，获得2+${player.attack}/named{护盾}`;
+      return `造成${this.damage}伤害，获得${this.getShieldAmount(player)}/named{护盾}`;
     }
     return `造成${this.damage}伤害，获得【2+/effect{力量}】/named{护盾}`;
   }
@@ -157,9 +163,14 @@ export class PsychicShield extends Skill {
     return Math.max(1 + Math.floor(this.power / 2), 1);
   }
 
+  getShieldAmount(player) {
+    return this.shield + 2 * player.magic;
+  }
+
   use(player, enemy, stage) {
     if(stage === 0) {
-      gainShield(player, player, this.shield);
+      gainShield(player, player, this.getShieldAmount(player));
+      enqueueDelay(500);
       return false;
     } else {
       player.addEffect('警戒', this.guardStacks);
@@ -168,7 +179,7 @@ export class PsychicShield extends Skill {
   }
 
   regenerateDescription(player) {
-    if(player) return `获得${this.shield + 2 * player.magic}/named{护盾}，${this.guardStacks}层/effect{警戒}`;
+    if(player) return `获得${this.getShieldAmount(player)}/named{护盾}，${this.guardStacks}层/effect{警戒}`;
     return `获得【${this.shield}+2x/named{灵能}】/named{护盾}，${this.guardStacks}层/effect{警戒}`;
   }
 }

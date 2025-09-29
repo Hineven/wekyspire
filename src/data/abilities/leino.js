@@ -4,7 +4,7 @@ import {backendGameState} from "../gameState";
 
 export class FireLeino extends Ability {
   constructor() {
-    super('火灵脉', '能使用火系灵御技能', 5, 10);
+    super('火灵脉', '能使用火系灵御技能，来自/effect{燃烧}的伤害减2', 5, 10);
   }
 
   apply(player) {

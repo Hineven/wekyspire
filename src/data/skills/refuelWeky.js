@@ -227,6 +227,6 @@ export class ExploitWeky extends Skill {
     if (player) {
       return `攻击自己，造成${10 + player.attack}伤害，受伤则获得${this.stack}/named{魏启}`;
     }
-    return `攻击自己，造成10伤害，受伤则获得${this.stack}/effect{魏启}`;
+    return `攻击自己，造成10伤害，受伤则获得${this.stack}/named{魏启}`;
   }
 }
