@@ -5,7 +5,7 @@ import {applyHeal, burnSkillCard, dealDamage, drawSkillCard, dropSkillCard, laun
 import {enqueueDelay} from "../animationDispatcher";
 
 // 无缘烈焰（C-）
-// 丢弃冷却中的技能，自己和敌人各获得4层燃烧
+// 丢弃冷却中的技能，自己和敌人各获得3层燃烧
 export class UnreasonableFire extends Skill {
   constructor() {
     super('无缘烈焰', 'fire', 1, 0, 2, 1);
@@ -13,11 +13,11 @@ export class UnreasonableFire extends Skill {
   }
 
   get selfStacks() {
-    return 4;
+    return 3;
   }
 
   get enemyStacks() {
-    return Math.max(4 + 2 * this.power, 1);
+    return Math.max(3 + 2 * this.power, 1);
   }
 
   use(player, enemy, stage) {
@@ -119,7 +119,7 @@ export class SearingHeat extends Skill {
 export class Spark extends Skill {
   constructor() {
     super('火花', 'fire', 1, 0, 1, 1);
-    this.baseColdDownTurns = 2;
+    this.baseColdDownTurns = 1;
   }
   get cards() {
     return Math.max(1 + this.power, 1);
@@ -145,11 +145,12 @@ export class Spark extends Skill {
 }
 
 // 玩火（C-）
-// 丢弃前方所有牌，每丢一张获得并赋予2层燃烧
+// 丢弃前方所有牌，每丢一张获得并赋予3层燃烧
 export class Firework extends Skill {
   constructor() {
     super('玩火', 'fire', 1, 1, 1, 1);
     this.baseColdDownTurns = 3;
+    this.baseSlowStart = true;
     this.subtitle = '小心牢底坐穿';
   }
 
@@ -158,7 +159,7 @@ export class Firework extends Skill {
   }
 
   get stacks() {
-    return 2;
+    return 3;
   }
 
   use(player, enemy, stage) {
@@ -367,7 +368,6 @@ export class HotHands extends Skill {
   }
 }
 
-
 // 吸热（C+）
 // 获得2层吸热
 export class HeatAbsorptionI extends Skill {
@@ -408,6 +408,41 @@ export class FireAssistance extends Skill {
     return `每${this.conversionRate}层/effect{燃烧}转化为1层/effect{集中}`;
   }
 }
+
+// 奉予烈焰
+// 抽牌焚毁，赋予【3 + 灵能】层燃烧，重复
+export class GiveFire extends Skill {
+  constructor() {
+    super('奉予烈焰', 'fire', 3, 1, 1, 2);
+    this.baseColdDownTurns = 4;
+  }
+  get stacks() {
+    return Math.max(3 + 2 * this.power, 1);
+  }
+  getStacks(player) {
+    return this.stacks + player.magic;
+  }
+  use(player, enemy, stage) {
+    for(let i = 0; i < 2; i ++) {
+      const card = drawSkillCard(player);
+      enqueueDelay(400);
+      if (card) {
+        burnSkillCard(player, card.uniqueID);
+        enqueueDelay(400);
+      }
+      enemy.addEffect('燃烧', this.getStacks(player));
+      enqueueDelay(400);
+    }
+    return true;
+  }
+  regenerateDescription(player) {
+    if(player) {
+      return `抽牌焚毁，赋予${this.getStacks(player)}层/effect{燃烧}，重复`;
+    }
+    return `抽牌焚毁，赋予【3 + /named{灵能}】层/effect{燃烧}，重复`;
+  }
+}
+
 
 // 燃心决（A）
 // 获得6层集中和1层燃心

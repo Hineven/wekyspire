@@ -14,7 +14,7 @@ export class ChargePunch extends Skill {
   }
 
   get damage() {
-    return 20 + 4 * this.power;
+    return 25 + 4 * this.power;
   }
 
   getChargedDamage(player) {
@@ -31,10 +31,10 @@ export class ChargePunch extends Skill {
   // 使用技能
   use(player, enemy) {
     if (super.use(player, enemy)) {
-      if(this.mode == 'idle'){
+      if(this.mode === 'idle'){
         this.mode = 'charge';
         this.chargedDamage = this.getChargedDamage(player);
-      } else if(this.mode == 'charge'){
+      } else if(this.mode === 'charge'){
         this.mode = 'idle';
         launchAttack(player, enemy, this.chargedDamage);
         this.chargedDamage = 0;
@@ -92,10 +92,38 @@ export class StrengthenI extends Skill {
   }
 }
 
+// 脆弱锻造技能
+export class FragileForge extends Skill {
+  constructor() {
+    super('脆弱锻造', 'normal', 1, 0, 3, 1, "锻造");
+  }
+
+  use(player, enemy, stage) {
+    // 找到左边的技能
+    const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
+    if(leftSkill) {
+      leftSkill.power += 1;
+    }
+    if(this.power > 0) {
+      const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
+      if(rightSkill) {
+        rightSkill.power += 1;
+      }
+    }
+    return true;
+  }
+
+  regenerateDescription(player) {
+    if(this.power > 0) return `/named{强化}/named{左邻}和/named{右邻}技能`;
+    return `/named{强化}/named{左邻}技能`;
+  }
+}
+
 // 锻造技能
 export class Forge extends Skill {
   constructor() {
-    super('锻造', 'normal', 2, 0, 1, 1, "锻造");
+    super('锻造', 'normal', 2, 0, 3, 1, "锻造");
+    this.baseSlowStart = true;
   }
 
   get coldDownTurns () {

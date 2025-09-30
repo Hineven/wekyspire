@@ -274,6 +274,13 @@ const effectDescriptions = {
     type: 'buff',
     icon: '👀',
     color: '#808080' // 灰色
+  },
+  '神焰': {
+    name: '神焰',
+    description: '每两层燃烧提供一点灵能',
+    type: 'buff',
+    icon: '🔥',
+    color: '#FF0000'
   }
 };
 

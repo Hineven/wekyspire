@@ -18,6 +18,11 @@ class Skill {
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
     this.baseColdDownTurns = 0;
+    this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
+  }
+
+  get slowStart () {
+    return this.baseSlowStart;
   }
 
   get manaCost () {
@@ -76,8 +81,14 @@ class Skill {
 
   // 战斗开始时调用，用于初始化技能
   onBattleStart() {
-    this.remainingUses = this.maxUses;
-    this.remainingColdDown = this.coldDownTurns;
+    if(this.slowStart) {
+      this.remainingUses = this.maxUses;
+      this.remainingColdDownTurns = this.coldDownTurns;
+    } else {
+      // 冷启动卡牌必须等待冷却后才能发动！
+      this.remainingUses = 0;
+      this.remainingColdDownTurns = this.coldDownTurns;
+    }
     // 默认实现，子类可以重写
   }
 

@@ -41,7 +41,7 @@ export class FireControlII extends Skill {
   }
 
   get stack() {
-    return Math.max(6 + this.power, 0);
+    return Math.max(6 + 2 * this.power, 0);
   }
 
   getStacks(player) {
@@ -185,7 +185,7 @@ export class FireControlAssistIII2 extends Skill {
 
   use(player, enemy, stage) {
     if(stage === 0) {
-      player.removeEffects(999);
+      player.removeEffects(999, 'random-kind');
       return false;
     } else {
       const frontierCurse = player.frontierSkills.find((skill) => skill.type === 'curse');
@@ -223,7 +223,7 @@ export class AuthenticFireControl extends Skill {
     if(this.mode === "idle") {
       this.mode = "active";
       this.name = '控:神焰';
-      player.removeEffects(999);
+      player.removeEffects(999, 'random-kind');
       return true;
     } else {
       // TODO

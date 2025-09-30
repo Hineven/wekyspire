@@ -145,10 +145,9 @@ export function drawSkillCard(player, number = 1) {
       break;
     }
     // 对于入手而言，动画是自动编排的，所以这里无需手动触发
-
     const firstSkill = player.backupSkills.shift();
     player.frontierSkills.push(firstSkill);
-
+    if(number === 1) return firstSkill;
   }
 }
 
