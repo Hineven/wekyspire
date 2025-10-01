@@ -27,7 +27,6 @@
     <!-- 操作面板 -->
     <ActionPanel
       :player="player"
-      :is-control-disabled="isControlDisabled"
       :is-player-turn="isPlayerTurn"
     />
   </div>
@@ -51,7 +50,6 @@ export default {
   props: {
     player: { type: Object, required: true },
     enemy: { type: Object, required: true },
-    isControlDisabled: { type: Boolean, default: false },
     isPlayerTurn: { type: Boolean, default: true },
     level: { type: Number, default: 1 }
   },

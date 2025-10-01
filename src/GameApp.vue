@@ -11,7 +11,6 @@
       v-else-if="gameState.gameStage === 'battle'"
       :player="gameState.player"
       :enemy="gameState.enemy"
-      :is-control-disabled="gameState.controlDisableCount > 0"
       :is-player-turn="!gameState.isEnemyTurn"
       :level="gameState.battleCount"
     />

@@ -427,23 +427,21 @@ export function enqueueClearCardAnimations({ tags = ['ui'], waitTags, durationMs
   });
 }
 
-// 控制锁定/解锁（直接修改 display 层计数，立即完成）
+// 控制锁定/解锁
 export function enqueueLockControl(options = {}) {
-  console.log('lock!');
   return enqueueInstruction({
     tags: ['ui', 'locking'],
-    waitTags: ['locking'], // 锁定时不等待任何前序（除了解锁/锁定），尽快生效
+    waitTags: ['unlocking', 'mount'], // 锁定时不等待任何前序（除了解锁锁定和前端组件挂载），尽快生效，防止二次点击
     durationMs: options.duration ?? 0,
-    start: () => { displayGameState.controlDisableCount = 1; },
+    start: () => { frontendEventBus.emit('disable-controls'); },
   });
 }
 export function enqueueUnlockControl(options = {}) {
-  console.log('unlock!');
   return enqueueInstruction({
-    tags: ['ui', 'locking'],
-    waitTags: ['all'], // 解锁时总是等待所有前序完成，避免过早解锁
+    tags: ['ui', 'unlocking'],
+    waitTags: ['all'], // 解锁时总是等待所有前序动画完成，避免过早解锁，防止误操作
     durationMs: options.duration ?? 0,
-    start: () => { displayGameState.controlDisableCount = 0; },
+    start: () => { frontendEventBus.emit('enable-controls'); },
   });
 }
 

@@ -9,7 +9,7 @@
 //   start: (ctx) => void      // 启动逻辑，在进入 running 时触发
 //   meta?: any                // 透传数据（可选）
 // - 可执行判定（假设更符合直觉的语义）：
-//   指令 X 可以开始执行，当且仅当 序列中位于 X 之前、且与 X.waitTags 存在“交集”的所有指令均已 finished。
+//   指令 X 可以开始执行，当且仅当 序列中“位于 X 之前且与 X.waitTags 存在“交集”的所有指令”均已 finished。
 //   这样等待标签表示“我需要等待的类别”，默认 ['all'] 即等待所有前序指令。
 // - 结束条件：
 //   1) 前端通过事件总线发出 'animation-instruction-finished'，携带 { id }；或

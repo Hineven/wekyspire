@@ -9,7 +9,7 @@ import {
   enqueueDelay,
   enqueueUnlockControl,
   enqueueAnimateCardById,
-  enqueueLockControl, enqueueClearCardAnimations, enqueueState
+  enqueueLockControl, enqueueClearCardAnimations, enqueueState, captureSnapshot
 } from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard} from "./battleUtils";
 
@@ -30,8 +30,10 @@ export function enterBattleStage() {
 
   // 切换游戏状态到战斗状态
   gameState.gameStage = 'battle';
-  // 等待一下，方便战斗界面组件挂载
-  enqueueDelay(500);
+  // 马上切换状态，阻塞，但是无延迟
+  enqueueState(captureSnapshot(), 0);
+  // 小等一下，方便战斗界面组件挂载 特殊类型: mount，依赖挂载的指令可以等待这个类型
+  enqueueDelay(300, {tags: ['ui', 'mount']});
 
   // 进入游戏控制流
   backendEventBus.emit(EventNames.Battle.BATTLE_START);
@@ -52,8 +54,8 @@ function startBattle() {
   gameState.player.backupSkills = [...gameState.player.skills];
   gameState.player.frontierSkills = [];
 
-  // 填充前台技能
-  fillFrontierSkills(gameState.player);
+  // 搞定后立刻锁定操作面板
+  enqueueLockControl();
 
   // 调用技能的onBattleStart方法
   gameState.player.skills.forEach(skill => {
@@ -73,26 +75,30 @@ function startPlayerTurn() {
   gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
 
   // 进行技能冷却
-  gameState.player.skills.forEach(skill => {
+  gameState.player.frontierSkills.forEach(skill => {
+    skill.coldDown();
+  });
+  gameState.player.backupSkills.forEach(skill => {
     skill.coldDown();
   });
 
-  // 填充前台技能
-  fillFrontierSkills(gameState.player);
-
-  enqueueDelay(300);
   // 回合开始时结算效果（使用修正后的玩家对象）
   const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   const isStunned = processStartOfTurnEffects(modPlayer);
   if(checkBattleVictory()) return ;
 
+  // 解锁操作面板
+  enqueueUnlockControl();
+
+  // 填充前台技能
+  fillFrontierSkills(gameState.player);
+
   if (isStunned) {
     addSystemLog('你被眩晕，跳过回合！');
     // 触发玩家回合结束事件
     backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN, {});
-    return;
+    return ;
   }
-  enqueueUnlockControl();
 
   // 等待玩家操作
   // 玩家操作通过BattleScreen组件的事件处理
@@ -215,8 +221,6 @@ function enemyTurn() {
   // 敌人行动逻辑
   gameState.isEnemyTurn = true;
 
-  enqueueLockControl();
-
   addEnemyActionLog(`/red{${gameState.enemy.name}} 的回合！`);
 
   enqueueDelay(500);
@@ -262,7 +266,6 @@ function battleVictory(isVictory) {
   gameState.player.shield = 0;
   // 清空战斗技能数组
   gameState.player.skills = [];
-
   // 锁定操作面板
   gameState.isEnemyTurn = true;
   
@@ -275,12 +278,12 @@ function battleVictory(isVictory) {
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
   enqueueDelay(3000);
+  // 之后再把前台和后备技能列表清空
+  gameState.player.frontierSkills = [];
+  gameState.player.backupSkills = [];
 
   // 清理掉卡牌ghost
   enqueueClearCardAnimations();
-
-  // 解锁操作面板
-  enqueueUnlockControl();
 
   // 战斗结束事件
   backendEventBus.emit(EventNames.Game.POST_BATTLE, {

@@ -23,9 +23,6 @@ export function createGameState() {
       return !this.isEnemyTurn;
     },
 
-    // 冻结玩家的控制面板计数
-    controlDisableCount: 0,
-
     // 玩家数据
     player: reactive(new Player()),
 

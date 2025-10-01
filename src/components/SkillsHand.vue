@@ -28,6 +28,7 @@ import SkillCard from './SkillCard.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus';
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
+import {backendGameState} from "../data/gameState";
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
@@ -244,9 +245,12 @@ export default {
     scheduleAppearFallback(id) {
       setTimeout(() => { if (this.appearing[id]) delete this.appearing[id]; }, 1500);
     },
-    canUseSkill(skill) {
-      const p = (this.player && typeof this.player.getModifiedPlayer === 'function') ? this.player.getModifiedPlayer() : this.player;
-      return skill && typeof skill.canUse === 'function' && skill.canUse(p) && skill.usesLeft !== 0;
+    canUseSkill(frontEndSkill) {
+      // 直接使用后端玩家状态和后端技能状态判断是否可用，避免因前端 player 状态不同步导致的误判
+      const player = backendGameState.player;
+      const p = (player && typeof player.getModifiedPlayer === 'function') ? player.getModifiedPlayer() : player;
+      const skill = player.frontierSkills.find(s => s.uniqueID === frontEndSkill.uniqueID);
+      return skill && typeof skill.canUse === 'function' && skill.canUse(p);
     },
     onSkillCardClicked(skill, event) {
       if (this.draggable || this.isControlDisabled || !this.isPlayerTurn) return; // 休整/不可控制/非玩家会和时禁用技能使用

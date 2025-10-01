@@ -44,12 +44,12 @@ export default {
   components: { SkillsHand, DeckIcon, DeckOverlayPanel },
   props: {
     player: { type: Object, required: true },
-    isControlDisabled: { type: Boolean, default: false },
     isPlayerTurn: { type: Boolean, default: true }
   },
   data() {
     return {
-      showDeckOverlay: false
+      showDeckOverlay: false,
+      isControlDisabled: true // 可以通过外部事件控制面板禁用
     };
   },
   computed: {
@@ -75,6 +75,18 @@ export default {
       const el = r && r.$el ? r.$el : r;
       if (el) orchestrator.deckAnchorEl = el;
     });
+    // 监听控制面板禁用事件
+    frontendEventBus.on('disable-controls', () => {
+      console.log('ActionPanel: disable-controls received');
+      this.isControlDisabled = true;
+    });
+    frontendEventBus.on('enable-controls', () => {
+      this.isControlDisabled = false;
+    });
+  },
+  beforeUnmount() {
+    frontendEventBus.off('disable-controls');
+    frontendEventBus.off('enable-controls');
   },
   methods: {
     onEndTurnButtonClicked() {
@@ -102,7 +114,7 @@ export default {
 }
 
 .action-panel.disabled {
-  filter: brightness(50%);
+  /* filter: brightness(50%); */
   pointer-events: none;
 }
 
