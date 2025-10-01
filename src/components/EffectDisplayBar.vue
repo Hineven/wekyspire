@@ -18,7 +18,7 @@
 <script>
 import EffectIcon from './EffectIcon.vue';
 import effectDescriptions from '../data/effectDescription.js';
-import { enqueueUI } from '../data/animationDispatcher.js';
+import frontendEventBus from "../frontendEventBus";
 
 export default {
   name: 'EffectDisplayBar',
@@ -121,8 +121,8 @@ export default {
         }
       }];
       
-      // 通过动画调度器发送UI动作（而非后端事件）
-      enqueueUI('spawnParticles', { particles });
+      // 立刻触发粒子生成
+      frontendEventBus.emit('spawn-particles',  particles );
     }
   }
 };

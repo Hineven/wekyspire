@@ -1,6 +1,6 @@
 // battleLogUtils.js - 提供战斗日志管理的助手函数
 
-import { enqueueUI } from './animationDispatcher.js';
+import {enqueueBattleLog} from "./animationInstructionHelpers";
 
 // 战斗日志类型枚举
 export const BattleLogType = {
@@ -17,7 +17,7 @@ export const BattleLogType = {
 // 添加普通战斗日志
 export function addBattleLog(log, type = BattleLogType.OTHER) {
   // 通过动画调度器入队，保证UI顺序展示
-  enqueueUI('addBattleLog', { log, type });
+  enqueueBattleLog({ log, type });
 }
 
 // 添加玩家行动日志

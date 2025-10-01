@@ -1,7 +1,7 @@
 // dialogues.js - 对话事件管理
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { getPlayerTierFromTierIndex } from './player.js';
-import { enqueueUI } from './animationDispatcher.js';
+import { enqueueUI } from './animationInstructionHelpers.js';
 
 let isRemiPresent = false;
 export function setIsRemiPresent(flag) {

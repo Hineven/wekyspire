@@ -62,7 +62,8 @@ export default {
   },
   methods: {
     onSkillCardHoverStart(skill) {
-      if(skill.canUse(this.player)) {
+      const p = (this.player && typeof this.player.getModifiedPlayer === 'function') ? this.player.getModifiedPlayer() : this.player;
+      if(skill.canUse(p)) {
         this.highlightedActionPointCost = skill.actionPointCost;
       }
     },

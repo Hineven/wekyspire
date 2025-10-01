@@ -34,7 +34,7 @@ export default {
       _revealQueue: [],        // 等待显示的日志队列（按时间顺序）
       _revealing: false,       // 是否正在逐条显示
       _revealTimer: null,      // 计时器句柄
-      revealIntervalMs: 500,   // 每条日志出现的间隔
+      revealIntervalMs: 200,   // 每条日志出现的间隔
       _idCounter: 0,           // 用于为每条日志分配稳定的 key
     };
   },

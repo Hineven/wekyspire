@@ -1,14 +1,28 @@
 // 灵脉相关能力
 import {Ability} from "../ability";
 import {backendGameState} from "../gameState";
+import backendEventBus, {EventNames} from "../../backendEventBus";
 
 export class FireLeino extends Ability {
   constructor() {
-    super('火灵脉', '能使用火系灵御技能，来自/effect{燃烧}的伤害减2', 5, 10);
+    super('火灵脉', '能使用火系灵御技能，获得4层/effect{火焰抗性}', 5, 10);
+    this.fireResistAddHook = null;
   }
 
   apply(player) {
     player.leino.push('fire');
+    // 增加一个钩子，来自燃烧的伤害减4
+    backendEventBus.on(EventNames.Game.PRE_BATTLE, this.fireResistAddHook = () => {
+      player.addEffect('火焰抗性', 4);
+    });
+  }
+
+  deapply () {
+    // 移除钩子
+    if(this.fireResistAddHook) {
+      backendEventBus.off(EventNames.Game.PRE_BATTLE, this.fireResistAddHook);
+      this.fireResistAddHook = null;
+    }
   }
 
   get spawnWeight() {
@@ -28,7 +42,7 @@ export class FireLeino extends Ability {
   }
 }
 
-export class WoodLeino extends Ability {
+class WoodLeino extends Ability {
   constructor() {
     super('木灵脉', '能使用木系灵御技能', 5, 10);
   }

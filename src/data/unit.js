@@ -1,5 +1,6 @@
 // filepath: d:\cb_6\hineven_wekyspire\wekyspire\src\data\unit.js
 import { addEffect as addEffectToTarget, removeEffect as removeEffectFromTarget, applyHeal as applyHealToTarget } from './battleUtils.js'
+import effectDescriptions from './effectDescription.js'
 
 // 基础作战单位抽象类（玩家/敌人公用）
 export default class Unit {
@@ -43,28 +44,95 @@ export default class Unit {
     applyHealToTarget(this, heal);
   }
 
+  // 随机移除效果
+  // mode:
+  // - 'random' 随机移除,
+  // - 'highest-stack' 优先层数最高的
+  // - 'highest-stack-kind' 以种类数为单位移除，优先层数最高种类
+  // - 'ramdom-kind' 以种类数为单位移除，随机种类
+  // type: 'all' | 'buff' | 'debuff' | 'neutral' 只移除指定类型的效果
+  removeEffects(count, mode = 'random', type='all') {
+    if (!count || count <= 0) return;
 
-  // 随机移除stacks层效果
-  removeEffects(stacks) {
-    const effectNames = Object.keys(this.effects);
-    for (let i = 0; i < stacks; i++) {
-      if (effectNames.length === 0) break;
-      const randomIndex = Math.floor(Math.random() * effectNames.length);
-      const effectName = effectNames[randomIndex];
-      this.removeEffect(effectName, 1);
+    const isTarget = (name) => {
+      const desc = effectDescriptions[name];
+      return desc && (type === 'all' || desc.type === type);
+    };
+
+    // 动态获取当前有效减益（层数>0）
+    const getTargetEntries = () => Object.entries(this.effects)
+      .filter(([name, stacks]) => (stacks || 0) > 0 && isTarget(name));
+
+    const kindRandom = mode === 'random-kind' || mode === 'ramdom-kind';
+    const kindHighest = mode === 'highest-stack-kind';
+
+    if (kindRandom || kindHighest) {
+      // 以“种类”为单位移除
+      for (let i = 0; i < count; i++) {
+        const targets = getTargetEntries();
+        if (targets.length === 0) break;
+
+        let chosen;
+        if (kindHighest) {
+          // 选择层数最高的种类（并在并列时随机）
+          const maxStacks = Math.max(...targets.map(([, s]) => s));
+          const candidates = targets.filter(([, s]) => s === maxStacks);
+          chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+          // 随机选择一个种类
+          chosen = targets[Math.floor(Math.random() * targets.length)];
+        }
+        const [name, stacks] = chosen;
+        this.removeEffect(name, stacks);
+      }
+      return;
+    }
+
+    // 以“层数”为单位移除
+    for (let i = 0; i < count; i++) {
+      const targets = getTargetEntries();
+      if (targets.length === 0) break;
+
+      let chosenName;
+      if (mode === 'highest-stack') {
+        // 选择当前层数最高的效果（并在并列时随机）
+        const maxStacks = Math.max(...targets.map(([, s]) => s));
+        const candidates = targets.filter(([, s]) => s === maxStacks);
+        chosenName = candidates[Math.floor(Math.random() * candidates.length)][0];
+      } else {
+        // 'random'：在效果种类中等概率选一个，移除1层
+        chosenName = targets[Math.floor(Math.random() * targets.length)][0];
+      }
+
+      this.removeEffect(chosenName, 1);
     }
   }
 
-  // 随机移除负面效果
-  // mode: 'random' 随机移除, 'highest-stack' 优先层数最高的
-  // 'highest-stack-kind' 种类移除，优先层数最高种类
-  // 'ramdom-kind' 种类移除，随机种类
   removeNegativeEffects(count, mode = 'random') {
-    // TODO
+    this.removeEffects(count, mode, 'debuff');
   }
 
+  removePositiveEffects(count, mode = 'random') {
+    this.removeEffects(count, mode, 'buff');
+  }
 
-  clearNegativeEffects () {
-    // TODO
+  clearEffects (type='all') {
+    // 将所有同类效果一网打尽
+    const isTarget = (name) => {
+      const desc = effectDescriptions[name];
+      return desc && (type === 'all' || desc.type === type);
+    };
+    for (const [name, stacks] of Object.entries(this.effects)) {
+      if ((stacks || 0) > 0 && isTarget(name)) {
+        this.removeEffect(name, stacks);
+      }
+    }
+  }
+
+  clearNegativeEffects() {
+    this.clearEffects('debuff');
+  }
+  clearPositiveEffects() {
+    this.clearEffects('buff');
   }
 }

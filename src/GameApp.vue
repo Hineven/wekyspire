@@ -11,7 +11,6 @@
       v-else-if="gameState.gameStage === 'battle'"
       :player="gameState.player"
       :enemy="gameState.enemy"
-      :is-control-disabled="gameState.controlDisableCount > 0"
       :is-player-turn="!gameState.isEnemyTurn"
       :level="gameState.battleCount"
     />
@@ -69,7 +68,7 @@ import AnimationOverlay from './components/AnimationOverlay.vue'
 import FloatingTooltip from './components/FloatingTooltip.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
-import orchestrator from './utils/animationOrchestrator.js';
+import orchestrator from './utils/cardAnimationOrchestrator.js';
 
 export default {
   name: 'App',

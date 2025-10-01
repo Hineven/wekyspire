@@ -124,6 +124,11 @@ const namedEntities = {
     icon: '🔥',
     color: 'red',
     description: '焚毁会从一场战斗中永久移除一个技能。'
+  },
+  '慢热': {
+    icon: '🐢',
+    color: 'purple',
+    description: '慢热技能在战斗开始时没有充能，需要冷却后才能使用。'
   }
 };
 

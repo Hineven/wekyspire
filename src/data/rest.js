@@ -29,6 +29,7 @@ export function clearRewards() {
 
 // 计算奖励
 export function spawnRewards() {
+
   // 计算战斗奖励
   gameState.rewards.money = Math.floor(Math.random() * 20) + 10;
 
@@ -94,6 +95,7 @@ export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
 export function claimAbilityReward(ability, clearRewardsFlag) {
   // 领取能力奖励
   ability.apply(gameState.player);
+  gameState.player.abilities.push(ability);
   if(clearRewardsFlag) {
     gameState.rewards.abilities = [];
   }

@@ -23,11 +23,10 @@
       :logs="logs"
       :enemy="enemy"
     />
-    
+
     <!-- 操作面板 -->
     <ActionPanel
       :player="player"
-      :is-control-disabled="isControlDisabled"
       :is-player-turn="isPlayerTurn"
     />
   </div>
@@ -46,18 +45,17 @@ export default {
     BattleLogPanel,
     EnemyStatusPanel,
     PlayerStatusPanel,
-    ActionPanel
+    ActionPanel,
   },
   props: {
     player: { type: Object, required: true },
     enemy: { type: Object, required: true },
-    isControlDisabled: { type: Boolean, default: false },
     isPlayerTurn: { type: Boolean, default: true },
     level: { type: Number, default: 1 }
   },
   data() {
     return {
-      logs: []
+      logs: [],
     };
   },
   mounted() {
@@ -75,7 +73,7 @@ export default {
     },
     onClearBattleLog() {
       this.logs = [];
-    }
+    },
   }
 };
 </script>

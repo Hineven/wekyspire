@@ -1,6 +1,6 @@
 import Skill from '../skill.js';
 import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
-import {enqueueDelay} from "../animationDispatcher";
+import {enqueueDelay} from "../animationInstructionHelpers";
 
 // 紧急护盾技能
 // 获得14点护盾，每次使用后，冷却时间增1

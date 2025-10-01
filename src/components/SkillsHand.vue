@@ -28,6 +28,7 @@ import SkillCard from './SkillCard.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus';
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
+import {backendGameState} from "../data/gameState";
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
@@ -41,7 +42,11 @@ export default {
     isControlDisabled: { type: Boolean, default: false },
     isPlayerTurn: { type: Boolean, default: true },
     // 休整时（PreparationPanel）开启拖拽；战斗时（ActionPanel）关闭
-    draggable: { type: Boolean, default: false }
+    draggable: { type: Boolean, default: false },
+    // 进入手中的卡牌是否立刻出现
+    instantAppear: { type: Boolean, default: false },
+    // 是否监听全局的 card-appear-finished 事件（关闭则不等待该事件，直接显示）
+    listenCardAppearFinished: { type: Boolean, default: true }
   },
   data() {
     return {
@@ -71,7 +76,7 @@ export default {
       return (this.player?.frontierSkills || []).filter(Boolean);
     },
     visibleIds() {
-      return this.visibleSkills.map(s => s.uniqueID);
+      return this.visibleSkills.map(s => s.uniqueID).filter(Boolean);
     },
     // 基于容器/悬浮/拖拽插槽来计算每张卡的位置
     layout() {
@@ -155,7 +160,9 @@ export default {
     }
   },
   mounted() {
-    frontendEventBus.on('card-appear-finished', this.onCardAppearFinished);
+    if (this.listenCardAppearFinished) {
+      frontendEventBus.on('card-appear-finished', this.onCardAppearFinished);
+    }
 
     this._ro = new ResizeObserver(entries => {
       for (const entry of entries) {
@@ -190,7 +197,6 @@ export default {
     visibleIds: {
       immediate: true,
       handler(newIds, oldIds) {
-        // 仅在初次（immediate）触发时跳过动画；后续即使 oldIds 为空数组也应触发“从空到有”的入场动画
         if (oldIds == null) {
           this.prevIds = [...newIds];
           return;
@@ -199,15 +205,27 @@ export default {
         const added = newIds.filter(id => !prevSet.has(id));
         this.prevIds = [...newIds];
         if (added.length === 0) return;
+        // 若未监听 card-appear-finished，则不等待该事件，直接显示
+        if (!this.listenCardAppearFinished) {
+          added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
+          return;
+        }
+        // 若禁用入场动画，直接显示
+        if (this.instantAppear) {
+          added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
+          return;
+        }
+        // 标记为“入场中”，等待 orchestrator 的 card-appear-finished 清理；添加兜底定时器
         added.forEach(id => { this.appearing[id] = true; });
         this.$nextTick(() => {
-          added.forEach(id => this.animateAppearFromDeck(id));
+          added.forEach(id => this.scheduleAppearFallback(id));
         });
       }
     }
   },
   methods: {
     onCardAppearFinished(payload = {}) {
+      console.log('收到 card-appear-finished 事件', payload);
       const id = payload?.id;
       if (id != null && this.appearing[id]) {
         delete this.appearing[id];
@@ -223,13 +241,16 @@ export default {
         delete this.cardRefs[id];
       }
     },
-    animateAppearFromDeck(id) {
-      frontendEventBus.emit('request-card-appear', { id });
-      // Fallback: 动画开始后 1.5 秒强制移除 appearing 状态，以防动画出现问题导致卡牌不显示
+    // 现在由后端统一触发入手动画；这里仅保留兜底清理逻辑，避免异常时卡片长时间不可见
+    scheduleAppearFallback(id) {
       setTimeout(() => { if (this.appearing[id]) delete this.appearing[id]; }, 1500);
     },
-    canUseSkill(skill) {
-      return skill && typeof skill.canUse === 'function' && skill.canUse(this.player) && skill.usesLeft !== 0;
+    canUseSkill(frontEndSkill) {
+      // 直接使用后端玩家状态和后端技能状态判断是否可用，避免因前端 player 状态不同步导致的误判
+      const player = backendGameState.player;
+      const p = (player && typeof player.getModifiedPlayer === 'function') ? player.getModifiedPlayer() : player;
+      const skill = player.frontierSkills.find(s => s.uniqueID === frontEndSkill.uniqueID);
+      return skill && typeof skill.canUse === 'function' && skill.canUse(p);
     },
     onSkillCardClicked(skill, event) {
       if (this.draggable || this.isControlDisabled || !this.isPlayerTurn) return; // 休整/不可控制/非玩家会和时禁用技能使用
@@ -238,7 +259,7 @@ export default {
         const actionPointCost = skill.actionPointCost;
         const mouseX = event.clientX;
         const mouseY = event.clientY;
-        backendEventBus.emit(EventNames.Player.USE_SKILL, skill.uniqueID);
+        backendEventBus.emit(EventNames.Battle.PLAYER_USE_SKILL, skill.uniqueID);
         this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },
@@ -357,23 +378,15 @@ export default {
 .skills-hand-root {
   position: relative;
   width: 100%;
-  /* 高度匹配卡片高度（考虑浮起放大，预留余量） */
-  min-height: 300px;
+  height: auto;
+  min-height: 280px;
 }
-.skills-hand-root.dragging {
-  user-select: none;
-}
-
 .skill-wrapper {
   position: absolute;
   top: 0;
-  /* 平滑移动/缩放过渡 */
-  transition: transform 120ms ease, z-index 120ms ease, visibility 0ms linear;
-  will-change: transform;
+  transition: transform 0.22s ease, visibility 0s linear;
 }
-
 .skill-wrapper.instant {
-  /* 拖拽时取消过渡，避免卡顿 */
   transition: none;
 }
 </style>

@@ -35,6 +35,20 @@ const effectDescriptions = {
     type: 'debuff',
     icon: '🩶'
   },
+  '火焰抗性': {
+    name: '火焰抗性',
+    description: '减少层数点受到的燃烧伤害',
+    type: 'buff',
+    icon: '🔥',
+    color: '#FF8C00' // 深橙色
+  },
+  '火焰主宰': {
+    name: '火焰主宰',
+    description: '每3层燃烧提供1点灵能',
+    type: 'buff',
+    icon: '🔥',
+    color: '#FF4500' // 橙红色
+  },
 
   // 回合开始时触发的效果
   '泉涌': {
@@ -50,6 +64,13 @@ const effectDescriptions = {
     type: 'debuff',
     icon: '💨',
     color: '#808080' // 灰色
+  },
+  '吸热': {
+    name: '吸热',
+    description: '回合开始时，减少层数层燃烧',
+    type: 'buff',
+    icon: '❄️',
+    color: '#1E90FF' // 道奇蓝
   },
   '燃烧': {
     name: '燃烧',
@@ -260,6 +281,13 @@ const effectDescriptions = {
     type: 'buff',
     icon: '👀',
     color: '#808080' // 灰色
+  },
+  '神焰': {
+    name: '神焰',
+    description: '每两层燃烧提供一点灵能',
+    type: 'buff',
+    icon: '🔥',
+    color: '#FF0000'
   }
 };
 

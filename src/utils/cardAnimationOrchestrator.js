@@ -1,8 +1,9 @@
-// 全局动画编排器（DOM + GSAP）
-// 职责：
-// - 初始化 overlay/anchors/ghost 容器引用
-// - 生成“幽灵”克隆元素并用 transform 动画
-// - 仅通过 animateById 进行动画调度与 ghost 创建，其他路径不再创建 ghost
+// 全局卡牌动画编排器（DOM + GSAP）
+// 仅管理“卡牌相关”的复杂动画，不负责其它类型动画。
+// 特性：
+// - 对每一张卡片（按 uniqueID）维护一个“异步动画播放队列”：
+//   同一张卡的动画指令会按顺序串行执行，不会相互打断；不同卡片的动画可并发播放。
+// - 通过 animateById 进行动画调度与 ghost 创建，其他路径不再创建 ghost。
 
 import frontendEventBus from '../frontendEventBus.js';
 import gsap from 'gsap';
@@ -18,6 +19,9 @@ const orchestrator = {
   // 记录：按ID缓存ghost，确保连续指令可复用状态
   // id -> { ghost, baseRect, startEl }
   _ghostRegistry: new Map(),
+  // 管理在中心展示的卡片ID列表（按加入顺序）
+  _centerIds: [],
+  _layoutCenterDurationMs: 220,
   // 全局“时代戳”（reset代次）。当 resetAllGhosts 发生时用于屏蔽旧任务
   _epoch: 0,
   _bumpEpoch() { this._epoch++; return this._epoch; },
@@ -57,7 +61,7 @@ const orchestrator = {
         { rotate: 0, opacity: 0, duration: t2, ease: 'power1.in', emitParticles: emitCfg }
       ];
     },
-    appearFromDeck({ durationMs = 450 } = {}) {
+    appearFromDeck({ durationMs = 300 } = {}) {
       // 需配合 initialFromDeck=true 使用
       return [
         { toBase: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
@@ -70,6 +74,51 @@ const orchestrator = {
     this.centerAnchorEl = centerAnchorEl;
     this.deckAnchorEl = deckAnchorEl;
     this.ghostContainerEl = ghostContainerEl;
+    try {
+      window.addEventListener('resize', () => { try { this._layoutCenter(); } catch (_) {} }, { passive: true });
+    } catch (_) {}
+  },
+  // 中心管理：注册/移除/清空
+  _addToCenter(id) {
+    if (id == null) return;
+    if (!this._centerIds.includes(id)) this._centerIds.push(id);
+    this._layoutCenter();
+  },
+  _removeFromCenter(id) {
+    if (id == null) return;
+    const idx = this._centerIds.indexOf(id);
+    if (idx >= 0) {
+      this._centerIds.splice(idx, 1);
+      this._layoutCenter();
+    }
+  },
+  _clearCenter() {
+    if (this._centerIds.length > 0) {
+      this._centerIds.splice(0, this._centerIds.length);
+    }
+  },
+  // 根据 centerAnchor 对 _centerIds 的幽灵进行横向排布
+  _layoutCenter() {
+    try {
+      if (!this._centerIds.length) return;
+      const count = this._centerIds.length;
+      const anchor = this.getAnchorPoint('center');
+      const gap = 220; // 卡片横向间隔（可按需要调整/计算）
+      // 计算对称位置偏移：-((n-1)/2)*gap ... +((n-1)/2)*gap
+      const half = (count - 1) / 2;
+      for (let i = 0; i < count; i++) {
+        const id = this._centerIds[i];
+        const entry = this._ghostRegistry.get(id);
+        if (!entry) continue;
+        const { ghost, baseRect } = entry;
+        const targetPoint = { x: anchor.x + (i - half) * gap, y: anchor.y };
+        const o = this.offsetsToPoint(baseRect, targetPoint);
+        try {
+          gsap.to(ghost, { x: o.x, y: o.y, scale: 1.2, duration: Math.max(0.001, this._layoutCenterDurationMs / 1000), ease: defaultEase });
+          ghost.style.zIndex = String(100 + i);
+        } catch (_) {}
+      }
+    } catch (_) {}
   },
 
   // 工具：测量/锚点/换算
@@ -96,9 +145,7 @@ const orchestrator = {
       position: 'absolute',
       left: `${startRect.left}px`,
       top: `${startRect.top}px`,
-      // 以下设置似乎会引起未知故障，先注释掉
-      // width: `${startRect.width}px`,
-      // height: `${startRect.height}px`,
+      // width/height 直接赋值可能引起未知故障，暂不设置
       margin: '0',
       transformOrigin: 'center center',
       pointerEvents: 'none',
@@ -106,7 +153,7 @@ const orchestrator = {
     ghost.classList.add('animation-ghost');
     this.ghostContainerEl.appendChild(ghost);
     gsap.set(ghost, { x: 0, y: 0, force3D: true });
-    // 保险：禁用克隆来的 CSS 动画，避免与 GSAP transform 冲突
+    // 禁用克隆来的 CSS 动画，避免与 GSAP transform 冲突
     ghost.classList.remove('activating');
     ghost.style.animation = 'none';
     ghost.style.animationName = 'none';
@@ -306,6 +353,9 @@ const orchestrator = {
       }
     } catch (_) {}
 
+    // 清空中心展示列表
+    try { this._clearCenter(); } catch (_) {}
+
     // 清空队列并关闭“排空模式”
     try { if (typeof _idChains?.clear === 'function') _idChains.clear(); } catch (_) {}
     this._draining = false;
@@ -315,7 +365,7 @@ const orchestrator = {
 
 // Helper to animate by id (backend-driven)
 const _idChains = new Map();
-async function animateById({ id, kind, options = {}, steps, hideStart }) {
+async function animateById({ id, kind, options = {}, steps, hideStart, completionToken }) {
   // 在入队前“抢先”克隆ghost，避免后续状态同步删除DOM后无法创建幽灵
   try {
     const preEl = getCardEl(id);
@@ -336,8 +386,12 @@ async function animateById({ id, kind, options = {}, steps, hideStart }) {
   const run = async () => {
     // 排空期间：仅允许在 reset 调用前提交的动画继续执行；否则仅允许当前时代
     if (orchestrator._draining) {
-      if (scheduledEpoch !== orchestrator._drainEpoch) return;
+      if (scheduledEpoch !== orchestrator._drainEpoch) {
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
+        return;
+      }
     } else if (scheduledEpoch !== orchestrator._epoch) {
+      if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
       return;
     }
     const el = getCardEl(id) || null;
@@ -345,43 +399,60 @@ async function animateById({ id, kind, options = {}, steps, hideStart }) {
     // 自定义steps：直接执行到ghost（不创建）
     if (Array.isArray(steps) && steps.length) {
       await orchestrator.playCardSequenceById(el, id, steps, { scheduledEpoch, hideStart: hideStart !== false, ...(options || {}) });
+      if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
       return;
     }
 
     // 预置序列：使用步骤构建器
     switch (kind) {
       case 'appearFromDeck': {
-        const { durationMs = 450, startScale = 0.6, fade = true } = options || {};
+        const { durationMs = 300, startScale = 0.6, fade = true } = options || {};
         const built = orchestrator.buildSteps.appearFromDeck({ durationMs });
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore', initialFromDeck: true, startScale, fade });
         try { frontendEventBus.emit('card-appear-finished', { id }); } catch (_) {}
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       case 'centerThenDeck': {
         const built = orchestrator.buildSteps.centerThenDeck(options || {});
+        // 先从中心布局中移除，避免布局占位
+        try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       case 'flyToCenter': {
         const built = orchestrator.buildSteps.flyToCenter(options || {});
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
+        // 纳入中心并重排
+        try { orchestrator._addToCenter(id); } catch (_) {}
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       case 'flyToDeckFade':
       case 'drop': {
         const built = orchestrator.buildSteps.flyToDeckFade(options || {});
+        // 若在中心，先从中心移除
+        try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       case 'exhaust':
       case 'burn': {
         const built = orchestrator.buildSteps.exhaustBurn(options || {});
+        // 若在中心，先从中心移除
+        try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       default: {
         const built = orchestrator.buildSteps.flyToCenter(options || {});
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
+        // 纳入中心并重排
+        try { orchestrator._addToCenter(id); } catch (_) {}
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
       }
     }
   };
@@ -398,11 +469,13 @@ async function animateById({ id, kind, options = {}, steps, hideStart }) {
 }
 
 frontendEventBus.on('animate-card-by-id', async (payload = {}) => {
+  // console.log('animate-card-by-id', payload);
   try { await animateById(payload || {}); } catch (_) {}
 });
 
 frontendEventBus.on('clear-card-animations', () => {
   orchestrator.resetAllGhosts({ restoreStart: true });
+  try { orchestrator._clearCenter(); } catch (_) {}
 });
 
 export { animateById };

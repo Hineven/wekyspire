@@ -41,6 +41,35 @@ export function getPlayerTierFromTierIndex(tierIndex) {
   return tiers[tierIndex];
 }
 
+// 为属性修正系统提供一个便捷的工厂：创建一个“叠加型”的玩家属性修正器
+// - 接受一个包含 attack/defense/magic 修正函数的对象
+// - 每个函数形如 (baseValue, currentPlayer) => number
+// - 返回一个 (player) => wrappedPlayer 的修正器
+export function createPlayerStatModifier({ attack, defense, magic } = {}) {
+  return function(player) {
+    // 仅覆盖需要的 getter；不改变 hp/effects 等引用
+    return new Proxy(player, {
+      // 仅覆盖需要修改的只读属性，其他全部透传
+      get(target, prop, receiver) {
+        if (prop === 'attack') {
+          const base = Reflect.get(target, 'attack', receiver);
+          return typeof attack === 'function' ? attack(base, receiver) : base;
+        }
+        if (prop === 'defense') {
+          const base = Reflect.get(target, 'defense', receiver);
+          return typeof defense === 'function' ? defense(base, receiver) : base;
+        }
+        if (prop === 'magic') {
+          const base = Reflect.get(target, 'magic', receiver);
+          return typeof magic === 'function' ? magic(base, receiver) : base;
+        }
+        return Reflect.get(target, prop, receiver);
+      }
+      // 不提供 set 拦截，保持写入直达底层对象（hp/effects 数据链接不变）
+    });
+  }
+}
+
 // 玩家数据类
 export class Player extends Unit {
   constructor() {
@@ -66,9 +95,14 @@ export class Player extends Unit {
     this.skills = []; // 场上技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
-    this.maxFrontierSkills = 8; // 最大前台技能数量
+    this.maxFrontierSkills = 10; // 最大前台技能数量
+    this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
     this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
+    this.abilities = []; // 玩家能力列表
+
+    // 属性修正器管线（按顺序应用）
+    this.modifiers = [];
   }
 
   // 计算属性
@@ -76,6 +110,37 @@ export class Player extends Unit {
 
   get agility() {
     return (this.effects['敏捷'] || 0);
+  }
+
+  // 属性修正系统 API
+  addModifier(modifierFn) {
+    if (typeof modifierFn === 'function') this.modifiers.push(modifierFn);
+    else console.warn('尝试添加非法的属性修正器：应为 function(player)=>player');
+  }
+  removeModifier(modifierFn) {
+    this.modifiers = this.modifiers.filter(m => m !== modifierFn);
+  }
+  clearModifiers() {
+    this.modifiers = [];
+  }
+
+  // 获取顺序应用所有修正器后的“修正玩家对象”。
+  // 注意：返回值通常是一个 Proxy，hp/effects 等数据链接保持为原对象引用；
+  // 仅 attack/defense/magic 等只读计算属性会被覆盖为修正后的值。
+  getModifiedPlayer() {
+    // 无修正器时，直接返回自身，避免不必要的包装
+    if (!this.modifiers || this.modifiers.length === 0) return this;
+    let current = this;
+    for (const mod of this.modifiers) {
+      try {
+        const next = mod(current);
+        // 允许修正器返回空以“跳过”
+        if (next) current = next;
+      } catch (e) {
+        console.warn('应用属性修正器时发生错误，已跳过：', e);
+      }
+    }
+    return current;
   }
 
   addBackupSkill (skill) {
@@ -102,5 +167,9 @@ export class Player extends Unit {
   gainActionPoint (amount) {
     this.remainingActionPoints += amount;
     this.remainingActionPoints = Math.min(this.remainingActionPoints, this.maxActionPoints);
+  }
+
+  hasAbility (abilityName) {
+    return this.abilities.some(ability => ability.name === abilityName);
   }
 }

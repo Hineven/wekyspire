@@ -9,7 +9,10 @@ import './assets/main.css'
 import './assets/common.css'
 import './assets/zLayers.css'
 import SkillManager from './data/skillManager.js'
-import { initAnimationDispatcher } from './data/animationDispatcher.js'
+// 保证单例初始化
+import animationSequencer from "./data/animationSequencer";
+// state sync watcher
+import {registerBackendStateWatcher} from "./data/animationInstructionHelpers";
 import {initGameFlowListeners} from "./game";
 import AbilityManager from "./data/abilityManager";
 
@@ -32,9 +35,6 @@ const app = createApp(App)
 // 使用路由
 app.use(router)
 
-// 初始化动画调度器（一次）
-initAnimationDispatcher();
-
 // 加载所有技能
 SkillManager.loadAllSkills().then(skillManager => {
   // 将skillManager实例添加到全局属性中，以便在应用中使用
@@ -48,6 +48,8 @@ SkillManager.loadAllSkills().then(skillManager => {
   // 挂载应用
 });
 
+// 初始化后端状态观察者
+registerBackendStateWatcher();
 
 // 初始化后端游戏流程在backendEventBus上的监听器
 initGameFlowListeners();
