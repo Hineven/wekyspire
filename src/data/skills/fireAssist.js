@@ -2,7 +2,7 @@
 
 import Skill from '../skill.js';
 import {applyHeal, burnSkillCard, dealDamage, drawSkillCard, dropSkillCard, launchAttack} from '../battleUtils.js';
-import {enqueueDelay} from "../animationDispatcher";
+import {enqueueDelay} from "../animationInstructionHelpers";
 
 // 无缘烈焰（C-）
 // 丢弃冷却中的技能，自己和敌人各获得3层燃烧

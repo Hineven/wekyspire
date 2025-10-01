@@ -4,7 +4,7 @@
 import effectDescriptions from '../data/effectDescription.js';
 import { dealDamage } from './battleUtils.js';
 import { addEffectLog, addBattleLog } from './battleLogUtils.js';
-import {enqueueDelay} from "./animationDispatcher";
+import {enqueueDelay} from "./animationInstructionHelpers.js";
 
 /**
  * 处理回合开始时触发的效果

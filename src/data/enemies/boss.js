@@ -1,7 +1,7 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
 import { addEnemyActionLog } from '../battleLogUtils.js';
-import {enqueueDelay} from "../animationDispatcher";
+import {enqueueDelay} from "../animationInstructionHelpers";
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {

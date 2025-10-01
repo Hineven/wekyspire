@@ -4,7 +4,7 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
-import {enqueueUI} from "./animationDispatcher";
+import {enqueueAnimateCardById} from "./animationInstructionHelpers";
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -150,10 +150,8 @@ export function drawSkillCard(player, number = 1) {
 
     // 手动触发入手动画，与其他卡牌动画保持一致（等待前序动画完成）
     if (firstSkill && firstSkill.uniqueID) {
-      enqueueUI(
-        'animateCardById',
-        { id: firstSkill.uniqueID, kind: 'appearFromDeck', options: { durationMs: 450, startScale: 0.6, fade: true } },
-        { duration: 0, blockBeforePreviousAnimations: true }
+      enqueueAnimateCardById(
+        { id: firstSkill.uniqueID, kind: 'appearFromDeck', options: { durationMs: 450, startScale: 0.6, fade: true } }
       );
     }
 
@@ -165,7 +163,7 @@ export function dropSkillCard(player, skillID) {
   const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
   if (index !== -1) {
     // 播放动画
-    enqueueUI('animateCardById', {id: skillID, kind: 'drop'});
+    enqueueAnimateCardById( {id: skillID, kind: 'drop'});
     // 执行逻辑
     const [droppedSkill] = player.frontierSkills.splice(index, 1);
     player.backupSkills.push(droppedSkill);
@@ -188,7 +186,7 @@ export function burnSkillCard(player, skillID) {
     return;
   }
   // 播放动画
-  enqueueUI('animateCardById', {id: skillID, kind: 'burn'});
+  enqueueAnimateCardById( {id: skillID, kind: 'burn'});
   let exhaustedSkill = null;
   if (frontierIndex !== -1) {
     exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];

@@ -5,7 +5,12 @@ import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects } from './effectProcessor.js'
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
-import { enqueueUI, enqueueDelay } from './animationDispatcher.js'
+import {
+  enqueueDelay,
+  enqueueUnlockControl,
+  enqueueAnimateCardById,
+  enqueueLockControl, enqueueClearCardAnimations, enqueueState
+} from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard} from "./battleUtils";
 
 // 开始战斗
@@ -87,7 +92,7 @@ function startPlayerTurn() {
     return;
   }
 
-  enqueueUI('unlockControl');
+  enqueueUnlockControl();
 
   // 等待玩家操作
   // 玩家操作通过BattleScreen组件的事件处理
@@ -152,13 +157,10 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'flyToCenter'});
-
-  // 通知UI层锁定控制面板
-  // enqueueUI('lockControl');
+  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'});
 
   // 增设一条idle动画指令，确保animateCardByID动画完成后才开始播放卡牌发动带来的各种效果的动画
-  enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
+  enqueueDelay(0);
 
   // 资源结算（后端状态）
   skill.consumeResources(gameState.player);
@@ -173,9 +175,7 @@ function useSkill(skill) {
 
   if(checkBattleVictory()) return ;
 
-  // UI解锁
-  // enqueueUI('unlockControl', {}, { blockBeforePreviousAnimations: true });
-  enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
+  enqueueDelay(0);
 }
 
 
@@ -206,7 +206,7 @@ function enemyTurn() {
   // 敌人行动逻辑
   gameState.isEnemyTurn = true;
 
-  enqueueUI('lockControl');
+  enqueueLockControl();
 
   addEnemyActionLog(`/red{${gameState.enemy.name}} 的回合！`);
 
@@ -268,10 +268,10 @@ function battleVictory(isVictory) {
   enqueueDelay(3000);
 
   // 清理掉卡牌ghost
-  enqueueUI('clearCardAnimations');
+  enqueueClearCardAnimations();
 
   // 解锁操作面板
-  enqueueUI('unlockControl');
+  enqueueUnlockControl();
 
   // 战斗结束事件
   backendEventBus.emit(EventNames.Game.POST_BATTLE, {
@@ -303,7 +303,7 @@ function handleSkillAfterUse(skill) {
   const index = gameState.player.frontierSkills.findIndex(s => s === skill);
   if (index !== -1) {
     // 首先，入队一个idle指令，保证后续动画在技能使用动画结束之后播放
-    enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
+    enqueueDelay();
     if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity || skill.remainingUses > 0) {
       // 如果是可充能/无限使用技能，或者充能有剩余，移动到后备技能列表尾部
       dropSkillCard(gameState.player, skill.uniqueID);

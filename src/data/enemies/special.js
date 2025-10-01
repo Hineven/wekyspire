@@ -1,7 +1,7 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
 import { addEnemyActionLog } from '../battleLogUtils.js';
-import {enqueueDelay} from "../animationDispatcher";
+import {enqueueDelay} from "../animationInstructionHelpers";
 
 // 雪狼 精英敌人
 export class BigWolf extends Enemy {

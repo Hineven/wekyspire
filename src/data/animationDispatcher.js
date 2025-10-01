@@ -55,6 +55,8 @@
 import { watch, toRaw } from 'vue';
 import { backendGameState, displayGameState } from './gameState.js';
 import frontendEventBus from '../frontendEventBus.js';
+import { enqueueUI as _enqueueUI_Helper, enqueueDelay as _enqueueDelay_Helper } from './animationInstructionHelpers.js';
+import { enqueueState as _enqueueState_Helper } from './animationInstructionHelpers.js';
 
 // 队列项类型：
 // - { kind: 'state', snapshot, duration? }
@@ -415,23 +417,22 @@ export function enqueueState(options = {}) {
 }
 // 入队一个UI动作
 export function enqueueUI(name, payload = {}, options = {}) {
-  const { duration = 0, blockBeforePreviousAnimations = false } = options;
-  // 若有存在未同步的后端变更，则在它之前切片一次状态（默认带屏障）
+  // 在迁移前保留旧语义：如有未同步状态，先切片一次（默认带屏障）
   if (defaultStateChangeDuration !== 0 && dirty) {
-    enqueueState({ snapshot: captureSnapshot(), duration: defaultStateChangeDuration });
+    _enqueueState_Helper({});
+    dirty = false;
   }
-  queue.push({ kind: 'ui', name, payload, duration, blockBeforePreviousAnimations });
-  tryStartProcessQueue();
+  return _enqueueUI_Helper(name, payload, options);
 }
 
 // 入队一个延时
 export function enqueueDelay(duration = defaultStepMs) {
-  // 若有存在未同步的后端变更，则在它之前切片一次状态（默认带屏障）
+  // 在迁移前保留旧语义：如有未同步状态，先切片一次（默认带屏障）
   if (defaultStateChangeDuration !== 0 && dirty) {
-    enqueueState({ snapshot: captureSnapshot(), duration: defaultStateChangeDuration });
+    _enqueueState_Helper({});
+    dirty = false;
   }
-  queue.push({ kind: 'delay', duration });
-  tryStartProcessQueue();
+  return _enqueueDelay_Helper(typeof duration === 'number' ? duration : 0);
 }
 
 export function clearQueue() {
