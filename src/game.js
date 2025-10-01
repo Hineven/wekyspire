@@ -2,6 +2,7 @@ import backendEventBus, { EventNames } from "./backendEventBus";
 import * as dialogues from './data/dialogues'
 import SkillManager from './data/skillManager.js'
 import {backendGameState as gameState, backendGameState} from './data/gameState.js'
+import { upgradePlayerTier } from './data/player.js'
 import {
   enterBattleStage,
   initializeBattleFlowListeners
@@ -18,14 +19,14 @@ function startGame() {
   const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
-  const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
+  const initialSkill4 = SkillManager.getInstance().createSkill('玩火');
 
   backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4];
 
   // 升满级调试
-  // while(backendGameState.player.tier < 9) {
-  //   upgradePlayerTier(backendGameState.player);
-  // }
+  while(backendGameState.player.tier < 9) {
+    upgradePlayerTier(backendGameState.player);
+  }
 
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.ENTER_BATTLE_STAGE);

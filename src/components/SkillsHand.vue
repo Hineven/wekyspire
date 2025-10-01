@@ -199,9 +199,10 @@ export default {
         const added = newIds.filter(id => !prevSet.has(id));
         this.prevIds = [...newIds];
         if (added.length === 0) return;
+        // 标记为“入场中”，等待 orchestrator 的 card-appear-finished 清理；添加兜底定时器
         added.forEach(id => { this.appearing[id] = true; });
         this.$nextTick(() => {
-          added.forEach(id => this.animateAppearFromDeck(id));
+          added.forEach(id => this.scheduleAppearFallback(id));
         });
       }
     }
@@ -223,13 +224,13 @@ export default {
         delete this.cardRefs[id];
       }
     },
-    animateAppearFromDeck(id) {
-      frontendEventBus.emit('request-card-appear', { id });
-      // Fallback: 动画开始后 1.5 秒强制移除 appearing 状态，以防动画出现问题导致卡牌不显示
+    // 现在由后端统一触发入手动画；这里仅保留兜底清理逻辑，避免异常时卡片长时间不可见
+    scheduleAppearFallback(id) {
       setTimeout(() => { if (this.appearing[id]) delete this.appearing[id]; }, 1500);
     },
     canUseSkill(skill) {
-      return skill && typeof skill.canUse === 'function' && skill.canUse(this.player) && skill.usesLeft !== 0;
+      const p = (this.player && typeof this.player.getModifiedPlayer === 'function') ? this.player.getModifiedPlayer() : this.player;
+      return skill && typeof skill.canUse === 'function' && skill.canUse(p) && skill.usesLeft !== 0;
     },
     onSkillCardClicked(skill, event) {
       if (this.draggable || this.isControlDisabled || !this.isPlayerTurn) return; // 休整/不可控制/非玩家会和时禁用技能使用
@@ -357,23 +358,15 @@ export default {
 .skills-hand-root {
   position: relative;
   width: 100%;
-  /* 高度匹配卡片高度（考虑浮起放大，预留余量） */
-  min-height: 300px;
+  height: auto;
+  min-height: 280px;
 }
-.skills-hand-root.dragging {
-  user-select: none;
-}
-
 .skill-wrapper {
   position: absolute;
   top: 0;
-  /* 平滑移动/缩放过渡 */
-  transition: transform 120ms ease, z-index 120ms ease, visibility 0ms linear;
-  will-change: transform;
+  transition: transform 0.22s ease, visibility 0s linear;
 }
-
 .skill-wrapper.instant {
-  /* 拖拽时取消过渡，避免卡顿 */
   transition: none;
 }
 </style>

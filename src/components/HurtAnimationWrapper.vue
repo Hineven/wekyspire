@@ -8,7 +8,7 @@
       'dead-wrapper': isDead,
       'shielded-wrapper': isShielded
       }"
-    :style="[shakeStyle, hurtStyle, zIndexStyle]"
+    :style="[hurtStyle, zIndexStyle]"
   >
     <slot></slot>
     <!-- 治疗效果覆盖层 -->
@@ -48,38 +48,20 @@ export default {
       isShieldBroke: false,
       shakeIntensity: 0,
       hurtIntensity: 0,
-      particles: []
+      particles: [],
+      _prevSnapshot: { hp: 0, shield: 0 },
+      _timers: []
     };
   },
   computed: {
     isShielded() {
-      return this.unit.shield > 0;
+      return (this.unit?.shield || 0) > 0;
     },
-    shakeStyle() {
-      if (!this.isShaking) return {};
-      
-      // 根据伤害强度计算震颤参数
-      const intensity = Math.min(this.shakeIntensity / 10, 1); // 归一化强度
-      const maxShake = 10 * intensity;
-      const maxRotate = 2 * intensity;
-      
-      // 添加一个震动偏移量，使每次震动都不同
-      const offsetX = (Math.random() - 0.5) * maxShake;
-      const offsetY = (Math.random() - 0.5) * maxShake;
-      const rotation = (Math.random() - 0.5) * maxRotate;
-      
-      return {
-        transform: `translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg)`
-      };
-    },
-    
+    // 注意：移除了 shakeStyle，避免与 CSS 动画在 transform 上冲突
     hurtStyle() {
       if (!this.isHurt) return {};
-      
-      // 根据伤害强度计算特效参数
-      const intensity = Math.min(this.hurtIntensity / 50, 1); // 归一化强度
-      const borderWidth = Math.min(Math.max(2, Math.floor(5 * intensity)), 10); // 边框厚度在1px到10px之间
-      
+      const intensity = Math.min(this.hurtIntensity / 50, 1);
+      const borderWidth = Math.min(Math.max(2, Math.floor(5 * intensity)), 10);
       return {
         '--hurt-border-width': `${borderWidth}px`,
         '--hurt-opacity': Math.max(Math.min(intensity, 1), 0.2)
@@ -87,175 +69,163 @@ export default {
     },
 
     zIndexStyle() {
-      return {
-        zIndex: this.zIndex
-      }
+      return { zIndex: this.zIndex };
+    },
+
+    // 用于合并监听 hp/shield 变化的签名
+    statKey() {
+      const hp = this.unit?.hp ?? 0;
+      const shield = this.unit?.shield ?? 0;
+      const id = this.unit?.uniqueID || this.unit?.name || '';
+      return `${id}:${hp}/${shield}`;
     }
   },
   mounted() {
-    // 改为由状态变化驱动动画，不再监听事件
+    // 初始化快照
     this._prevSnapshot = {
       hp: this.unit?.hp ?? 0,
       shield: this.unit?.shield ?? 0
     };
   },
   watch: {
-    unit: {
-      deep: true,
-      handler() {
-        if (!this.unit) return;
-        const prevHp = this._prevSnapshot?.hp ?? this.unit.hp;
-        const prevShield = this._prevSnapshot?.shield ?? this.unit.shield;
-        const currHp = this.unit.hp;
-        const currShield = this.unit.shield;
+    // 当 unit 实例切换时，重置快照，避免跨实例误判
+    unit(newUnit, oldUnit) {
+      this._prevSnapshot = {
+        hp: newUnit?.hp ?? 0,
+        shield: newUnit?.shield ?? 0
+      };
+      // 可选择重置动画状态，避免继承残留态
+      this.isShaking = false;
+      this.isHurt = false;
+      this.isEvading = false;
+      this.isHealing = false;
+      this.isDead = false;
+      this.hurtIntensity = 0;
+      this.shakeIntensity = 0;
+      this._clearTimers();
+    },
 
-        const dhp = currHp - prevHp; // 负值表示受伤，正值表示治疗
-        const dshield = currShield - prevShield; // 负值表示护盾损失
+    // 合并监听 hp/shield 变化，计算 delta 并驱动动画
+    statKey() {
+      if (!this.unit) return;
+      const prevHp = this._prevSnapshot.hp;
+      const prevShield = this._prevSnapshot.shield;
+      const currHp = this.unit.hp;
+      const currShield = this.unit.shield;
 
-        // 触发死亡动画（hp从>0到<=0）
-        if (prevHp > 0 && currHp <= 0 && this.unit.type !== 'player') {
-          this.handleBattleVictory();
-        }
+      const dhp = currHp - prevHp; // 负值=受伤，正值=治疗
+      const dshield = currShield - prevShield; // 负值=护盾损失
 
-        if (dhp < 0 || dshield < 0) {
-          // 计算伤害量
-          const hpDamage = Math.max(0, -dhp);
-          const passThrough = hpDamage + Math.max(0, -dshield);
-          this.triggerHurtAnimation(hpDamage, passThrough);
-        } else if (dhp > 0) {
-          // 治疗
-          this.triggerHurtAnimation(-dhp, 0);
-        }
-
-        // 更新快照
-        this._prevSnapshot = { hp: currHp, shield: currShield };
+      // 死亡触发（hp从>0到<=0），排除玩家
+      if (prevHp > 0 && currHp <= 0 && this.unit.type !== 'player') {
+        this.handleBattleVictory();
       }
+
+      if (dhp < 0 || dshield < 0) {
+        const hpDamage = Math.max(0, -dhp);
+        const passThroughDamage = hpDamage + Math.max(0, -dshield);
+        this.triggerHurtAnimation(hpDamage, passThroughDamage);
+      } else if (dhp > 0) {
+        // 治疗
+        this.triggerHurtAnimation(-dhp, 0);
+      }
+
+      // 更新快照
+      this._prevSnapshot = { hp: currHp, shield: currShield };
     }
   },
   beforeUnmount() {
-    // 无事件需要清理
+    this._clearTimers();
   },
   methods: {
-    triggerHurtAnimation(hpDamage, passThoughDamage) {
-      const damage = hpDamage;
-      // 如果无伤害，且无穿透伤害，则认定为闪避，播放闪避动画并结束
-      if(damage === 0 && passThoughDamage === 0) {
-        this.isEvading = true;
-        // 在0.7秒后停止闪避特效
-        setTimeout(() => {
-          this.isEvading = false;
-        }, 700);
-        // 不执行其他动画效果
-        return;
+    _setTimer(fn, delay) {
+      const id = setTimeout(fn, delay);
+      this._timers.push(id);
+      return id;
+    },
+    _clearTimers() {
+      if (this._timers && this._timers.length) {
+        for (const id of this._timers) clearTimeout(id);
+        this._timers = [];
       }
-      
-      // 如果是负数伤害（治疗）
-      if (damage < 0) {
-        // 触发治疗动画
-        this.isHealing = true;
-        // 创建治疗文本
-        this.createDamageText(damage);
-        // 在0.6秒后停止治疗特效
-        setTimeout(() => {
-          this.isHealing = false;
-        }, 600);
-        
-        // 不执行其他动画效果
+    },
+
+    triggerHurtAnimation(hpDamage, passThroughDamage) {
+      const damage = hpDamage;
+      // 无伤害且无穿透 => 闪避
+      if (damage === 0 && passThroughDamage === 0) {
+        this.isEvading = true;
+        this._setTimer(() => { this.isEvading = false; }, 700);
         return;
       }
 
-      // 设置震颤强度
+      // 负数伤害 => 治疗
+      if (damage < 0) {
+        this.isHealing = true;
+        this.createDamageText(damage);
+        this._setTimer(() => { this.isHealing = false; }, 600);
+        return;
+      }
+
+      // 正常受伤
       this.shakeIntensity = damage;
       this.isShaking = true;
-      
-      // 设置受伤特效强度
       this.hurtIntensity = damage;
       this.isHurt = true;
-      
-      // 如果hp受到伤害，则创建粒子效果（流血）
-      if(damage > 0) {
+
+      // 粒子：hp 伤害红色/橙色，纯护盾伤害蓝色
+      if (damage > 0) {
         this.createParticles(damage, 0);
       } else {
-        // 否然，如果是盾伤害，创建蓝色粒子效果
-        this.createParticles(damage, 140);
+        this.createParticles(Math.abs(damage), 140);
       }
-      // 创建伤害文本
-      this.createDamageText(passThoughDamage);
-      
-      // 根据伤害强度计算震颤持续时间
-      const duration = Math.min(200 + passThoughDamage * 2, 600); // 持续时间在200ms到600ms之间
-      
-      // 在一定时间后停止震颤
-      setTimeout(() => {
-        this.isShaking = false;
-        this.shakeIntensity = 0;
-      }, duration);
-      
-      // 在0.2秒后停止受伤特效
-      setTimeout(() => {
-        this.isHurt = false;
-        this.hurtIntensity = 0;
-      }, 200);
+      // 伤害文本（使用穿透总伤害）
+      this.createDamageText(passThroughDamage);
+
+      // 抖动持续时间
+      const duration = Math.min(200 + passThroughDamage * 2, 600);
+      this._setTimer(() => { this.isShaking = false; this.shakeIntensity = 0; }, duration);
+      // 受伤特效快速结束
+      this._setTimer(() => { this.isHurt = false; this.hurtIntensity = 0; }, 200);
     },
+
     handleBattleVictory() {
-      // 当胜利时，如果unit不是玩家，播放敌人死亡动画
-      if(this.unit.type !== 'player') {
-        // 持续生成大量粒子
-        for(let i = 0; i < 7; i++) {
-          setTimeout(() => {
-            this.createParticles(20);
-          }, i * 200);
+      if (this.unit.type !== 'player') {
+        // 持续生成粒子
+        for (let i = 0; i < 7; i++) {
+          this._setTimer(() => { this.createParticles(20); }, i * 200);
         }
-        // 最后播放爆炸动画：面板短暂剧烈震动
-        setTimeout(() => {
-          this.isShaking = true;
-          this.shakeIntensity = 20;
-        }, 900);
-        // 面板发生闪烁，变成红色后变成纯白
-        setTimeout(() => {
-          this.isDead = true;
-        }, 1400);
-        // 爆炸时一次性生成大量粒子
-        setTimeout(() => {
-          this.createParticles(100);
-        }, 1400);
+        // 爆炸前抖动
+        this._setTimer(() => { this.isShaking = true; this.shakeIntensity = 20; }, 900);
+        // 闪烁并置 dead
+        this._setTimer(() => { this.isDead = true; }, 1400);
+        // 爆炸粒子
+        this._setTimer(() => { this.createParticles(100); }, 1400);
       }
     },
-    
+
     createDamageText(damage) {
-      // 获取父元素尺寸
       const wrapper = this.$el;
       const wrapperRect = wrapper.getBoundingClientRect();
       const wrapperWidth = wrapperRect.width;
       const wrapperHeight = wrapperRect.height;
-      
-      // 设置文本内容和样式
+
       const isHealing = damage < 0;
       const text = isHealing ? `+${Math.abs(damage)}` : `-${damage}`;
-      
-      // 根据伤害/治疗设置颜色
       const color = isHealing ? '#00ff00' : '#ff0000';
-      
-      // 根据伤害/治疗量设置字体大小
       const damageValue = Math.abs(damage);
       const fontSize = Math.min(96, Math.max(24, 12 + damageValue / 4));
-      
-      // 设置初始位置（中心区域随机位置）
+
       const centerX = wrapperRect.left + wrapperWidth / 2;
       const centerY = wrapperRect.top + wrapperHeight / 2;
       const startX = centerX + (Math.random() - 0.5) * wrapperWidth * 0.3;
       const startY = centerY + (Math.random() - 0.5) * wrapperHeight * 0.3;
-      
-      // 动画参数
-      const duration = Math.min(
-        3000,
-        isHealing ? (1000 -damageValue * 50) : (800 + damageValue * 30)
-      );
-      const gravity = isHealing ? 0 : 1000; // 治疗文本不受重力影响
-      let velocityX = (Math.random() - 0.5) * 200;
-      let velocityY = -200 - Math.random() * 200;
-      
-      // 创建文本粒子配置
+
+      const duration = Math.min(3000, isHealing ? (1000 - damageValue * 50) : (800 + damageValue * 30));
+      const gravity = isHealing ? 0 : 1000;
+      const velocityX = (Math.random() - 0.5) * 200;
+      const velocityY = -200 - Math.random() * 200;
+
       const particle = {
         x: startX,
         y: startY,
@@ -267,8 +237,6 @@ export default {
         text: text,
         extraStyles: {
           color: color,
-          // textShadow: '0 0 3px rgba(0, 0, 0, 0.5)',
-          // fontFamily: 'Arial, sans-serif',
           userSelect: 'none',
           pointerEvents: 'none',
           fontSize: `${fontSize}px`,
@@ -276,79 +244,55 @@ export default {
           zIndex: '20'
         }
       };
-      
-      // 通过事件总线发送粒子生成请求
       frontendEventBus.emit('spawn-particles', [particle]);
     },
-    
-    createParticles(damage, hueShift = 0) {
-      // 获取父元素尺寸（相对坐标）
-      const wrapperWidth = this.$el.offsetWidth;
-      const wrapperHeight = this.$el.offsetHeight;
-      
-      // 根据伤害大小确定粒子数量
-      const particleCount = Math.min(Math.max(Math.floor(damage / 5), 20), 80);
-      
+
+    createParticles(damageMagnitude, hueShift = 0) {
+      const wrapperRect = this.$el.getBoundingClientRect();
+      const wrapperWidth = wrapperRect.width;
+      const wrapperHeight = wrapperRect.height;
+
+      const magnitude = Math.max(1, Math.abs(damageMagnitude));
+      const particleCount = Math.min(Math.max(Math.floor(magnitude / 5), 20), 80);
+
       const particles = [];
-      
       for (let i = 0; i < particleCount; i++) {
-        // 随机选择从哪个边界出发（0:上, 1:右, 2:下, 3:左）
         const edge = Math.floor(Math.random() * 4);
-        let startX, startY;
-        
-        // 根据选择的边界设置初始位置（相对坐标）
+        let startX = 0, startY = 0;
         switch (edge) {
-          case 0: // 上边界
-            startX = Math.random() * wrapperWidth;
-            startY = 0;
-            break;
-          case 1: // 右边界
-            startX = wrapperWidth;
-            startY = Math.random() * wrapperHeight;
-            break;
-          case 2: // 下边界
-            startX = Math.random() * wrapperWidth;
-            startY = wrapperHeight;
-            break;
-          case 3: // 左边界
-            startX = 0;
-            startY = Math.random() * wrapperHeight;
-            break;
+          case 0: startX = Math.random() * wrapperWidth; startY = 0; break;
+          case 1: startX = wrapperWidth; startY = Math.random() * wrapperHeight; break;
+          case 2: startX = Math.random() * wrapperWidth; startY = wrapperHeight; break;
+          case 3: startX = 0; startY = Math.random() * wrapperHeight; break;
         }
-        
-        // 计算从边界向外的飞散方向
         const centerX = wrapperWidth / 2;
         const centerY = wrapperHeight / 2;
         const angle = Math.atan2(startY - centerY, startX - centerX);
-        
-        const speed = (8 + Math.random() * 12) * Math.max(1, Math.min(damage / 10, 8)); // 增加速度
-        const size = (1 + Math.random() * 4) * Math.min(20, Math.max(2, damage / 4));
-        
-        // 随机颜色，主要是红色和橙色，少量黄色
-        const hue = hueShift + Math.random() * 45; // 0-45范围，红色到黄色
-        const saturation = 80 + Math.random() * 20; // 80-100%饱和度
-        const lightness = 40 + Math.random() * 20; // 40-60%亮度
-        
-        // 获取组件在屏幕上的绝对位置
-        const wrapperRect = this.$el.getBoundingClientRect();
+
+        const speed = (8 + Math.random() * 12) * Math.max(1, Math.min(magnitude / 10, 8));
+        const size = (1 + Math.random() * 4) * Math.min(20, Math.max(2, magnitude / 4));
+
+        const hue = hueShift + Math.random() * 45;
+        const saturation = 80 + Math.random() * 20;
+        const lightness = 40 + Math.random() * 20;
+
         const absoluteX = wrapperRect.left + startX;
         const absoluteY = wrapperRect.top + startY;
-        
+
         particles.push({
           x: absoluteX,
           y: absoluteY,
-          vx: Math.cos(angle) * speed ,
-          vy: Math.sin(angle) * speed ,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
           size: size,
           color: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
-          life: (500 + Math.random() * 500) * Math.min(3, Math.max(1, damage / 100)),
+          life: (500 + Math.random() * 500) * Math.min(3, Math.max(1, magnitude / 100)),
           shape: 'circle',
           opacityFade: true,
           drag: 0.1,
           zIndex: 0
         });
       }
-      
       // 通过事件总线发送粒子生成请求
       frontendEventBus.emit('spawn-particles', particles);
     }

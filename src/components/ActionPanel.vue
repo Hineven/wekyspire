@@ -35,7 +35,7 @@ import DeckIcon from './DeckIcon.vue';
 import DeckOverlayPanel from './DeckOverlayPanel.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus';
-import orchestrator from '../utils/animationOrchestrator.js';
+import orchestrator from '../utils/cardAnimationOrchestrator.js';
 
 export default {
   name: 'ActionPanel',

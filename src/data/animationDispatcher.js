@@ -3,6 +3,8 @@
 // 核心目标
 // - 以“队列 + 节拍”的方式，把后端状态（backendGameState）的变化按动画节奏排序并映射到显示层（displayGameState），完成前端动画播放和后端逻辑计算节奏的分离。
 // - 保证每一次关键状态变化（S 子集）都有独立的可控展示顺序；纯 UI 动作（如日志、声音）也在同一队列中顺序播放。
+// - 可以按需插入延时，拉开动画节奏。
+// - 支持“动画屏障”（blockBeforePreviousAnimations），确保某些 UI 动作在所有前置动画完成后再执行。否然，默认情况下队列仅会等待前序“非零延时”项完成后直接执行。
 //
 // 核心机制
 // 1) 三类队列项
@@ -47,15 +49,6 @@
 //   - 非 UI 关键数据（hp、shield、effects、money、AP 等）作为普通字段进入 S。
 //   - 仅后端使用的中间态字段请加“_”后缀（如 actionIndex_），避免触发动画。
 //   - 方法如 canUse 只读取 S 字段（可从显示层读取），确保在显示层实例上正常运行。
-//
-// 常见坑与规避
-// - 若完全没有非零延时，状态不会自动切片入队，显示层会在下一次出现非零延时前保持合并展示；这是预期的“帧间合并”。
-// - 数组重排/插入/删除：为元素提供稳定 id（uniqueID/id），以避免回退到索引合并时的潜在错配。
-// - 无关触发多：把纯后端中间态统一命名为 *_ 并确保是可枚举自有属性；这类字段不会被 S 监听到。
-//
-// 扩展点
-// - 可为特定 UI 事件手动传入 { duration: X } 以强制切片当前状态，控制动画节拍。
-// - 如需进一步减少冗余快照，可在入队前做“最近一次入队项是否已是 state”检查以去重。
 
 // animationDispatcher.js - 将后端状态的变化以动画节奏应用到显示层状态，并支持UI动作
 
@@ -65,7 +58,7 @@ import frontendEventBus from '../frontendEventBus.js';
 
 // 队列项类型：
 // - { kind: 'state', snapshot, duration? }
-// - { kind: 'ui', name: 'lockControl'|'unlockControl', payload?, duration? }
+// - { kind: 'ui', name: 'lockControl'|'unlockControl', payload?, duration?, blockBeforePreviousAnimations? }
 // - { kind: 'delay', duration }
 const queue = [];
 let processing = false;
@@ -74,16 +67,32 @@ let defaultStepMs = 0;
 // 新增：脏位与 tick 末兜底检查
 let dirty = false;
 let endOfTickScheduled = false;
+// 跟踪由 orchestrator 执行的动画完成度（用于 blockBeforePreviousAnimations）
+const inflightTokens = new Set();
+
+const defaultStateChangeDuration = 400;
+
+// 监听 orchestrator 完成事件（动画自然结束）
+frontendEventBus.on('animation-card-by-id-finished', (msg = {}) => {
+  const token = msg?.token;
+  if (token && inflightTokens.has(token)) {
+    inflightTokens.delete(token);
+    // 若因 blockBeforePreviousAnimations 阻塞，尝试继续推进队列
+    if (inflightTokens.size === 0) {
+      stalling = false;
+      tryStartProcessQueue();
+    }
+  }
+});
+
 function scheduleEndOfTickCheck() {
   if (endOfTickScheduled) return;
   endOfTickScheduled = true;
   setTimeout(() => {
     endOfTickScheduled = false;
     if (dirty) {
-      // tick 结束仍有未同步的变更，强制入队一次当前快照
-      queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
-      dirty = false;
-      tryStartProcessQueue();
+      // tick 结束仍有未同步的变更，强制入队一次当前快照（默认带屏障）
+      enqueueState({ snapshot: captureSnapshot(), duration: defaultStateChangeDuration });
     }
   }, 0);
 }
@@ -295,6 +304,15 @@ function scheduleNext(delay) {
 function processQueue() {
   if (processing) return;
   if (queue.length === 0) return;
+
+  // 峰值前检查：若队首项要求等待此前动画完成，则在有未完成动画时阻塞
+  const head = queue[0];
+  if (head && head.blockBeforePreviousAnimations === true && inflightTokens.size > 0) {
+    // 等待 orchestrator 通知所有过去动画结束后再继续
+    stalling = true;
+    return; // 不消费队首项
+  }
+
   processing = true;
   const item = queue.shift();
   try {
@@ -355,12 +373,25 @@ function handleUIAction(item) {
     case 'clearBattleLogUI':
       frontendEventBus.emit('clear-battle-log');
       break;
-    case 'animateCardById':
-      // 由后端（调度层）提供 id/kind/options/steps/hideStart，统一在此桥接
-      frontendEventBus.emit('animate-card-by-id', payload || {});
+    case 'animateCardById': {
+      // 为每次 orchestrator 动画分配完成令牌，全部纳入 inflight 以便 barrier 生效
+      const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      inflightTokens.add(token);
+      const enriched = Object.assign({}, payload || {}, { completionToken: token });
+      frontendEventBus.emit('animate-card-by-id', enriched);
       break;
+    }
     case 'clearCardAnimations':
       frontendEventBus.emit('clear-card-animations');
+      // 同步清理所有未完成令牌，避免后续 blockBeforePreviousAnimations 项目永久阻塞
+      if (inflightTokens.size > 0) {
+        inflightTokens.clear();
+        stalling = false;
+        tryStartProcessQueue();
+      }
+      break;
+    case 'idle':
+      // 什么都不做，仅占位
       break;
     default:
       console.warn(`animationDispatcher遇到了未知动画指令名称: ${name}`);
@@ -371,30 +402,33 @@ function handleUIAction(item) {
 // 外部API：入队
 // 入队一个sisplayState修改
 export function enqueueState(options = {}) {
-  const {duration, snapshot} = options;
-  queue.push({kind: 'state', snapshot: snapshot || captureSnapshot(), duration});
+  const { duration, snapshot, blockBeforePreviousAnimations = true } = options;
+  queue.push({
+    kind: 'state',
+    snapshot: snapshot || captureSnapshot(),
+    duration: (duration ?? defaultStateChangeDuration),
+    blockBeforePreviousAnimations
+  });
   // 快照已捕获，清除脏位
   dirty = false;
   tryStartProcessQueue();
 }
 // 入队一个UI动作
 export function enqueueUI(name, payload = {}, options = {}) {
-  const { duration = 0 } = options;
-  // 若有非零延时，且存在未同步的后端变更，则在它之前切片一次状态
-  if (duration > 0 && dirty) {
-    queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
-    dirty = false;
+  const { duration = 0, blockBeforePreviousAnimations = false } = options;
+  // 若有存在未同步的后端变更，则在它之前切片一次状态（默认带屏障）
+  if (defaultStateChangeDuration !== 0 && dirty) {
+    enqueueState({ snapshot: captureSnapshot(), duration: defaultStateChangeDuration });
   }
-  queue.push({ kind: 'ui', name, payload, duration });
+  queue.push({ kind: 'ui', name, payload, duration, blockBeforePreviousAnimations });
   tryStartProcessQueue();
 }
 
 // 入队一个延时
 export function enqueueDelay(duration = defaultStepMs) {
-  // 若有非零延时，且存在未同步的后端变更，则在它之前切片一次状态
-  if (duration > 0 && dirty) {
-    queue.push({ kind: 'state', snapshot: captureSnapshot(), duration: 0 });
-    dirty = false;
+  // 若有存在未同步的后端变更，则在它之前切片一次状态（默认带屏障）
+  if (defaultStateChangeDuration !== 0 && dirty) {
+    enqueueState({ snapshot: captureSnapshot(), duration: defaultStateChangeDuration });
   }
   queue.push({ kind: 'delay', duration });
   tryStartProcessQueue();
@@ -420,8 +454,9 @@ export function initAnimationDispatcher({ stepMs = 0 } = {}) {
 }
 
 // 提供一个便捷桥接：当界面请求“新卡进入手牌”时，由调度器统一入队动画，确保与状态切片/节拍一致
-frontendEventBus.on('request-card-appear', ({ id } = {}) => {
-  if (id == null) return;
-  // 若有未同步变更，duration>0 时会自动切片一次状态
-  enqueueUI('animateCardById', { id, kind: 'appearFromDeck', options: { id, durationMs: 450, startScale: 0.6, fade: true } }, { duration: 0 });
-});
+// 已废弃：入手动画改为后端在 drawSkillCard 内统一触发
+// frontendEventBus.on('request-card-appear', ({ id } = {}) => {
+//   if (id == null) return;
+//   enqueueUI(
+//     'animateCardById',
+

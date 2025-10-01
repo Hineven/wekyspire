@@ -6,7 +6,7 @@ import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivat
 import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
 import { enqueueUI, enqueueDelay } from './animationDispatcher.js'
-import {burnSkillCard, dropSkillCard} from "./battleUtils";
+import {burnSkillCard, drawSkillCard, dropSkillCard} from "./battleUtils";
 
 // 开始战斗
 export function enterBattleStage() {
@@ -75,8 +75,9 @@ function startPlayerTurn() {
   fillFrontierSkills(gameState.player);
 
   enqueueDelay(300);
-  // 回合开始时结算效果
-  const isStunned = processStartOfTurnEffects(gameState.player);
+  // 回合开始时结算效果（使用修正后的玩家对象）
+  const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+  const isStunned = processStartOfTurnEffects(modPlayer);
   if(checkBattleVictory()) return ;
 
   if (isStunned) {
@@ -128,14 +129,15 @@ export function generateEnemy() {
 
 // 此技能返回值必须被检查！
 export function activateSkill (skill) {
-  // 技能发动时结算效果（后端状态）
-  processSkillActivationEffects(gameState.player);
+  // 技能发动时结算效果（后端状态，使用修正后的玩家）
+  const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+  processSkillActivationEffects(modPlayer);
   if(checkBattleVictory()) return true;
 
   var stage = 0;
-  // 发动技能效果
+  // 发动技能效果（对技能传入修正后的玩家）
   while(true) {
-    const result = skill.use(gameState.player, gameState.enemy, stage);
+    const result = skill.use(modPlayer, gameState.enemy, stage);
     if(checkBattleVictory()) return true;
 
     if(result === true) break;
@@ -153,12 +155,15 @@ function useSkill(skill) {
   enqueueUI('animateCardById', {id: skill.uniqueID, kind: 'flyToCenter'});
 
   // 通知UI层锁定控制面板
-  enqueueUI('lockControl');
+  // enqueueUI('lockControl');
+
+  // 增设一条idle动画指令，确保animateCardByID动画完成后才开始播放卡牌发动带来的各种效果的动画
+  enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
 
   // 资源结算（后端状态）
   skill.consumeResources(gameState.player);
   
-  // 触发技能发动前效果
+  // 触发技能发动前效果与技能主体
   if(activateSkill(skill)) return ;
 
   if(checkBattleVictory()) return ;
@@ -169,7 +174,8 @@ function useSkill(skill) {
   if(checkBattleVictory()) return ;
 
   // UI解锁
-  enqueueUI('unlockControl');
+  // enqueueUI('unlockControl', {}, { blockBeforePreviousAnimations: true });
+  enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
 }
 
 
@@ -185,8 +191,9 @@ export function dropLeftmostSkill() {
 
 // 结束玩家回合
 function endPlayerTurn() {
-  // 回合结束时结算效果
-  processEndOfTurnEffects(gameState.player);
+  // 回合结束时结算效果（使用修正后的玩家）
+  const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+  processEndOfTurnEffects(modPlayer);
 
   if(checkBattleVictory()) return ;
 
@@ -210,11 +217,14 @@ function enemyTurn() {
 
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.enemy);
+  if(checkBattleVictory()) return ;
+
   if (isStunned) {
     addSystemLog('敌人被眩晕，跳过回合！');
   } else {
-    // 等待敌人行动完成（包括所有攻击动画）
-    gameState.enemy.act(gameState.player);
+    // 等待敌人行动完成（包括所有攻击动画），对敌人传入修正后的玩家以包含防御修正
+    const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+    gameState.enemy.act(modPlayer);
   }
 
 
@@ -275,8 +285,9 @@ function battleVictory(isVictory) {
 function fillFrontierSkills(player) {
   // 从后备技能列表头部取技能，直到前台技能数量达到最大值
   while (player.frontierSkills.length < player.maxFrontierSkills && player.backupSkills.length > 0) {
-    const skill = player.backupSkills.shift();
-    player.frontierSkills.push(skill);
+    drawSkillCard(player);
+    // const skill = player.backupSkills.shift();
+    // player.frontierSkills.push(skill);
   }
   
   // 触发技能列表更新事件
@@ -291,6 +302,8 @@ function handleSkillAfterUse(skill) {
   // 查找技能在前台技能列表中的位置
   const index = gameState.player.frontierSkills.findIndex(s => s === skill);
   if (index !== -1) {
+    // 首先，入队一个idle指令，保证后续动画在技能使用动画结束之后播放
+    enqueueUI('idle', {}, { blockBeforePreviousAnimations: true });
     if (skill.coldDownTurns !== 0 || skill.maxUses === Infinity || skill.remainingUses > 0) {
       // 如果是可充能/无限使用技能，或者充能有剩余，移动到后备技能列表尾部
       dropSkillCard(gameState.player, skill.uniqueID);
@@ -323,8 +336,14 @@ export function initializeBattleFlowListeners() {
   backendEventBus.on(EventNames.Battle.PLAYER_USE_SKILL, (uniqueID) => {
     const skill = gameState.player.frontierSkills.find(s => s.uniqueID === uniqueID);
     console.log('使用技能：', skill);
-    if (skill) useSkill(skill);
-    else {
+    if (skill) {
+      // 额外检查一次技能是否能使用，因为前端是异步动画，所以如果玩家操作过快则可能会尝试发动无法使用的技能
+      if(gameState.gameStage === 'battle' && gameState.isPlayerTurn && skill.canUse(gameState.player)) {
+        useSkill(skill);
+      } else {
+        console.warn(`技能使用失败：技能 ${skill.name} 当前无法使用。`);
+      }
+    } else {
       console.warn(`技能使用失败：前台技能列表中未找到id为 ${uniqueID} 的技能`);
       console.log(gameState.player.frontierSkills);
     }

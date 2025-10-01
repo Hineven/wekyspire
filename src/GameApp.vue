@@ -69,7 +69,7 @@ import AnimationOverlay from './components/AnimationOverlay.vue'
 import FloatingTooltip from './components/FloatingTooltip.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
-import orchestrator from './utils/animationOrchestrator.js';
+import orchestrator from './utils/cardAnimationOrchestrator.js';
 
 export default {
   name: 'App',

@@ -144,9 +144,19 @@ export function drawSkillCard(player, number = 1) {
       // addBattleLog('你的后备技能已空，无法抽取更多卡牌！');
       break;
     }
-    // 对于入手而言，动画是自动编排的，所以这里无需手动触发
+    // 对于入手而言，动画由后端统一触发
     const firstSkill = player.backupSkills.shift();
     player.frontierSkills.push(firstSkill);
+
+    // 手动触发入手动画，与其他卡牌动画保持一致（等待前序动画完成）
+    if (firstSkill && firstSkill.uniqueID) {
+      enqueueUI(
+        'animateCardById',
+        { id: firstSkill.uniqueID, kind: 'appearFromDeck', options: { durationMs: 450, startScale: 0.6, fade: true } },
+        { duration: 0, blockBeforePreviousAnimations: true }
+      );
+    }
+
     if(number === 1) return firstSkill;
   }
 }

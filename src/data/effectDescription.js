@@ -42,6 +42,13 @@ const effectDescriptions = {
     icon: '🔥',
     color: '#FF8C00' // 深橙色
   },
+  '火焰主宰': {
+    name: '火焰主宰',
+    description: '每3层燃烧提供1点灵能',
+    type: 'buff',
+    icon: '🔥',
+    color: '#FF4500' // 橙红色
+  },
 
   // 回合开始时触发的效果
   '泉涌': {

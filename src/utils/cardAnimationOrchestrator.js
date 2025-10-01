@@ -1,8 +1,9 @@
-// 全局动画编排器（DOM + GSAP）
-// 职责：
-// - 初始化 overlay/anchors/ghost 容器引用
-// - 生成“幽灵”克隆元素并用 transform 动画
-// - 仅通过 animateById 进行动画调度与 ghost 创建，其他路径不再创建 ghost
+// 全局卡牌动画编排器（DOM + GSAP）
+// 仅管理“卡牌相关”的复杂动画，不负责其它类型动画。
+// 特性：
+// - 对每一张卡片（按 uniqueID）维护一个“异步动画播放队列”：
+//   同一张卡的动画指令会按顺序串行执行，不会相互打断；不同卡片的动画可并发播放。
+// - 通过 animateById 进行动画调度与 ghost 创建，其他路径不再创建 ghost。
 
 import frontendEventBus from '../frontendEventBus.js';
 import gsap from 'gsap';
@@ -96,9 +97,7 @@ const orchestrator = {
       position: 'absolute',
       left: `${startRect.left}px`,
       top: `${startRect.top}px`,
-      // 以下设置似乎会引起未知故障，先注释掉
-      // width: `${startRect.width}px`,
-      // height: `${startRect.height}px`,
+      // width/height 直接赋值可能引起未知故障，暂不设置
       margin: '0',
       transformOrigin: 'center center',
       pointerEvents: 'none',
@@ -106,7 +105,7 @@ const orchestrator = {
     ghost.classList.add('animation-ghost');
     this.ghostContainerEl.appendChild(ghost);
     gsap.set(ghost, { x: 0, y: 0, force3D: true });
-    // 保险：禁用克隆来的 CSS 动画，避免与 GSAP transform 冲突
+    // 禁用克隆来的 CSS 动画，避免与 GSAP transform 冲突
     ghost.classList.remove('activating');
     ghost.style.animation = 'none';
     ghost.style.animationName = 'none';

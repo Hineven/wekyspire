@@ -88,7 +88,7 @@ export class SearingHeat extends Skill {
     this.baseColdDownTurns = 2;
   }
   get damage() {
-    return Math.max(8 + 4 * this.power, 1);
+    return Math.max(10 + 4 * this.power, 1);
   }
   getDamage (player) {
     return this.damage + player.magic * 2;
@@ -273,7 +273,6 @@ export class DisperseFire extends Skill {
 export class ScorchingCurse extends Skill {
   constructor() {
     super('炽热诅咒', 'fire', 2, 1, 1, 1);
-    this.subtitle = '炽热诅咒';
     this.baseColdDownTurns = 3;
   }
 

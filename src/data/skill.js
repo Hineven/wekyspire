@@ -81,7 +81,7 @@ class Skill {
 
   // 战斗开始时调用，用于初始化技能
   onBattleStart() {
-    if(this.slowStart) {
+    if(!this.slowStart) {
       this.remainingUses = this.maxUses;
       this.remainingColdDownTurns = this.coldDownTurns;
     } else {
