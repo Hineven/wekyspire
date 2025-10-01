@@ -23,7 +23,7 @@
       :logs="logs"
       :enemy="enemy"
     />
-    
+
     <!-- 操作面板 -->
     <ActionPanel
       :player="player"
@@ -46,7 +46,7 @@ export default {
     BattleLogPanel,
     EnemyStatusPanel,
     PlayerStatusPanel,
-    ActionPanel
+    ActionPanel,
   },
   props: {
     player: { type: Object, required: true },
@@ -57,7 +57,7 @@ export default {
   },
   data() {
     return {
-      logs: []
+      logs: [],
     };
   },
   mounted() {
@@ -75,7 +75,7 @@ export default {
     },
     onClearBattleLog() {
       this.logs = [];
-    }
+    },
   }
 };
 </script>

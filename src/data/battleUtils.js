@@ -4,7 +4,7 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
-import {enqueueAnimateCardById} from "./animationInstructionHelpers";
+import {captureSnapshot, enqueueAnimateCardById, enqueueState} from "./animationInstructionHelpers";
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -135,6 +135,8 @@ export function applyHeal(target, heal) {
 }
 
 export function drawSkillCard(player, number = 1) {
+  let returnSkill = null;
+  let ids = [];
   for (let i = 0; i < number; i++) {
     if (player.frontierSkills.length >= player.maxHandSize) {
       // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
@@ -146,17 +148,24 @@ export function drawSkillCard(player, number = 1) {
     }
     // 对于入手而言，动画由后端统一触发
     const firstSkill = player.backupSkills.shift();
-    player.frontierSkills.push(firstSkill);
 
     // 手动触发入手动画，与其他卡牌动画保持一致（等待前序动画完成）
     if (firstSkill && firstSkill.uniqueID) {
-      enqueueAnimateCardById(
-        { id: firstSkill.uniqueID, kind: 'appearFromDeck', options: { durationMs: 450, startScale: 0.6, fade: true } }
-      );
+      player.frontierSkills.push(firstSkill);
+      ids.push(firstSkill.uniqueID);
     }
-
-    if(number === 1) return firstSkill;
+    if(i === 0) {
+      returnSkill = firstSkill;
+    }
   }
+  enqueueState({snapshot: captureSnapshot(), durationMs: 0});
+  ids.forEach((id) => {
+    enqueueAnimateCardById(
+      {id: id, kind: 'appearFromDeck', options: {durationMs: 500, startScale: 0.6, fade: true}},
+      {waitTags: ['state', 'ui'], durationMs: 200}
+    );
+  });
+  return returnSkill;
 }
 
 export function dropSkillCard(player, skillID) {

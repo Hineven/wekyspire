@@ -30,6 +30,8 @@ export function enterBattleStage() {
 
   // 切换游戏状态到战斗状态
   gameState.gameStage = 'battle';
+  // 等待一下，方便战斗界面组件挂载
+  enqueueDelay(500);
 
   // 进入游戏控制流
   backendEventBus.emit(EventNames.Battle.BATTLE_START);
@@ -42,6 +44,9 @@ function startBattle() {
     .filter(skill => skill !== null)
     .map(skill => cloneSkill(skill));
 
+  // 添加战斗日志
+  addSystemLog(`战斗 #${gameState.battleCount} 开始！`);
+  addSystemLog(`遭遇了 ${gameState.enemy.name}！`);
 
   // 初始化前台和后备技能列表
   gameState.player.backupSkills = [...gameState.player.skills];
@@ -54,10 +59,6 @@ function startBattle() {
   gameState.player.skills.forEach(skill => {
     skill.onBattleStart();
   });
-
-  // 添加战斗日志
-  addSystemLog(`战斗 #${gameState.battleCount} 开始！`);
-  addSystemLog(`遭遇了 ${gameState.enemy.name}！`);
 
   // 开始玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
@@ -91,7 +92,6 @@ function startPlayerTurn() {
     backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN, {});
     return;
   }
-
   enqueueUnlockControl();
 
   // 等待玩家操作
@@ -157,9 +157,12 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'});
+  // 为了增强“动画响应感”，此动画不等待前置动画结束即可立刻执行
+  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'}, {
+    tags: ['ui'], waitTags: []
+  });
 
-  // 增设一条idle动画指令，确保animateCardByID动画完成后才开始播放卡牌发动带来的各种效果的动画
+  // 增设一条idle动画指令作为barrier，确保animateCardByID动画完成后才开始播放卡牌发动带来的各种效果的动画
   enqueueDelay(0);
 
   // 资源结算（后端状态）
@@ -191,6 +194,12 @@ export function dropLeftmostSkill() {
 
 // 结束玩家回合
 function endPlayerTurn() {
+  if(gameState.isEnemyTurn) {
+    console.warn('当前不是玩家回合，无法结束玩家回合。');
+    return ;
+  }
+  // 马上锁定，防止玩家反复点击结束回合
+  enqueueLockControl();
   // 回合结束时结算效果（使用修正后的玩家）
   const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   processEndOfTurnEffects(modPlayer);
@@ -283,12 +292,12 @@ function battleVictory(isVictory) {
 }
 
 function fillFrontierSkills(player) {
-  // 从后备技能列表头部取技能，直到前台技能数量达到最大值
-  while (player.frontierSkills.length < player.maxFrontierSkills && player.backupSkills.length > 0) {
-    drawSkillCard(player);
-    // const skill = player.backupSkills.shift();
-    // player.frontierSkills.push(skill);
-  }
+  // 从后备技能列表头部取技能，直到前台技能数量达到最大值或抽取数达标
+  const numCardsToDraw = Math.min(
+    player.maxFrontierSkills - player.frontierSkills.length,
+    player.drawFrontierSkills
+  );
+  drawSkillCard(player, numCardsToDraw);
   
   // 触发技能列表更新事件
   backendEventBus.emit(EventNames.Player.FRONTIER_UPDATED, {

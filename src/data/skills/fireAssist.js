@@ -170,10 +170,8 @@ export class Firework extends Skill {
       }
       const skill = player.frontierSkills[0];
       dropSkillCard(player, skill.uniqueID);
-      enqueueDelay(200);
       player.addEffect('燃烧', this.stacks);
       enemy.addEffect('燃烧', this.stacks);
-      enqueueDelay(500);
     }
     return true;
   }
@@ -211,7 +209,6 @@ export class WarmHug extends Skill {
       const stacks = this.getStacks(player);
       player.removeEffect('燃烧', Math.min(stacks, player.effects['燃烧'] || 0));
       enemy.addEffect('燃烧', stacks);
-      enqueueDelay(500);
       return true;
     }
   }
@@ -252,7 +249,6 @@ export class DisperseFire extends Skill {
           break;
         }
         dropSkillCard(player, skill.uniqueID);
-        enqueueDelay(300);
       }
       return false;
     } else {

@@ -2,8 +2,10 @@
   <div class="action-panel" :class="{ 'disabled': !isPlayerTurn || isControlDisabled }">
     <SkillsHand
       :player="player"
+      :skills="player?.frontierSkills || []"
       :is-control-disabled="isControlDisabled"
       :is-player-turn="isPlayerTurn"
+      :instant-appear="false"
     />
 
     <!-- 使用独立的 DeckIcon 组件作为牌库图标与锚点 -->

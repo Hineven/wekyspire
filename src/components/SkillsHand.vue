@@ -41,7 +41,11 @@ export default {
     isControlDisabled: { type: Boolean, default: false },
     isPlayerTurn: { type: Boolean, default: true },
     // 休整时（PreparationPanel）开启拖拽；战斗时（ActionPanel）关闭
-    draggable: { type: Boolean, default: false }
+    draggable: { type: Boolean, default: false },
+    // 进入手中的卡牌是否立刻出现
+    instantAppear: { type: Boolean, default: false },
+    // 是否监听全局的 card-appear-finished 事件（关闭则不等待该事件，直接显示）
+    listenCardAppearFinished: { type: Boolean, default: true }
   },
   data() {
     return {
@@ -71,7 +75,7 @@ export default {
       return (this.player?.frontierSkills || []).filter(Boolean);
     },
     visibleIds() {
-      return this.visibleSkills.map(s => s.uniqueID);
+      return this.visibleSkills.map(s => s.uniqueID).filter(Boolean);
     },
     // 基于容器/悬浮/拖拽插槽来计算每张卡的位置
     layout() {
@@ -155,7 +159,9 @@ export default {
     }
   },
   mounted() {
-    frontendEventBus.on('card-appear-finished', this.onCardAppearFinished);
+    if (this.listenCardAppearFinished) {
+      frontendEventBus.on('card-appear-finished', this.onCardAppearFinished);
+    }
 
     this._ro = new ResizeObserver(entries => {
       for (const entry of entries) {
@@ -190,7 +196,6 @@ export default {
     visibleIds: {
       immediate: true,
       handler(newIds, oldIds) {
-        // 仅在初次（immediate）触发时跳过动画；后续即使 oldIds 为空数组也应触发“从空到有”的入场动画
         if (oldIds == null) {
           this.prevIds = [...newIds];
           return;
@@ -199,6 +204,16 @@ export default {
         const added = newIds.filter(id => !prevSet.has(id));
         this.prevIds = [...newIds];
         if (added.length === 0) return;
+        // 若未监听 card-appear-finished，则不等待该事件，直接显示
+        if (!this.listenCardAppearFinished) {
+          added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
+          return;
+        }
+        // 若禁用入场动画，直接显示
+        if (this.instantAppear) {
+          added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
+          return;
+        }
         // 标记为“入场中”，等待 orchestrator 的 card-appear-finished 清理；添加兜底定时器
         added.forEach(id => { this.appearing[id] = true; });
         this.$nextTick(() => {
@@ -209,6 +224,7 @@ export default {
   },
   methods: {
     onCardAppearFinished(payload = {}) {
+      console.log('收到 card-appear-finished 事件', payload);
       const id = payload?.id;
       if (id != null && this.appearing[id]) {
         delete this.appearing[id];

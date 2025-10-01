@@ -71,15 +71,31 @@ function createInstanceFromBackendNode(bEl) {
 function reconcileArrayById(sArr, dArr, bArr) {
   const idKey = getIdKeyFromArray(sArr) || getIdKeyFromArray(bArr);
   if (!idKey) return false;
+  // Build id -> dest element map
   const dstMap = new Map();
   for (let i = 0; i < dArr.length; i++) {
     const el = dArr[i];
     if (el && typeof el === 'object' && idKey in el) dstMap.set(el[idKey], el);
   }
+  // Build id -> backend element map (to preserve prototypes correctly)
+  const bMap = new Map();
+  if (Array.isArray(bArr)) {
+    for (let i = 0; i < bArr.length; i++) {
+      const bel = bArr[i];
+      if (bel && typeof bel === 'object' && idKey in bel) bMap.set(bel[idKey], bel);
+    }
+  }
+
   const newArr = new Array(sArr.length);
   for (let i = 0; i < sArr.length; i++) {
     const sEl = sArr[i];
-    const bEl = Array.isArray(bArr) ? bArr[i] : undefined;
+    // Prefer backend node by id match; fallback to index
+    let bEl = undefined;
+    if (sEl && typeof sEl === 'object' && idKey in sEl) {
+      bEl = bMap.get(sEl[idKey]);
+    }
+    if (bEl === undefined && Array.isArray(bArr)) bEl = bArr[i];
+
     if (sEl && typeof sEl === 'object' && idKey in sEl) {
       const id = sEl[idKey];
       let target = dstMap.get(id);
@@ -87,8 +103,8 @@ function reconcileArrayById(sArr, dArr, bArr) {
       applyProjectionToDisplay(sEl, target, bEl);
       newArr[i] = target;
     } else if (sEl && typeof sEl === 'object') {
-      let target = (Array.isArray(bArr) && bArr[i]) ? createInstanceFromBackendNode(bArr[i]) : {};
-      applyProjectionToDisplay(sEl, target, Array.isArray(bArr) ? bArr[i] : undefined);
+      let target = bEl ? createInstanceFromBackendNode(bEl) : {};
+      applyProjectionToDisplay(sEl, target, bEl);
       newArr[i] = target;
     } else {
       newArr[i] = sEl;
@@ -188,7 +204,7 @@ export function captureSnapshot() {
 }
 
 // 默认的状态同步“虚拟动画”时长
-export const DEFAULT_STATE_CHANGE_DURATION = 400;
+export const DEFAULT_STATE_CHANGE_DURATION = 200;
 
 function computeWaitTags(options = {}) {
   const explicit = options.waitTags;
@@ -200,12 +216,12 @@ function computeWaitTags(options = {}) {
 }
 
 // 对外暴露：将一次状态同步作为指令推入 sequencer
-export function enqueueState({ snapshot, durationMs } = {}) {
+export function enqueueState({ snapshot, durationMs, waitTags } = {}) {
   const snap = snapshot || captureSnapshot();
   const dur = typeof durationMs === 'number' ? durationMs : DEFAULT_STATE_CHANGE_DURATION;
   return animationSequencer.enqueueInstruction({
     tags: ['state'],
-    waitTags: ['all'],
+    waitTags: waitTags || ['all'],
     durationMs: dur,
     start: () => {
       try {
@@ -413,19 +429,21 @@ export function enqueueClearCardAnimations({ tags = ['ui'], waitTags, durationMs
 
 // 控制锁定/解锁（直接修改 display 层计数，立即完成）
 export function enqueueLockControl(options = {}) {
+  console.log('lock!');
   return enqueueInstruction({
-    tags: ['ui'],
-    waitTags: computeWaitTags(options),
+    tags: ['ui', 'locking'],
+    waitTags: ['locking'], // 锁定时不等待任何前序（除了解锁/锁定），尽快生效
     durationMs: options.duration ?? 0,
-    start: () => { displayGameState.controlDisableCount = (displayGameState.controlDisableCount || 0) + 1; },
+    start: () => { displayGameState.controlDisableCount = 1; },
   });
 }
 export function enqueueUnlockControl(options = {}) {
+  console.log('unlock!');
   return enqueueInstruction({
-    tags: ['ui'],
-    waitTags: computeWaitTags(options),
+    tags: ['ui', 'locking'],
+    waitTags: ['all'], // 解锁时总是等待所有前序完成，避免过早解锁
     durationMs: options.duration ?? 0,
-    start: () => { displayGameState.controlDisableCount = Math.max(0, (displayGameState.controlDisableCount || 0) - 1); },
+    start: () => { displayGameState.controlDisableCount = 0; },
   });
 }
 

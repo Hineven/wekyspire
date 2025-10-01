@@ -95,7 +95,8 @@ export class Player extends Unit {
     this.skills = []; // 场上技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
-    this.maxFrontierSkills = 8; // 最大前台技能数量
+    this.maxFrontierSkills = 10; // 最大前台技能数量
+    this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
     this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
     this.abilities = []; // 玩家能力列表

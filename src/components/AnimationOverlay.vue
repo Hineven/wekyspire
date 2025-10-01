@@ -37,11 +37,11 @@ export default {
   width: 0;
   height: 0;
 }
-/* 中心舞台：屏幕正中 */
+/* 中心舞台：屏幕正中（略上移以对齐 center-cards 展示区） */
 .center-anchor {
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -40%);
 }
 /* 牌库锚点：屏幕右下，适当留边距 */
 .deck-anchor {
