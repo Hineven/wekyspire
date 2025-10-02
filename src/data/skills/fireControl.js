@@ -14,7 +14,7 @@ export class FireControlI extends Skill {
     return Math.max(2 + this.power, 0);
   }
 
-  getStack(player) {
+  getStacks(player) {
     return this.stack + player.magic;
   }
 

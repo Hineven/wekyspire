@@ -386,7 +386,7 @@ export class FireAssistance extends Skill {
   use(player, enemy, stage) {
     const burnEffect = player.effects['燃烧'];
     if (burnEffect) {
-      const convertableStacks = Math.ceil(burnEffect.stacks / this.conversionRate);
+      const convertableStacks = Math.ceil(burnEffect / this.conversionRate);
       player.removeEffect('燃烧', burnEffect);
       player.addEffect('集中', convertableStacks);
     }
@@ -401,7 +401,7 @@ export class FireAssistance extends Skill {
 // 抽牌焚毁，赋予【3 + 灵能】层燃烧，重复
 export class GiveFire extends Skill {
   constructor() {
-    super('奉予烈焰', 'fire', 3, 1, 1, 2);
+    super('奉予烈焰', 'fire', 3, 1, 1, 1);
     this.baseColdDownTurns = 4;
   }
   get stacks() {
@@ -492,7 +492,7 @@ export class DualExtinction extends Skill {
     if(player) {
       return `获得并赋予${this.getStacks(player)}层/effect{燃烧}`;
     }
-    return `获得并赋予【${this.stacks} + 3*named{灵能}】层/effect{燃烧}`;
+    return `获得并赋予【${this.stacks} + 3*/named{灵能}】层/effect{燃烧}`;
   }
 }
 

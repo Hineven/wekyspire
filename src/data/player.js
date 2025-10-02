@@ -146,6 +146,10 @@ export class Player extends Unit {
     return current;
   }
 
+  canDropFirstSkill() {
+    return this.frontierSkills.length > 0 && this.remainingActionPoints > 0;
+  }
+
   addBackupSkill (skill) {
     this.backupSkills.push(skill);
   }

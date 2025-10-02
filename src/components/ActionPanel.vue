@@ -47,6 +47,7 @@ import CardsDisplayOverlayPanel from './CardsDisplayOverlayPanel.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus';
 import orchestrator from '../utils/cardAnimationOrchestrator.js';
+import {backendGameState} from "../data/gameState";
 
 export default {
   name: 'ActionPanel',
@@ -64,7 +65,8 @@ export default {
   },
   computed: {
     canDropSkill() {
-      return (this.isPlayerTurn && !this.isControlDisabled && this.player.remainingActionPoints > 0);
+      const canDropSkillV = backendGameState.player.canDropFirstSkill();
+      return (this.isPlayerTurn && !this.isControlDisabled && canDropSkillV);
     },
     backupSkillsCount() {
       return (this.player?.backupSkills || []).length;
