@@ -9,10 +9,17 @@ import frontendEventBus from '../frontendEventBus.js';
 
 // 内部：S 子集规则
 function isWritableProperty(target, key) {
-  const desc = Object.getOwnPropertyDescriptor(target, key);
-  if (!desc) return true;
-  if (typeof desc.get === 'function' && typeof desc.set !== 'function') return false;
-  if (desc.writable === false) return false;
+  // 查找自身及原型链的属性描述符，避免向仅 getter 的访问器属性赋值
+  let cur = target;
+  let desc = undefined;
+  while (cur) {
+    desc = Object.getOwnPropertyDescriptor(cur, key);
+    if (desc) break;
+    cur = Object.getPrototypeOf(cur);
+  }
+  if (!desc) return true; // 未定义则可安全写入（会创建自有属性）
+  if (typeof desc.get === 'function' && typeof desc.set !== 'function') return false; // getter-only
+  if (desc.writable === false) return false; // 数据属性非可写
   return true;
 }
 
@@ -445,6 +452,35 @@ export function enqueueUnlockControl(options = {}) {
   });
 }
 
+// 受伤/治疗动画指令：由后端调用，以动画节奏发送到前端
+export function enqueueHurtAnimation({ unitId, hpDamage = 0, passThroughDamage = 0 } = {}) {
+  // 计算一个与现有实现接近的时长：
+  const isHealing = hpDamage < 0;
+  const durationMs = isHealing ? 400 : Math.min(200 + Math.max(0, passThroughDamage) * 2, 600);
+  return enqueueInstruction({
+    tags: ['ui'],
+    waitTags: ['all'],
+    durationMs,
+    start: ({ emit }) => {
+      try { emit('unit-hurt', { unitId, hpDamage, passThroughDamage }); } catch (_) {}
+    }
+  });
+}
+
+// 死亡动画指令
+export function enqueueUnitDeath({ unitId } = {}) {
+  // 参考 HurtAnimationWrapper：抖动/闪烁/爆炸总计 ~1400ms
+  const durationMs = 1500;
+  return enqueueInstruction({
+    tags: ['ui'],
+    waitTags: ['all'],
+    durationMs,
+    start: ({ emit }) => {
+      try { emit('unit-death', { unitId }); } catch (_) {}
+    }
+  });
+}
+
 export default {
   captureSnapshot,
   applyProjectionToDisplay,
@@ -462,4 +498,6 @@ export default {
   enqueueLockControl,
   enqueueUnlockControl,
   DEFAULT_STATE_CHANGE_DURATION,
+  enqueueHurtAnimation,
+  enqueueUnitDeath,
 };

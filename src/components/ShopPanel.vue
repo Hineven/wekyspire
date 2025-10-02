@@ -1,6 +1,5 @@
 <template>
-  <transition-group name="slide" tag="div" class="shop-panel-wrapper">
-  <div class="shop-panel" v-if="isVisible" key="panel">
+  <div class="shop-panel" key="panel">
     <h2>商店</h2>
     <div class="shop-items">
       <div 
@@ -26,7 +25,6 @@
     </div>
     <button @click="$emit('close')">离开</button>
   </div>
-  </transition-group>
 </template>
 
 <script>
@@ -47,10 +45,6 @@ export default {
     gameState: {
       type: Object,
       required: true
-    },
-    isVisible: {
-      type: Boolean,
-      default: false
     }
   },
   methods: {
@@ -222,31 +216,5 @@ button {
 
 button:hover {
   background-color: #616161; /* 深灰色 */
-}
-
-/* 滑动进入和退出动画 */
-.slide-enter-active, .slide-leave-active {
-  transition: all 0.5s ease;
-}
-
-.slide-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.slide-leave-to {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.slide-enter-to, .slide-leave-from {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-/* 为transition-group添加样式 */
-.shop-panel-wrapper {
-  display: flex;
-  justify-content: center;
 }
 </style>

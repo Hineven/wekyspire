@@ -5,7 +5,7 @@
     @mouseenter="showTooltip"
     @mousemove="onMouseMove"
     @mouseleave="hideTooltip"
-    :class="{ 'scale-animation': isScaling }"
+    :class="{ 'stat-bump': isScaling }"
   >
     {{ effectIcon }}
     {{ effectName }}
@@ -111,16 +111,7 @@ export default {
   cursor: help;
   margin: 0 2px;
   font-weight: bold;
-  transition: transform 0.5s ease;
+  will-change: transform;
 }
-
-.effect-icon.scale-animation {
-  animation: scaleEffect 0.5s ease;
-}
-
-@keyframes scaleEffect {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.3); }
-  100% { transform: scale(1); }
-}
+/* 使用全局的 .stat-bump 动画（见 src/assets/common.css） */
 </style>

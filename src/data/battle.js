@@ -50,9 +50,10 @@ function startBattle() {
   addSystemLog(`战斗 #${gameState.battleCount} 开始！`);
   addSystemLog(`遭遇了 ${gameState.enemy.name}！`);
 
-  // 初始化前台和后备技能列表
+  // 初始化前台/后备/坟地技能列表
   gameState.player.backupSkills = [...gameState.player.skills];
   gameState.player.frontierSkills = [];
+  gameState.player.burntSkills = [];
 
   // 搞定后立刻锁定操作面板
   enqueueLockControl();
@@ -278,9 +279,10 @@ function battleVictory(isVictory) {
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
   enqueueDelay(3000);
-  // 之后再把前台和后备技能列表清空
+  // 之后再把前台/后备/坟地技能列表清空
   gameState.player.frontierSkills = [];
   gameState.player.backupSkills = [];
+  gameState.player.burntSkills = [];
 
   // 清理掉卡牌ghost
   enqueueClearCardAnimations();

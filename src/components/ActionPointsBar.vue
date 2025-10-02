@@ -1,6 +1,6 @@
 <template>
   <div class="action-points-bar">
-    <div class="action-points-text">⚡行动点 {{ player.remainingActionPoints }}/{{ player.maxActionPoints }}</div>
+    <div class="action-points-text" ref="apText">⚡行动点 {{ player.remainingActionPoints }}/{{ player.maxActionPoints }}</div>
     <div class="action-points-dots">
       <BarPoint
         v-for="(dot, index) in actionPointsDots" 
@@ -71,6 +71,28 @@ export default {
       this.highlightedActionPointCost = 0;
     },
 
+    // 触发缩放动画
+    triggerBump(el) {
+      if (!el) return;
+      el.classList.remove('stat-bump');
+      // 强制回流以重启动画
+      // eslint-disable-next-line no-unused-expressions
+      el.offsetWidth;
+      el.classList.add('stat-bump');
+      const onEnd = () => {
+        el.classList.remove('stat-bump');
+        el.removeEventListener('animationend', onEnd);
+      };
+      el.addEventListener('animationend', onEnd);
+    }
+  },
+  watch: {
+    'player.remainingActionPoints'(nv, ov) {
+      if (nv !== ov) this.$nextTick(() => this.triggerBump(this.$refs.apText));
+    },
+    'player.maxActionPoints'(nv, ov) {
+      if (nv !== ov) this.$nextTick(() => this.triggerBump(this.$refs.apText));
+    }
   }
 };
 </script>
@@ -91,5 +113,8 @@ export default {
   font-size: 14px;
   font-weight: bold;
   width: 100px;
+  will-change: transform;
 }
+
+/* 使用全局的 .stat-bump 动画（见 src/assets/common.css） */
 </style>

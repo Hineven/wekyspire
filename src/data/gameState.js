@@ -10,6 +10,9 @@ export function createGameState() {
     // 游戏阶段: 'start', 'battle', 'rest', 'end'
     gameStage: 'start',
 
+    // 休整界面阶段：'money' | 'breakthrough' | 'skill' | 'ability' | 'shop' | ''（不显示）
+    restScreenStage: '',
+
     // 是否开启了瑞米进行游戏
     isRemiPresent: false,
 

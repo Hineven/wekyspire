@@ -1,34 +1,25 @@
 <template>
   <div
-    class="deck-icon"
-    :title="`后备技能：${count} 张`"
-    @mouseenter="onEnter"
-    @mousemove="onMove"
-    @mouseleave="onLeave"
-    @click="onClick"
-    ref="root"
+      class="burnt-skills-icon"
+      :title="`焚毁技能：${count} 张`"
+      @mouseenter="onEnter"
+      @mousemove="onMove"
+      @mouseleave="onLeave"
+      @click="onClick"
+      ref="root"
   >
-    <span class="icon">🃏</span>
+    <span class="icon">🕳️</span>
     <span class="count" v-if="count > 0">{{ count }}</span>
-
-    <!-- 顶部卡牌预览 -->
-    <div v-if="showPreview && topSkill" class="preview-wrapper">
-      <SkillCard :skill="topSkill" :player="player" :preview-mode="true" />
-    </div>
   </div>
 </template>
 
 <script>
 import frontendEventBus from '../frontendEventBus.js';
-import SkillCard from './SkillCard.vue';
 
 export default {
-  name: 'DeckIcon',
-  components: { SkillCard },
+  name: 'BurntSkillsIcon',
   props: {
     count: { type: Number, default: 0 },
-    names: { type: Array, default: () => [] },
-    topSkill: { type: Object, default: null },
     player: { type: Object, default: null }
   },
   emits: ['click'],
@@ -56,12 +47,12 @@ export default {
     onEnter(e) {
       this.showPreview = true;
       const listHtml = this.names && this.names.length
-        ? `<ul style='padding-left:16px;margin:6px 0;'>${this.names.map(n => `<li>${n}</li>`).join('')}</ul>`
-        : '';
+          ? `<ul style='padding-left:16px;margin:6px 0;'>${this.names.map(n => `<li>${n}</li>`).join('')}</ul>`
+          : '';
       frontendEventBus.emit('tooltip:show', {
-        name: '牌库',
-        text: `后备技能：<strong>${this.count}</strong> 张${listHtml}`,
-        color: '#ffd54f',
+        name: '坟地',
+        text: `已焚毁技能：<strong>${this.count}</strong> 张${listHtml}`,
+        color: '#cd00c3',
         x: e.clientX,
         y: e.clientY,
         maxWidth: 260
@@ -82,10 +73,10 @@ export default {
 </script>
 
 <style scoped>
-.deck-icon {
+.burnt-skills-icon {
   position: absolute;
   right: 16px;
-  top: 16px;
+  top: -32px;
   width: 44px;
   height: 44px;
   border-radius: 8px;
@@ -100,8 +91,8 @@ export default {
   z-index: var(--z-overlay);
   will-change: transform;
 }
-.deck-icon .icon { font-size: 22px; line-height: 1; }
-.deck-icon .count {
+.burnt-skills-icon .icon { font-size: 22px; line-height: 1; }
+.burnt-skills-icon .count {
   position: absolute;
   bottom: -6px;
   right: -6px;
@@ -117,21 +108,5 @@ export default {
   align-items: center;
   justify-content: center;
   box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-}
-
-/* 预览卡牌容器，显示在icon附近 */
-.preview-wrapper {
-  position: absolute;
-  bottom: 26px; /* 显示在图标上方 */
-  right: 0;
-  z-index: var(--z-tooltip);
-  pointer-events: none; /* 不阻挡鼠标，避免影响悬浮区域 */
-  transform: translateY(0);
-}
-
-/* 让预览卡片稍微小一点（选择性） */
-.preview-wrapper :deep(.skill-card) {
-  transform: scale(0.9);
-  transform-origin: top right;
 }
 </style>

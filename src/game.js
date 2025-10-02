@@ -8,7 +8,7 @@ import {
   initializeBattleFlowListeners
 } from './data/battle.js'
 import {
-  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards
+  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage
 } from './data/rest.js'
 
 function startGame() {
@@ -20,8 +20,9 @@ function startGame() {
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
   const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
+  const initialSkill5 = SkillManager.getInstance().createSkill('冲锋盾');
 
-  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4];
+  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5];
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {
@@ -75,6 +76,8 @@ export function initGameFlowListeners() {
 
   backendEventBus.on(EventNames.Game.ENTER_REST_STAGE, () => {
     gameState.gameStage = 'rest';
+    // 由后端控制休整面板阶段
+    setInitialRestStage();
   });
 
   // 休整阶段：事件驱动的后端结算与流程推进

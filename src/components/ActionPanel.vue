@@ -18,12 +18,20 @@
       @click="onDeckClick"
     />
 
-    <!-- Deck 全屏覆盖面板 -->
-    <DeckOverlayPanel
-      v-if="showDeckOverlay"
-      :skills="player?.backupSkills || []"
+    <BurntSkillsIcon
+      v-if="player?.burntSkills?.length > 0"
+      :count="player.burntSkills.length"
       :player="player"
-      @close="showDeckOverlay = false"
+      @click="onBurntSkillsClick"
+    />
+
+    <!-- 卡牌列表覆盖面板（通用） -->
+    <CardsDisplayOverlayPanel
+      v-if="showDeckOverlay || showBurntSkillsOverlay"
+      :skills="showDeckOverlay ? (player?.backupSkills || []) : (player?.burntSkills || [])"
+      :player="player"
+      :title="showDeckOverlay ? '牌库' : '坟地'"
+      @close="showDeckOverlay = false; showBurntSkillsOverlay = false"
     />
 
     <button @click="onDropSkillButtonClicked" :disabled="!canDropSkill">⚡1 丢弃头部技能</button>
@@ -34,14 +42,15 @@
 <script>
 import SkillsHand from './SkillsHand.vue';
 import DeckIcon from './DeckIcon.vue';
-import DeckOverlayPanel from './DeckOverlayPanel.vue';
+import BurntSkillsIcon from './BurntSkillsIcon.vue';
+import CardsDisplayOverlayPanel from './CardsDisplayOverlayPanel.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus';
 import orchestrator from '../utils/cardAnimationOrchestrator.js';
 
 export default {
   name: 'ActionPanel',
-  components: { SkillsHand, DeckIcon, DeckOverlayPanel },
+  components: { SkillsHand, DeckIcon, BurntSkillsIcon, CardsDisplayOverlayPanel },
   props: {
     player: { type: Object, required: true },
     isPlayerTurn: { type: Boolean, default: true }
@@ -49,6 +58,7 @@ export default {
   data() {
     return {
       showDeckOverlay: false,
+      showBurntSkillsOverlay: false,
       isControlDisabled: true // 可以通过外部事件控制面板禁用
     };
   },
@@ -98,6 +108,14 @@ export default {
     onDeckClick() {
       // 打开牌库覆盖面板，并隐藏悬浮tooltip
       this.showDeckOverlay = true;
+      frontendEventBus.emit('tooltip:hide');
+    },
+    onBurntSkillsClick() {
+      const burntSkills = this.player?.burntSkills || [];
+      if (burntSkills.length === 0) return;
+      // 打开烧毁技能覆盖面板
+      this.showBurntSkillsOverlay = true;
+      // 隐藏悬浮tooltip
       frontendEventBus.emit('tooltip:hide');
     }
   }

@@ -1,19 +1,17 @@
 <template>
-  <transition-group name="slide" tag="div" class="skill-reward-panel-wrapper">
-    <div class="skill-reward-panel" v-if="isVisible" key="panel">
-      <h2>选择一个技能！</h2>
-      <div class="skill-cards">
-        <SkillCard
-          v-for="(skill, index) in skills" 
-          :key="skill.uniqueID"
-          :skill="skill"
-          :preview-mode="true"
-          @skill-card-clicked="onSkillCardClicked"
-        />
-      </div>
-      <button @click="closePanel">放弃</button>
+  <div class="skill-reward-panel" key="panel">
+    <h2>选择一个技能！</h2>
+    <div class="skill-cards">
+      <SkillCard
+        v-for="(skill, index) in skills"
+        :key="skill.uniqueID"
+        :skill="skill"
+        :preview-mode="true"
+        @skill-card-clicked="onSkillCardClicked"
+      />
     </div>
-  </transition-group>
+    <button @click="closePanel">放弃</button>
+  </div>
 </template>
 
 <script>
@@ -27,10 +25,6 @@ export default {
     skills: {
       type: Array,
       default: () => []
-    },
-    isVisible: {
-      type: Boolean,
-      default: false
     }
   },
   methods: {
@@ -98,31 +92,5 @@ button {
 
 button:hover:not(:disabled) {
   background-color: #43a047; /* 深一点的绿色 */
-}
-
-/* 滑动进入和退出动画 */
-.slide-enter-active, .slide-leave-active {
-  transition: all 0.5s ease;
-}
-
-.slide-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.slide-leave-to {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.slide-enter-to, .slide-leave-from {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-/* 为transition-group添加样式 */
-.skill-reward-panel-wrapper {
-  display: flex;
-  justify-content: center;
 }
 </style>

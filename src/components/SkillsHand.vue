@@ -16,6 +16,7 @@
         :player-mana="(player && player.mana != null) ? player.mana : Infinity"
         :can-click="draggable || (isPlayerTurn && !isControlDisabled && canUseSkill(skill))"
         :suppress-activation-animation-on-click="true"
+        :auto-register-in-registry="false"
         :ref="el => setCardRef(el, skill.uniqueID)"
         @skill-card-clicked="onSkillCardClicked"
       />

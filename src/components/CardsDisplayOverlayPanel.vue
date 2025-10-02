@@ -3,7 +3,7 @@
     <div v-if="visible" class="deck-overlay" @click="onClose">
       <transition name="panel-scale" appear>
         <div class="deck-content">
-          <h2 class="title">牌库（{{ skills.length }}）</h2>
+          <h2 class="title">{{ title }}（{{ skills.length }}）</h2>
           <div class="grid">
             <SkillCard
               v-for="s in skills"
@@ -25,11 +25,12 @@
 import SkillCard from './SkillCard.vue';
 
 export default {
-  name: 'DeckOverlayPanel',
+  name: 'CardsDisplayOverlayPanel',
   components: { SkillCard },
   props: {
     skills: { type: Array, default: () => [] },
-    player: { type: Object, default: null }
+    player: { type: Object, default: null },
+    title: { type: String, default: '牌库' }
   },
   emits: ['close'],
   data() {
@@ -114,3 +115,4 @@ export default {
   opacity: 0;
 }
 </style>
+
