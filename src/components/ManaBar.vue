@@ -1,6 +1,6 @@
 <template>
   <div class="mana-bar">
-    <div class="mana-text">💧魏启 {{ player.mana }}/{{ player.maxMana }}</div>
+    <div class="mana-text" ref="manaText">💧魏启 {{ player.mana }}/{{ player.maxMana }}</div>
     <div class="mana-dots">
       <BarPoint
         v-for="(dot, index) in manaDots" 
@@ -71,6 +71,28 @@ export default {
       this.highlightedManaCost = 0;
     },
 
+    // 触发缩放动画
+    triggerBump(el) {
+      if (!el) return;
+      el.classList.remove('stat-bump');
+      // 强制回流
+      // eslint-disable-next-line no-unused-expressions
+      el.offsetWidth;
+      el.classList.add('stat-bump');
+      const onEnd = () => {
+        el.classList.remove('stat-bump');
+        el.removeEventListener('animationend', onEnd);
+      };
+      el.addEventListener('animationend', onEnd);
+    }
+  },
+  watch: {
+    'player.mana'(nv, ov) {
+      if (nv !== ov) this.$nextTick(() => this.triggerBump(this.$refs.manaText));
+    },
+    'player.maxMana'(nv, ov) {
+      if (nv !== ov) this.$nextTick(() => this.triggerBump(this.$refs.manaText));
+    }
   }
 };
 </script>
@@ -91,5 +113,8 @@ export default {
   font-size: 14px;
   font-weight: bold;
   width: 100px;
+  will-change: transform;
 }
+
+/* 使用全局的 .stat-bump 动画（见 src/assets/common.css） */
 </style>

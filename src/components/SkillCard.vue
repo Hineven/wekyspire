@@ -5,6 +5,7 @@
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
     :style="skillCardStyle"
+    ref="root"
   >
     <div class="skill-card-background-paper"></div>
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
@@ -40,6 +41,7 @@ import SkillCosts from './skillCard/SkillCosts.vue';
 import SkillUses from './skillCard/SkillUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../utils/colorUtils";
+import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
 
 export default {
   name: 'SkillCard',
@@ -51,10 +53,12 @@ export default {
     playerMana: { type: Number, default: Infinity },
     previewMode: { type: Boolean, default: false },
     canClick: { type: Boolean, default: true },
-    suppressActivationAnimationOnClick: { type: Boolean, default: false }
+    suppressActivationAnimationOnClick: { type: Boolean, default: false },
+    // 当父组件已手动注册 DOM（如 SkillsHand）时，关闭此项以避免重复注册
+    autoRegisterInRegistry: { type: Boolean, default: true }
   },
   data() {
-    return { hovered: false };
+    return { hovered: false, _registeredSelf: false };
   },
   computed: {
     skillDescription() {
@@ -91,6 +95,18 @@ export default {
     },
     skillCardImageStyle() {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
+    }
+  },
+  mounted() {
+    // 仅在需要时由组件自身注册到全局卡片DOM注册表
+    if (this.autoRegisterInRegistry) {
+      try { registerCardEl(this.skill?.uniqueID, this.$refs.root); this._registeredSelf = true; } catch (_) {}
+    }
+  },
+  beforeUnmount() {
+    if (this._registeredSelf) {
+      try { unregisterCardEl(this.skill?.uniqueID, this.$refs.root); } catch (_) {}
+      this._registeredSelf = false;
     }
   },
   methods: {

@@ -29,14 +29,8 @@ import frontendEventBus from '../frontendEventBus.js';
 export default {
   name: 'HurtAnimationWrapper',
   props: {
-    unit: {
-      type: Object,
-      default: null
-    },
-    zIndex: {
-      type: Number,
-      default: 1
-    }
+    unit: { type: Object, default: null },
+    zIndex: { type: Number, default: 1 }
   },
   data() {
     return {
@@ -49,7 +43,6 @@ export default {
       shakeIntensity: 0,
       hurtIntensity: 0,
       particles: [],
-      _prevSnapshot: { hp: 0, shield: 0 },
       _timers: []
     };
   },
@@ -57,7 +50,6 @@ export default {
     isShielded() {
       return (this.unit?.shield || 0) > 0;
     },
-    // 注意：移除了 shakeStyle，避免与 CSS 动画在 transform 上冲突
     hurtStyle() {
       if (!this.isHurt) return {};
       const intensity = Math.min(this.hurtIntensity / 50, 1);
@@ -67,34 +59,22 @@ export default {
         '--hurt-opacity': Math.max(Math.min(intensity, 1), 0.2)
       };
     },
-
     zIndexStyle() {
       return { zIndex: this.zIndex };
-    },
-
-    // 用于合并监听 hp/shield 变化的签名
-    statKey() {
-      const hp = this.unit?.hp ?? 0;
-      const shield = this.unit?.shield ?? 0;
-      const id = this.unit?.uniqueID || this.unit?.name || '';
-      return `${id}:${hp}/${shield}`;
     }
   },
   mounted() {
-    // 初始化快照
-    this._prevSnapshot = {
-      hp: this.unit?.hp ?? 0,
-      shield: this.unit?.shield ?? 0
-    };
+    frontendEventBus.on('unit-hurt', this.onUnitHurt);
+    frontendEventBus.on('unit-death', this.onUnitDeath);
+  },
+  beforeUnmount() {
+    this._clearTimers();
+    frontendEventBus.off('unit-hurt', this.onUnitHurt);
+    frontendEventBus.off('unit-death', this.onUnitDeath);
   },
   watch: {
-    // 当 unit 实例切换时，重置快照，避免跨实例误判
-    unit(newUnit, oldUnit) {
-      this._prevSnapshot = {
-        hp: newUnit?.hp ?? 0,
-        shield: newUnit?.shield ?? 0
-      };
-      // 可选择重置动画状态，避免继承残留态
+    // 当 unit 实例切换时，重置动画状态，避免继承残留态
+    unit() {
       this.isShaking = false;
       this.isHurt = false;
       this.isEvading = false;
@@ -103,41 +83,64 @@ export default {
       this.hurtIntensity = 0;
       this.shakeIntensity = 0;
       this._clearTimers();
-    },
-
-    // 合并监听 hp/shield 变化，计算 delta 并驱动动画
-    statKey() {
-      if (!this.unit) return;
-      const prevHp = this._prevSnapshot.hp;
-      const prevShield = this._prevSnapshot.shield;
-      const currHp = this.unit.hp;
-      const currShield = this.unit.shield;
-
-      const dhp = currHp - prevHp; // 负值=受伤，正值=治疗
-      const dshield = currShield - prevShield; // 负值=护盾损失
-
-      // 死亡触发（hp从>0到<=0），排除玩家
-      if (prevHp > 0 && currHp <= 0 && this.unit.type !== 'player') {
-        this.handleBattleVictory();
-      }
-
-      if (dhp < 0 || dshield < 0) {
-        const hpDamage = Math.max(0, -dhp);
-        const passThroughDamage = hpDamage + Math.max(0, -dshield);
-        this.triggerHurtAnimation(hpDamage, passThroughDamage);
-      } else if (dhp > 0) {
-        // 治疗
-        this.triggerHurtAnimation(-dhp, 0);
-      }
-
-      // 更新快照
-      this._prevSnapshot = { hp: currHp, shield: currShield };
     }
   },
-  beforeUnmount() {
-    this._clearTimers();
-  },
   methods: {
+    onUnitHurt(payload = {}) {
+      console.log(payload);
+      const id = payload?.unitId;
+      if (!id || id !== this.unit?.uniqueID) return;
+      const hpDamage = payload?.hpDamage ?? 0;
+      const passThroughDamage = payload?.passThroughDamage ?? 0;
+
+      if (hpDamage === 0 && passThroughDamage === 0) {
+        // 闪避
+        this.isEvading = true;
+        this._setTimer(() => { this.isEvading = false; }, 700);
+        return;
+      }
+
+      if (hpDamage < 0) {
+        // 治疗
+        this.isHealing = true;
+        this.createDamageText(hpDamage);
+        this._setTimer(() => { this.isHealing = false; }, 600);
+        return;
+      }
+
+      // 正常受伤
+      this.shakeIntensity = hpDamage;
+      this.isShaking = true;
+      this.hurtIntensity = hpDamage;
+      this.isHurt = true;
+
+      // 粒子与文本
+      if (hpDamage > 0) {
+        this.createParticles(hpDamage, 0);
+      } else {
+        this.createParticles(Math.abs(hpDamage), 140);
+      }
+      this.createDamageText(passThroughDamage);
+
+      const duration = Math.min(200 + passThroughDamage * 2, 600);
+      this._setTimer(() => { this.isShaking = false; this.shakeIntensity = 0; }, duration);
+      this._setTimer(() => { this.isHurt = false; this.hurtIntensity = 0; }, 200);
+    },
+
+    onUnitDeath(payload = {}) {
+      const id = payload?.unitId;
+      if (!id || id !== this.unit?.uniqueID) return;
+      // 玩家不触发死亡爆炸
+      if (this.unit?.type === 'player') return;
+      // 延续原来的死亡演出
+      for (let i = 0; i < 7; i++) {
+        this._setTimer(() => { this.createParticles(20); }, i * 200);
+      }
+      this._setTimer(() => { this.isShaking = true; this.shakeIntensity = 20; }, 900);
+      this._setTimer(() => { this.isDead = true; }, 1400);
+      this._setTimer(() => { this.createParticles(100); }, 1400);
+    },
+
     _setTimer(fn, delay) {
       const id = setTimeout(fn, delay);
       this._timers.push(id);
@@ -147,60 +150,6 @@ export default {
       if (this._timers && this._timers.length) {
         for (const id of this._timers) clearTimeout(id);
         this._timers = [];
-      }
-    },
-
-    triggerHurtAnimation(hpDamage, passThroughDamage) {
-      const damage = hpDamage;
-      // 无伤害且无穿透 => 闪避
-      if (damage === 0 && passThroughDamage === 0) {
-        this.isEvading = true;
-        this._setTimer(() => { this.isEvading = false; }, 700);
-        return;
-      }
-
-      // 负数伤害 => 治疗
-      if (damage < 0) {
-        this.isHealing = true;
-        this.createDamageText(damage);
-        this._setTimer(() => { this.isHealing = false; }, 600);
-        return;
-      }
-
-      // 正常受伤
-      this.shakeIntensity = damage;
-      this.isShaking = true;
-      this.hurtIntensity = damage;
-      this.isHurt = true;
-
-      // 粒子：hp 伤害红色/橙色，纯护盾伤害蓝色
-      if (damage > 0) {
-        this.createParticles(damage, 0);
-      } else {
-        this.createParticles(Math.abs(damage), 140);
-      }
-      // 伤害文本（使用穿透总伤害）
-      this.createDamageText(passThroughDamage);
-
-      // 抖动持续时间
-      const duration = Math.min(200 + passThroughDamage * 2, 600);
-      this._setTimer(() => { this.isShaking = false; this.shakeIntensity = 0; }, duration);
-      // 受伤特效快速结束
-      this._setTimer(() => { this.isHurt = false; this.hurtIntensity = 0; }, 200);
-    },
-
-    handleBattleVictory() {
-      if (this.unit.type !== 'player') {
-        // 持续生成粒子
-        for (let i = 0; i < 7; i++) {
-          this._setTimer(() => { this.createParticles(20); }, i * 200);
-        }
-        // 爆炸前抖动
-        this._setTimer(() => { this.isShaking = true; this.shakeIntensity = 20; }, 900);
-        // 闪烁并置 dead
-        this._setTimer(() => { this.isDead = true; }, 1400);
-        // 爆炸粒子
-        this._setTimer(() => { this.createParticles(100); }, 1400);
       }
     },
 
@@ -293,7 +242,6 @@ export default {
           zIndex: 0
         });
       }
-      // 通过事件总线发送粒子生成请求
       frontendEventBus.emit('spawn-particles', particles);
     }
   }
@@ -305,13 +253,13 @@ export default {
   width: fit-content;
   height: fit-content;
   position: relative;
-  transition: transform 0.1s ease;
+  margin: 20px;
+  transition: border 0.1s ease, filter 0.1s ease, transform 0.1s ease;
   /* 受伤特效的默认变量 */
   --hurt-border-width: 0px;
   --hurt-opacity: 0;
   border: var(--hurt-border-width) solid rgba(255, 0, 0, var(--hurt-opacity));
   filter: drop-shadow(0 0 5px rgba(255, 0, 0, calc(var(--hurt-opacity) * 0.5)));
-  transition: border 0.2s ease, filter 0.2s ease;
 }
 
 .hurt-shake {

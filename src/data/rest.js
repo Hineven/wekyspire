@@ -6,6 +6,8 @@ import ItemManager from './itemManager.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { backendGameState as gameState } from './gameState.js'
 import { getNextPlayerTier, upgradePlayerTier } from './player.js'
+import { enqueueAnimateCardById } from './animationInstructionHelpers.js'
+import frontendEventBus from '../frontendEventBus.js'
 
 export function spawnSkillRewards() {
   // 技能奖励
@@ -64,12 +66,30 @@ export function claimMoney() {
   gameState.player.money += gameState.rewards.money;
   const amount = gameState.rewards.money;
   gameState.rewards.money = 0;
+  // 阶段推进
+  gotoNextRestStage();
   // 发送事件（已领取）
   backendEventBus.emit(EventNames.Player.MONEY_CLAIMED, amount);
 }
 
 // 领取技能奖励
 export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
+  if (!skill) return;
+  // 先入队飞行动画（以便在状态同步/切换面板前克隆幽灵）
+  try {
+    enqueueAnimateCardById({
+      id: skill.uniqueID,
+      kind: undefined,
+      steps: [
+        { toAnchor: 'deck', scale: 0.55, rotate: 18, duration: 520, ease: 'power2.in' },
+        { opacity: 0, duration: 120 },
+        { call: () => { try { frontendEventBus.emit('rest-deck-bump'); } catch (_) {} }, holdMs: 0 }
+      ],
+      hideStart: true,
+      options: { endMode: 'destroy' }
+    }, { waitTags: ['all'] });
+  } catch (_) {}
+
   // 计算可用容量（最多 maxSkills 个）
   const capacity = Math.min(gameState.player.maxSkills || 0, gameState.player.cultivatedSkills.length + 1);
   if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = gameState.player.cultivatedSkills.length;
@@ -82,11 +102,14 @@ export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
   } else {
     gameState.player.cultivatedSkills[slotIndex] = skill;
   }
-  console.log(gameState.player.cultivatedSkills);
 
   if(clearRewardsFlag) {
+    // 领取一个技能后，清空剩余技能奖励（仅允许领取一次）
     gameState.rewards.skills = [];
   }
+  // 阶段推进
+  gotoNextRestStage();
+
   // 发送事件（统一为 Player.SKILL_REWARD_CLAIMED）
   backendEventBus.emit(EventNames.Player.SKILL_REWARD_CLAIMED, { skill: skill, slotIndex: slotIndex });
 }
@@ -99,15 +122,19 @@ export function claimAbilityReward(ability, clearRewardsFlag) {
   if(clearRewardsFlag) {
     gameState.rewards.abilities = [];
   }
+  // 阶段推进
+  gotoNextRestStage();
   // 发送玩家领取能力奖励事件（已领取）
   backendEventBus.emit(EventNames.Player.ABILITY_CLAIMED, { ability: ability });
 }
 
-// 领取突破奖励（新加：由UI调用，而不是在UI组件中直接变更display层）
+// 领取突破奖励
 export function claimBreakthroughReward() {
   if (!gameState.rewards.breakthrough) return;
   gameState.rewards.breakthrough = false;
   upgradePlayerTier(gameState.player);
+  // 阶段推进
+  gotoNextRestStage();
   backendEventBus.emit(EventNames.Player.TIER_UPGRADED, gameState.player);
 }
 
@@ -140,4 +167,28 @@ export function reorderSkills(skillUniqueIDs) {
   gameState.player.cultivatedSkills = reordered;
   console.log('技能顺序已更新：', reordered);
   backendEventBus.emit(EventNames.Player.SKILLS_REORDERED, reordered);
+}
+
+function computeNextRestStage(currentStage = gameState.restScreenStage) {
+  // 按顺序：money -> breakthrough -> skill -> ability -> shop
+  let availableStages = [];
+  if (gameState.rewards.money > 0) availableStages.push('money');
+  if (gameState.rewards.breakthrough) availableStages.push('breakthrough');
+  if (Array.isArray(gameState.rewards.skills) && gameState.rewards.skills.length > 0) availableStages.push('skill');
+  if (Array.isArray(gameState.rewards.abilities) && gameState.rewards.abilities.length > 0) availableStages.push('ability');
+  if (gameState.shopItems.length > 0) availableStages.push('shop');
+  const currentIndex = availableStages.indexOf(currentStage);
+  if (currentIndex === -1 || currentIndex === availableStages.length - 1) {
+    return availableStages[0] || '';
+  } else {
+    return availableStages[currentIndex + 1];
+  }
+}
+
+export function setInitialRestStage() {
+  gameState.restScreenStage = computeNextRestStage();
+}
+
+export function gotoNextRestStage() {
+  gameState.restScreenStage = computeNextRestStage();
 }

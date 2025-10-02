@@ -5,7 +5,7 @@
       <PlayerBasicStats :player="player" :show-mana="restScreen" />
     
       <!-- 魏启条 -->
-      <ManaBar :player="player" v-if="!restScreen" />
+      <ManaBar :player="player" />
       
       <!-- 行动点条 -->
       <ActionPointsBar :player="player" v-if="!restScreen" />

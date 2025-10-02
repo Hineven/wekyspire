@@ -1,9 +1,7 @@
 <template>
-  <transition-group name="slide" tag="div" class="breakthrough-reward-panel-wrapper">
-    <div class="breakthrough-reward-panel" v-if="isVisible" key="panel" @click="claimReward">
-      <h2>🏇突破！</h2>
-    </div>
-  </transition-group>
+  <div class="breakthrough-reward-panel" key="panel" @click="claimReward">
+    <h2>🏇突破！</h2>
+  </div>
 </template>
 
 <script>
@@ -12,10 +10,6 @@ import backendEventBus, { EventNames } from '../backendEventBus.js';
 export default {
   name: 'BreakthroughRewardPanel',
   props: {
-    isVisible: {
-      type: Boolean,
-      default: false
-    }
   },
   methods: {
     claimReward() {
@@ -68,31 +62,5 @@ export default {
   background: red;
   box-shadow: 0 6px 12px rgba(232, 15, 0, 0.5);
   transform: translateY(-2px);
-}
-
-/* 滑动进入和退出动画 */
-.slide-enter-active, .slide-leave-active {
-  transition: all 0.5s ease;
-}
-
-.slide-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.slide-leave-to {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.slide-enter-to, .slide-leave-from {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-/* 为transition-group添加样式 */
-.breakthrough-reward-panel-wrapper {
-  display: flex;
-  justify-content: center;
 }
 </style>

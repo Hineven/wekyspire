@@ -1,33 +1,31 @@
 <template>
-  <transition-group name="slide" tag="div" class="ability-reward-panel-wrapper">
-    <div class="ability-reward-panel" v-if="isVisible" key="panel">
-      <!-- 选中效果覆盖层 -->
-      <transition name="selection-overlay-fade">
-        <div class="selection-overlay" v-if="showSelectionEffect" key="overlay"></div>
-      </transition>
-      
-      <h2>选择一项能力！</h2>
-      <div class="ability-cards">
-        <div 
-          v-for="ability in abilities"
-          :key="ability.uniqueID"
-          :class="[
-            'ability-card', 
-            'tier-' + ability.tier,
-            { 'selected-glow': selectedAbility === ability && showSelectionEffect }
-          ]"
-          @click="selectAbility(ability)"
-        >
-          <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
-          <div class="ability-name">{{ ability.name }}</div>
-          <div class="ability-description">
-            <ColoredText :text="ability.description" />
-          </div>
+  <div class="ability-reward-panel" key="panel">
+    <!-- 选中效果覆盖层 -->
+    <transition name="selection-overlay-fade">
+      <div class="selection-overlay" v-if="showSelectionEffect" key="overlay"></div>
+    </transition>
+
+    <h2>选择一项能力！</h2>
+    <div class="ability-cards">
+      <div
+        v-for="ability in abilities"
+        :key="ability.uniqueID"
+        :class="[
+          'ability-card',
+          'tier-' + ability.tier,
+          { 'selected-glow': selectedAbility === ability && showSelectionEffect }
+        ]"
+        @click="selectAbility(ability)"
+      >
+        <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
+        <div class="ability-name">{{ ability.name }}</div>
+        <div class="ability-description">
+          <ColoredText :text="ability.description" />
         </div>
       </div>
-      <button @click="closePanel">放弃</button>
     </div>
-  </transition-group>
+    <button @click="closePanel">放弃</button>
+  </div>
 </template>
 
 <script>
@@ -43,10 +41,6 @@ export default {
     abilities: {
       type: Array,
       default: () => []
-    },
-    isVisible: {
-      type: Boolean,
-      default: false
     }
   },
   data() {
@@ -231,29 +225,4 @@ button:hover {
   box-shadow: 0 0 20px 10px #f44336;
 }
 
-/* 滑动进入和退出动画 */
-.slide-enter-active, .slide-leave-active {
-  transition: all 0.5s ease;
-}
-
-.slide-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.slide-leave-to {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.slide-enter-to, .slide-leave-from {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-/* 为transition-group添加样式 */
-.ability-reward-panel-wrapper {
-  display: flex;
-  justify-content: center;
-}
 </style>

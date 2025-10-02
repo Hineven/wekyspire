@@ -75,19 +75,37 @@ export default {
       
       // 通过事件总线发送粒子生成请求
       frontendEventBus.emit('spawn-particles', particles);
+    },
+
+    // 触发数值栏目的缩放动画（类似层数变化的“跳动”效果）
+    triggerStatBump(statElement) {
+      if (!statElement) return;
+      // 重启动画
+      statElement.classList.remove('stat-bump');
+      // 强制回流以重新应用动画
+      // eslint-disable-next-line no-unused-expressions
+      statElement.offsetWidth;
+      statElement.classList.add('stat-bump');
+      // 动画结束后清理类，便于下次再次触发
+      const handler = () => {
+        statElement.classList.remove('stat-bump');
+        statElement.removeEventListener('animationend', handler);
+      };
+      statElement.addEventListener('animationend', handler);
     }
   },
   
   watch: {
     // 监听玩家属性变化
     player: {
-      handler(newPlayer, oldPlayerVue) {
+      handler(newPlayer) {
         if (newPlayer.money !== this.previousPlayer.money) {
           const diff = newPlayer.money - this.previousPlayer.money;
           const moneyStat = this.$el.querySelector('.stat:nth-child(1)');
           if (moneyStat) {
             const text = diff > 0 ? `+${diff}💰` : `${diff}💰`;
             this.spawnTextParticle(text, moneyStat, diff > 0 ? '#4caf50' : '#f44336');
+            this.triggerStatBump(moneyStat);
           }
         }
         
@@ -98,6 +116,7 @@ export default {
           if (defenseStat) {
             const text = diff > 0 ? `+${diff}🛡️` : `${diff}🛡️`;
             this.spawnTextParticle(text, defenseStat, diff > 0 ? '#9c27b0' : '#f44336');
+            this.triggerStatBump(defenseStat);
           }
         }
         
@@ -108,6 +127,7 @@ export default {
           if (magicStat && diff !== 0) {
             const text = diff > 0 ? `+${diff}🔮` : `${diff}🔮`;
             this.spawnTextParticle(text, magicStat, diff > 0 ? '#2196f3' : '#f44336');
+            this.triggerStatBump(magicStat);
           }
         }
 
@@ -117,6 +137,7 @@ export default {
           if (tierStat) {
             const newTierLabel = this.getPlayerTierLabel(newPlayer.tier);
             this.spawnTextParticle(`🏅 ${newTierLabel}`, tierStat, '#ffd700');
+            this.triggerStatBump(tierStat);
           }
         }
         
@@ -149,10 +170,14 @@ export default {
   display: flex;
   align-items: center;
   margin-right: 15px;
+  /* 在动画期间更平滑 */
+  will-change: transform;
 }
 
 .stat-label {
   font-weight: bold;
   margin-right: 5px;
 }
+
+/* 使用全局的 .stat-bump 动画（见 src/assets/common.css） */
 </style>

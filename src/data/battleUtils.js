@@ -5,6 +5,7 @@ import {
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
 import {captureSnapshot, enqueueAnimateCardById, enqueueState} from "./animationInstructionHelpers";
+import {enqueueHurtAnimation, enqueueUnitDeath} from "./animationInstructionHelpers";
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -15,9 +16,16 @@ function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker 
   if (mitigatedDamage > 0) {
     // 先打护盾
     const shieldDamage = Math.min(target.shield, mitigatedDamage);
-    target.shield -= shieldDamage;
     mitigatedDamage -= shieldDamage;
     hpDamage = mitigatedDamage;
+
+    // 入队受伤/治疗动画指令（通过前端事件驱动实际播放）
+    enqueueHurtAnimation({
+      unitId: target.uniqueID, hpDamage: hpDamage, passThroughDamage: passThoughDamage
+    });
+
+    // 更新生命值状态
+    target.shield -= shieldDamage;
     target.hp = Math.max(target.hp - mitigatedDamage, 0);
 
     if (mitigatedDamage > 0) {
@@ -40,6 +48,10 @@ function applyDamageAndLog(target, mitigatedDamage, { mode = 'attack', attacker 
       }
     }
   } else {
+    // 入队闪避动画指令（通过前端事件驱动实际播放）
+    enqueueHurtAnimation({
+      unitId: target.uniqueID, hpDamage: 0, passThroughDamage: 0
+    });
     if (mode === 'attack') {
       if (attacker) addBattleLog(`${attacker.name} 攻击了 ${target.name}，但不起作用！`);
       else addBattleLog(`你被攻击，但没有作用！`);
@@ -78,6 +90,8 @@ export function launchAttack (attacker, target, damage) {
   if (!result.dead) {
     // 发射攻击完成事件，用于结算攻击特效等
     processAttackFinishEffects(attacker, target, result.hpDamage, result.passThoughDamage);
+  } else {
+    try { enqueueUnitDeath({ unitId: target.uniqueID }); } catch (_) {}
   }
 
   return result;
@@ -90,7 +104,11 @@ export function dealDamage (source, target, damage, penetrateDefense = false) {
   // 固定防御减免
   if(!penetrateDefense) finalDamage = Math.max(finalDamage - target.defense, 0);
 
-  return applyDamageAndLog(target, finalDamage, { mode: 'direct', source });
+  const result = applyDamageAndLog(target, finalDamage, { mode: 'direct', source });
+  if (result.dead) {
+    try { enqueueUnitDeath({ unitId: target.uniqueID }); } catch (_) {}
+  }
+  return result;
 }
 
 // 任意获得护盾的结算逻辑
@@ -130,8 +148,8 @@ export function applyHeal(target, heal) {
   const delta = Math.min(canHeal, heal);
   target.hp += heal;
   if (target.hp > target.maxHp) target.hp = target.maxHp;
-  // 如需日志，可在此处添加，但为避免重复日志，保持静默
-  // addHealLog(`${target.name}恢复了${heal}点生命！`);
+  // 入队治疗动画指令（hpDamage 传负值表示治疗）
+  try { enqueueHurtAnimation({ unitId: target.uniqueID, hpDamage: -Math.abs(delta), passThroughDamage: 0 }); } catch (_) {}
 }
 
 export function drawSkillCard(player, number = 1) {
@@ -202,7 +220,10 @@ export function burnSkillCard(player, skillID) {
     // 从玩家技能列表中移除该技能
     const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
     if (skillListIndex !== -1) {
-      player.skills.splice(skillListIndex, 1);
+      const burnt = player.skills.splice(skillListIndex, 1);
+      console.log('焚烧技能：', burnt);
+      // 加入坟地
+      player.burntSkills.push(burnt[0]);
     }
   }
   if (backupIndex !== -1) {

@@ -14,3 +14,14 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* 统一：数值/按钮缩放跳动动画 */
+@keyframes stat-bump {
+  0% { transform: scale(1); }
+  28% { transform: scale(1.14); }
+  56% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.stat-bump {
+  animation: stat-bump 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}

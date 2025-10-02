@@ -1,10 +1,8 @@
 <template>
-  <transition-group name="slide" tag="div" class="money-reward-panel-wrapper">
-    <div class="money-reward-panel" v-if="isVisible" key="panel" @click="claimReward">
-      <h2>金币！</h2>
-      <p>💰 +{{ amount }}</p>
-    </div>
-  </transition-group>
+  <div class="money-reward-panel" key="panel" @click="claimReward">
+    <h2>金币！</h2>
+    <p>💰 +{{ amount }}</p>
+  </div>
 </template>
 
 <script>
@@ -13,10 +11,6 @@ import backendEventBus, { EventNames } from '../backendEventBus.js';
 export default {
   name: 'MoneyRewardPanel',
   props: {
-    isVisible: {
-      type: Boolean,
-      default: false
-    },
     amount: {
       type: Number,
       default: 0
@@ -62,31 +56,5 @@ export default {
   background: linear-gradient(135deg, #ffd587, #f0e68c);
   box-shadow: 0 6px 12px rgba(212, 175, 55, 0.5);
   transform: translateY(-2px);
-}
-
-/* 滑动进入和退出动画 */
-.slide-enter-active, .slide-leave-active {
-  transition: all 0.5s ease;
-}
-
-.slide-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.slide-leave-to {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.slide-enter-to, .slide-leave-from {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-/* 为transition-group添加样式 */
-.money-reward-panel-wrapper {
-  display: flex;
-  justify-content: center;
 }
 </style>

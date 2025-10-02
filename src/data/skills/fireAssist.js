@@ -115,14 +115,14 @@ export class SearingHeat extends Skill {
 }
 
 // 火花（C-)
-// 获得2层燃烧，抽1张牌
+// 获得2层燃烧，抽2张牌
 export class Spark extends Skill {
   constructor() {
     super('火花', 'fire', 1, 0, 1, 1);
     this.baseColdDownTurns = 1;
   }
   get cards() {
-    return Math.max(1 + this.power, 1);
+    return Math.max(2 + this.power, 1);
   }
   get stacks() {
     return 2;
@@ -132,10 +132,7 @@ export class Spark extends Skill {
       player.addEffect('燃烧', this.stacks);
       return false;
     } else {
-      for(let i = 0; i < this.cards; i ++) {
-        drawSkillCard(player)
-        enqueueDelay(400);
-      }
+      drawSkillCard(player, this.cards);
       return true;
     }
   }
@@ -301,7 +298,6 @@ export class ScorchingCurse extends Skill {
       burnSkillCard(player, closestSkillID, true);
       return false;
     } else {
-      enqueueDelay(500);
       enemy.addEffect('燃烧', this.getStacks(player));
       return true;
     }
@@ -351,10 +347,7 @@ export class HotHands extends Skill {
       player.addEffect('燃烧', this.stacks);
       return false;
     } else {
-      for(let i = 0; i < this.cards; i ++) {
-        drawSkillCard(player)
-        enqueueDelay(400);
-      }
+      drawSkillCard(player, this.cards);
       return true;
     }
   }
