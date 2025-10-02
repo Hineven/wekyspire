@@ -247,14 +247,19 @@ const orchestrator = {
     } else if (scheduledEpoch !== undefined && scheduledEpoch !== this._epoch) {
       return;
     }
-    const entry = this._ghostRegistry.get(id);
-    if (!entry) return; // 无可用ghost：无法执行该动画
+    let entry = this._ghostRegistry.get(id);
+    if (!entry) {
+      // 无可用ghost：无法执行该动画
+      console.warn("[cardAnimationOrchestrator] 无法执行动画：找不到幽灵", id, startEl, steps, options);
+      return;
+    }
+
     const { ghost, baseRect, startEl: registeredStartEl } = entry;
 
     // 开场处理：隐藏原DOM、显示ghost
     try {
-      const originEl = startEl || registeredStartEl;
-      if (hideStart && originEl) originEl.style.visibility = 'hidden';
+      const originEl2 = startEl || registeredStartEl;
+      if (hideStart && originEl2) originEl2.style.visibility = 'hidden';
     } catch (_) {}
     if (revealGhostOnStart) { try { gsap.set(ghost, { autoAlpha: 1 }); } catch (_) {} }
 

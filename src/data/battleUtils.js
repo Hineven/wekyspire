@@ -236,4 +236,6 @@ export function burnSkillCard(player, skillID) {
   }
   // 触发技能焚毁事件
   backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
+  // 显式同步一次状态，确保显示层及时移除该卡片
+  enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
