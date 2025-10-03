@@ -7,7 +7,7 @@ export class Fireshot extends Skill {
     super('火矢', 'fire', 1, 1, 1, 1, '火球术');
     this.upgradeTo = "强火矢";
     this.baseColdDownTurns = 3;
-    this.slowStart = true;
+    this.baseSlowStart = true;
   }
 
 
@@ -38,7 +38,7 @@ export class Fireball extends Skill {
     super('强火矢', 'fire', 3, 1, 1, 1, '火球术');
     this.upgradeTo = "炙火矢";
     this.baseColdDownTurns = 3;
-    this.slowStart = true;
+    this.baseSlowStart = true;
   }
 
   get baseDamage() {
@@ -68,7 +68,7 @@ export class LargeFireball extends Skill {
     super('炙火矢', 'fire', 5, 3, 1, 1, '火球术');
     this.upgradeTo = "小爆裂术";
     this.baseColdDownTurns = 4;
-    this.slowStart = true;
+    this.baseSlowStart = true;
   }
 
   get baseDamage() {
@@ -96,9 +96,9 @@ export class LargeFireball extends Skill {
 // 小爆裂术(A-)
 export class TinyKaradiaBurst extends Skill {
   constructor() {
-    super('小爆裂术', 'fire', 6, 5, 1, Infinity, '火球术');
+    super('小爆裂术', 'fire', 6, 5, 1, 1, '火球术');
     this.baseColdDownTurns = 5;
-    this.slowStart = true;
+    this.baseSlowStart = true;
     this.image = '小爆裂术.png';
   }
 
@@ -129,7 +129,7 @@ export class SolarBlast extends Skill {
     super('齐明天焱', 'fire', 8, 8, 1, 1, '火球术');
     this.subtitle = "纯粹的破坏力";
     this.baseColdDownTurns = 6;
-    this.slowStart = true;
+    this.baseSlowStart = true;
     this.image = '齐明天焱.png';
   }
 
@@ -142,7 +142,7 @@ export class SolarBlast extends Skill {
   }
 
   get multiplier() {
-    return 24 + 5 * this.power;
+    return 25 + 5 * this.power;
   }
 
   getDamage(player) {

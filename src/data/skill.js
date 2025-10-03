@@ -7,7 +7,6 @@ class Skill {
     // 随机生成一个唯一ID。注意！前后台技能的id可能不同。
     this.uniqueID = Math.random().toString(36).substring(2, 10);
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
-    this.description = ''; // 生成的技能描述
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.baseManaCost = baseManaCost || 0; // 魏启消耗
     this.baseActionPointCost = baseActionPointCost || 1; // 行动点消耗，默认为1
@@ -112,15 +111,10 @@ class Skill {
     this.consumeUses()
   }
 
-  // 获取技能描述
-  getDescription() {
-    return this.description;
-  }
-
   // 重新生成技能描述（根据玩家状态计算具体数值）
   regenerateDescription(player) {
     // 默认实现，子类可以重写
-    return this.description;
+    return '未实现';
   }
 
   // 判断技能是否可用

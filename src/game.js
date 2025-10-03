@@ -19,8 +19,9 @@ function startGame() {
   const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
-  const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
-  const initialSkill5 = SkillManager.getInstance().createSkill('冲锋盾');
+  // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');
+  const initialSkill4 = SkillManager.getInstance().createSkill('冲锋盾');
+  const initialSkill5 = SkillManager.getInstance().createSkill('敏捷打击');
 
   backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5];
 
