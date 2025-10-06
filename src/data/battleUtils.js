@@ -125,16 +125,11 @@ export function gainShield (caster, target, shield) {
 // 统一的效果添加入口（通过动画队列事件）
 export function addEffect(target, effectName, stacks = 1) {
   if (stacks === 0) return;
-  const previousStacks = target.effects[effectName] || 0;
-
   if (target.effects[effectName]) {
     target.effects[effectName] += stacks;
   } else {
     target.effects[effectName] = stacks;
   }
-
-  const currStacks = target.effects[effectName] || 0;
-
 }
 
 // 统一的效果移除入口
@@ -179,7 +174,7 @@ export function drawSkillCard(player, number = 1) {
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
   ids.forEach((id) => {
     enqueueAnimateCardById(
-      {id: id, kind: 'appearFromDeck', options: {durationMs: 500, startScale: 0.6, fade: true}},
+      {id: id, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}},
       {waitTags: ['state', 'ui'], durationMs: 200}
     );
   });
