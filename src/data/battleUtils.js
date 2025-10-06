@@ -203,35 +203,41 @@ export function burnSkillCard(player, skillID) {
   }
   const frontierIndex = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
   const backupIndex = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
-  if(frontierIndex === -1 && backupIndex === -1) {
-    console.warn(`技能ID为 ${skillID} 的技能不在前台或后备技能列表中，无法焚烧。`);
+  const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
+  if(frontierIndex === -1 && backupIndex === -1 && activatedIndex === -1) {
+    console.warn(`技能ID为 ${skillID} 的技能不在前台/后备/咏唱位列表中，无法焚烧。`);
     return;
   }
-  // 播放动画
-  enqueueAnimateCardById( {id: skillID, kind: 'burn'});
+  // 判定来源容器，用于动画 transfer
+  let fromContainer = 'unknown';
+  if (activatedIndex !== -1) fromContainer = 'activated-bar';
+  else if (frontierIndex !== -1) fromContainer = 'skills-hand';
+  else if (backupIndex !== -1) fromContainer = 'deck';
+
+  // 动画（先播动画再修改逻辑，以便 orchestrator 拿到当前位置 DOM）
+  enqueueAnimateCardById( {id: skillID, kind: 'burn', transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }});
+
   let exhaustedSkill = null;
-  if (frontierIndex !== -1) {
+  if (activatedIndex !== -1) {
+    exhaustedSkill = player.activatedSkills.splice(activatedIndex, 1)[0];
+    // 从总技能数组移除
+    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+    player.burntSkills.push(exhaustedSkill);
+  } else if (frontierIndex !== -1) {
     exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];
-    // 从玩家技能列表中移除该技能
     const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
     if (skillListIndex !== -1) {
       const burnt = player.skills.splice(skillListIndex, 1);
-      console.log('焚烧技能：', burnt);
-      // 加入坟地
       player.burntSkills.push(burnt[0]);
     }
-  }
-  if (backupIndex !== -1) {
+  } else if (backupIndex !== -1) {
     exhaustedSkill = player.backupSkills.splice(backupIndex, 1)[0];
-    // 从玩家技能列表中移除该技能
     const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) {
-      player.skills.splice(skillListIndex, 1);
-    }
+    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+    player.burntSkills.push(exhaustedSkill);
   }
-  // 触发技能焚毁事件
   backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
-  // 显式同步一次状态，确保显示层及时移除该卡片
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
 

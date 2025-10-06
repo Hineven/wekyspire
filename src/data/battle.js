@@ -178,12 +178,10 @@ function useSkill(skill) {
 
   // 咏唱型技能特殊处理：进入咏唱位，不走普通后处理
   if (skill.cardMode === 'chant') {
-    activateChantSkill(skill);
-    enqueueDelay(0);
-    return; // 不执行普通结束逻辑
+    activateChantSkill(skill)
+  } else {
+    handleSkillAfterUse(skill);
   }
-
-  handleSkillAfterUse(skill);
   if(checkBattleVictory()) return ;
   enqueueDelay(0);
 }
@@ -194,33 +192,36 @@ function activateChantSkill(skill) {
   const idx = player.frontierSkills.indexOf(skill);
   if (idx !== -1) player.frontierSkills.splice(idx, 1);
 
-  let replaced = null;
-  if (!player.hasFreeActivatedSlot()) {
-    replaced = player.activatedSkills[0];
+  // 若需要替换现有咏唱
+  if (!player.hasFreeActivatedSlot() && player.activatedSkills.length) {
+    const replaced = player.activatedSkills[0];
     if (replaced) {
       const willBurnReplaced = willSkillBurn(replaced);
-      enqueueAnimateCardById({
-        id: replaced.uniqueID,
-        kind: willBurnReplaced ? 'burn' : 'drop',
-        transfer: { type: 'deactivate', from: 'activated-bar', to: willBurnReplaced ? 'graveyard' : 'deck' }
-      });
+      // 生命周期钩子在 burn 之前调用
       try { replaced.onDisable(player, 'replaced'); } catch (_) {}
-      player.activatedSkills.shift();
+      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill: replaced, reason: 'replaced' });
       if (willBurnReplaced) {
-        const listIdx = player.skills.indexOf(replaced);
-        if (listIdx !== -1) player.skills.splice(listIdx, 1);
-        player.burntSkills.push(replaced);
+        burnSkillCard(player, replaced.uniqueID);
       } else {
+        // 非焚毁：动画 drop + 从 activated 移除并进后备
+        enqueueAnimateCardById({
+          id: replaced.uniqueID,
+          kind: 'drop',
+          transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
+        });
+        // 修改状态
+        player.activatedSkills.shift();
         player.backupSkills.push(replaced);
       }
-      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill: replaced, reason: 'replaced' });
     }
   }
+  // 放入咏唱位
   player.activatedSkills.push(skill);
   try { skill.onEnable(player); } catch (_) {}
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_ENABLED, { skill, reason: 'use' });
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+  // Transition animation
   enqueueAnimateCardById({
     id: skill.uniqueID,
     steps: [ { toAnchor: 'activated', scale: 1.0, duration: 400, ease: 'power2.inOut' } ],
@@ -244,24 +245,24 @@ function manualStopActivatedSkill(skill) {
   if (checkBattleVictory()) return;
   backendEventBus.emit(EventNames.Player.SKILL_USED, { player, skill, manualStop: true });
   const willBurnCurrent = willSkillBurn(skill);
-  enqueueAnimateCardById({
-    id: skill.uniqueID,
-    kind: willBurnCurrent ? 'burn' : 'drop',
-    transfer: { type: 'deactivate', from: 'activated-bar', to: willBurnCurrent ? 'graveyard' : 'deck' }
-  });
+  // 生命周期结束回调
+  try { skill.onDisable(player, 'manual'); } catch (_) {}
+  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
+  // 从激活位移除（在 burnSkillCard 内部也会处理，但仅限 activatedSkills；为稳妥先手动移除，burnSkillCard 再次检查无副作用）
   const idx = player.activatedSkills.indexOf(skill);
   if (idx !== -1) player.activatedSkills.splice(idx, 1);
-  try { skill.onDisable(player, 'manual'); } catch (_) {}
   if (willBurnCurrent) {
-    const listIdx = player.skills.indexOf(skill);
-    if (listIdx !== -1) player.skills.splice(listIdx, 1);
-    player.burntSkills.push(skill);
+    burnSkillCard(player, skill.uniqueID);
   } else {
+    enqueueAnimateCardById({
+      id: skill.uniqueID,
+      kind: 'drop',
+      transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
+    });
     player.backupSkills.push(skill);
+    enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
   }
-  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
-  enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
 
 // 监听手动停止事件
