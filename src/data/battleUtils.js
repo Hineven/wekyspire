@@ -234,3 +234,11 @@ export function burnSkillCard(player, skillID) {
   // 显式同步一次状态，确保显示层及时移除该卡片
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
+
+export function willSkillBurn(skill) {
+  if (!skill) return false; // default safe
+  // 返回 true 表示应该焚毁（不可再返回后备）
+  // 与之前逻辑： (coldDownTurns !== 0 || maxUses === Infinity || remainingUses > 0) 则不 burn 相反
+  const canReturn = (skill.coldDownTurns !== 0) || (skill.maxUses === Infinity) || (skill.remainingUses > 0);
+  return !canReturn;
+}

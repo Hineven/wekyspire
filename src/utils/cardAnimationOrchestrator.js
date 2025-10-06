@@ -169,6 +169,7 @@ const orchestrator = {
     if (typeof nameOrEl === 'string') {
       if (nameOrEl === 'center') return this.centerAnchorEl;
       if (nameOrEl === 'deck') return this.deckAnchorEl;
+      if (nameOrEl === 'activated') return this.activatedAnchorEl;
       return null;
     }
     return nameOrEl;

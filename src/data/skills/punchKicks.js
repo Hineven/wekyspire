@@ -6,6 +6,7 @@ export class PunchKick extends Skill {
   
   constructor() {
     super('拳打脚踢', 'normal', 0, 0, 2, Infinity);
+    this.cardMode = 'chant';
   }
   
   get damage () {

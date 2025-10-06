@@ -18,6 +18,8 @@ class Skill {
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
     this.baseColdDownTurns = 0;
     this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
+    // 新增：卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
+    this.cardMode = 'normal';
   }
 
   get slowStart () {
@@ -127,6 +129,10 @@ class Skill {
   upgrade(deltaPower) {
     this.power += deltaPower;
   }
+
+  // 咏唱型技能启用/停用生命周期钩子（仅 cardMode === 'chant' 使用）
+  onEnable(player) { /* 默认无行为；子类可覆盖 */ }
+  onDisable(player, reason) { /* 默认无行为；子类可覆盖 */ }
 }
 
 export default Skill;

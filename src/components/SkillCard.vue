@@ -1,6 +1,6 @@
 <template>
   <div 
-    :class="['skill-card', { disabled: disabled }]"
+    :class="['skill-card', { disabled: disabled, 'chant-mode': isChant }]"
     @click="onClick"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
@@ -11,6 +11,7 @@
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
 
     <div class="upgrade-badge" v-if="skill.isUpgradeCandidate">升级</div>
+    <div v-if="isChant" class="chant-badge" title="咏唱型卡牌：可持续激活">咏</div>
     <div v-if="hovered && skill.isUpgradeCandidate && skill.upgradedFrom" class="upgrade-replace-tooltip">
       将替换：{{ skill.upgradedFrom }}
     </div>
@@ -95,7 +96,8 @@ export default {
     },
     skillCardImageStyle() {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
-    }
+    },
+    isChant() { return this.skill?.cardMode === 'chant'; }
   },
   mounted() {
     // 仅在需要时由组件自身注册到全局卡片DOM注册表
@@ -208,6 +210,8 @@ export default {
   box-shadow: 0 0 4px rgba(0,0,0,0.4);
   z-index: 2;
 }
+.chant-badge { position:absolute; top:4px; left:4px; background:linear-gradient(135deg,#6a5af9,#3b2dbc); color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px; font-size:12px; box-shadow:0 0 4px rgba(0,0,0,0.4); z-index:2; }
+.skill-card.chant-mode { box-shadow:0 0 0 2px #6a5af9, 0 0 8px rgba(106,90,249,0.6); }
 .upgrade-replace-tooltip {
   position: absolute;
   bottom: -6px;

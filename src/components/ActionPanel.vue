@@ -1,5 +1,10 @@
 <template>
   <div class="action-panel" :class="{ 'disabled': !isPlayerTurn || isControlDisabled }">
+    <ActivatedSkillsBar
+      :player="player"
+      :is-player-turn="isPlayerTurn"
+      :is-control-disabled="isControlDisabled"
+    />
     <SkillsHand
       :player="player"
       :skills="player?.frontierSkills || []"
@@ -41,6 +46,7 @@
 
 <script>
 import SkillsHand from './SkillsHand.vue';
+import ActivatedSkillsBar from './ActivatedSkillsBar.vue';
 import DeckIcon from './DeckIcon.vue';
 import BurntSkillsIcon from './BurntSkillsIcon.vue';
 import CardsDisplayOverlayPanel from './CardsDisplayOverlayPanel.vue';
@@ -51,7 +57,7 @@ import {backendGameState} from "../data/gameState";
 
 export default {
   name: 'ActionPanel',
-  components: { SkillsHand, DeckIcon, BurntSkillsIcon, CardsDisplayOverlayPanel },
+  components: { SkillsHand, ActivatedSkillsBar, DeckIcon, BurntSkillsIcon, CardsDisplayOverlayPanel },
   props: {
     player: { type: Object, required: true },
     isPlayerTurn: { type: Boolean, default: true }
