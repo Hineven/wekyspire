@@ -38,7 +38,7 @@ export class CarelessPunchKick extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if(stage == 0) {
+    if(stage === 0) {
       launchAttack(player, enemy, 10);
       return false;
     } else { 
@@ -144,7 +144,7 @@ export class PowerPunchKick extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if(stage == 0) {
+    if(stage === 0) {
         const atkPassThroughDamage = launchAttack(player, enemy, this.damage).passThoughDamage;
         if(atkPassThroughDamage > 0) return false;
         return true;
@@ -174,7 +174,7 @@ export class OffPowerPunchKick extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if(stage == 0) {
+    if(stage === 0) {
         launchAttack(player, enemy, this.damage);
         return false;
     } else {
@@ -225,7 +225,7 @@ export class AgilePunchKick extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if (stage == 0) {
+    if (stage === 0) {
       const result = launchAttack(player, enemy, this.damage);
       if (result.passThoughDamage > 0) return false;
       return true;
@@ -269,10 +269,60 @@ export class ChargePunchKick extends Skill { // 原名 SpeedyPunchKick（与“�
   }
   use(player, enemy, stage) {
     const skill = new HeavyPunchKick(this.damage);
+    skill.power = this.power;
     discoverSkillCard(player, skill, 'deck');
     return true;
   }
   regenerateDescription(player) {
     return `发现/skill{大力一击${signedNumberStringW0(this.power)}}进入牌库`;
+  }
+}
+
+// 连环打击
+// 造成6伤害，丢两张头部卡牌
+export class ComboPunchKick extends Skill {
+  constructor() {
+    super('连环打击', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 3;
+  }
+  get damage() {
+    return Math.max(6 + 3 * this.power, 4);
+  }
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      launchAttack(player, enemy, this.damage);
+      return false;
+    } else {
+      if(player.skills.length > 0) dropSkillCard(player, player.skills[0].uniqueID);
+      if(player.skills.length > 0) dropSkillCard(player, player.skills[0].uniqueID);
+      return true;
+    }
+  }
+  regenerateDescription(player) {
+    return `造成${this.damage + (player?.attack ?? 0)}伤害，丢最左侧两张牌`;
+  }
+}
+
+// 狡黠打击
+// 造成6伤害，将最左侧牌置入牌堆顶
+export class CunningPunchKick extends Skill {
+  constructor() {
+    super('狡黠打击', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 2;
+  }
+  get damage() {
+    return Math.max(6 + 3 * this.power, 4);
+  }
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      launchAttack(player, enemy, this.damage);
+      return false;
+    } else {
+      if(player.skills.length > 1) {
+        const leftSkill = player.skills[0];
+        dropSkillCard(player, skillID, 0);
+      }
+      return true;
+    }
   }
 }

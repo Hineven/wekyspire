@@ -162,7 +162,7 @@ class Skill {
   // 重新生成技能描述（根据玩家状态计算具体数值）
   regenerateDescription(player) {
     // 默认实现，子类可以重写
-    return '未实现';
+    return '';
   }
 
   // 判断技能是否可用

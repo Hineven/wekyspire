@@ -31,6 +31,8 @@ class SkillManager {
       await import('./skills/refuelWeky.js'),
       await import('./skills/shielding.js'),
       await import('./skills/speedThinking.js'),
+      await import('./skills/curses.js'),
+      await import('./skills/matialArts')
       // await import('./skills/remi.js'),
       // await import('./skills/lumi.js')
     ];
@@ -82,6 +84,7 @@ class SkillManager {
         type: tempSkill.type,
         series: tempSkill.skillSeriesName,
         tier: tempSkill.tier,
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
         spawnWeight: tempSkill.spawnWeight
       };
     });
@@ -99,7 +102,8 @@ class SkillManager {
       !playerSkillNames.includes(skill.name) &&
       !playerSkillSeries.includes(skill.series) &&
       skill.tier <= playerTier &&
-      skill.canSpawnAsReward_
+      skill.canSpawnAsReward_ &&
+      skill.tier >= 0 // 不能是（-1）特殊卡
     );
 
     // —— 收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——

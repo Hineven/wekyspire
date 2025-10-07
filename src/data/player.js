@@ -124,7 +124,7 @@ export class Player extends Unit {
   // 属性修正系统 API
   addModifier(modifierFn) {
     if (typeof modifierFn === 'function') this.modifiers.push(modifierFn);
-    else console.warn('尝试添加非法的属性修正器：应为 function(player)=>player');
+    else console.warn('尝试添加非法的属性修正器：', modifierFn, '应为 function(player)=>player');
   }
   removeModifier(modifierFn) {
     this.modifiers = this.modifiers.filter(m => m !== modifierFn);

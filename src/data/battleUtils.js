@@ -224,16 +224,15 @@ export function drawSelectedSkillCard (player, skillID) {
   }
 }
 
-export function dropSkillCard(player, skillID) {
+export function dropSkillCard(player, skillID, inDeckOrder = -1) {
   const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  let droppedSkill = null;
   if (index !== -1) {
     // 播放动画
     enqueueAnimateCardById( {id: skillID, kind: 'drop'});
     // 执行逻辑
-    const [droppedSkill] = player.frontierSkills.splice(index, 1);
-    player.backupSkills.push(droppedSkill);
-    // 触发技能丢弃事件
-    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+    [droppedSkill] = player.frontierSkills.splice(index, 1);
+
   } else {
     // 尝试从咏唱位丢弃
     const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
@@ -243,9 +242,7 @@ export function dropSkillCard(player, skillID) {
         kind: 'drop',
         transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
       });
-      const [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
-      player.backupSkills.push(droppedSkill);
-      backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+      [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
     } else {
       // 最后尝试从 overlaySkills 丢弃（新发现的卡牌）
       const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
@@ -255,14 +252,20 @@ export function dropSkillCard(player, skillID) {
           kind: 'drop',
           transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'deck' }
         });
-        const [droppedSkill] = player.overlaySkills.splice(overlayIndex, 1);
-        player.backupSkills.push(droppedSkill);
-        backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+        [droppedSkill] = player.overlaySkills.splice(overlayIndex, 1);
       } else {
         console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位/Overlay列表中，无法丢弃。`);
+        return ;
       }
     }
   }
+  if(inDeckOrder < 0) {
+    player.backupSkills.push(droppedSkill);
+  } else {
+    player.backupSkills.splice(inDeckOrder, 0, droppedSkill);
+  }
+  // 触发技能丢弃事件
+  backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
 }
 
 export function burnSkillCard(player, skillID) {

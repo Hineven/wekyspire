@@ -3,6 +3,8 @@
 import Skill from '../skill.js';
 import {applyHeal, burnSkillCard, dealDamage, drawSkillCard, dropSkillCard, launchAttack} from '../battleUtils.js';
 import {enqueueDelay} from "../animationInstructionHelpers";
+import {backendGameState} from "../gameState";
+import {EventNames} from "../../backendEventBus";
 
 // 无缘烈焰（C-）
 // 丢弃冷却中的技能，自己和敌人各获得3层燃烧
@@ -300,6 +302,79 @@ export class DisperseFire extends Skill {
   }
 }
 
+// 添油（C-）
+// 敌人有燃烧时，赋予2层燃烧
+export class AddFuelOnFire extends Skill {
+  constructor() {
+    super('添油', 'fire', 1, 0, 0, 1);
+    this.baseColdDownTurns = 1;
+  }
+  get stack () {
+    return Math.max(2 + this.power, 1);
+  }
+  canUse(player, enemy) {
+    if(super.canUse(player)) {
+      return (enemy.effects['燃烧'] || 0) > 0;
+    }
+    return false;
+  }
+  use(player, enemy, stage) {
+    enemy.addEffect('燃烧', this.stack);
+    return true;
+  }
+  regenerateDescription(player) {
+    return `敌人有/effect{燃烧}时，赋予${this.stack}层/effect{燃烧}`;
+  }
+}
+
+// 扑火（C-）
+// 移除敌人至多12层燃烧，造成等量伤害
+export class SplatFire extends Skill {
+  constructor() {
+    super('扑火', 'fire', 1, 0, 1, 1);
+    this.baseColdDownTurns = 1;
+  }
+  get stack () {
+    return Math.max(12 + 4 * this.power, 1);
+  }
+  use(player, enemy) {
+    const burnEffect = enemy.effects['燃烧'] || 0;
+    const toRemove = Math.min(this.stack, burnEffect);
+    enemy.removeEffect('燃烧', toRemove);
+    enqueueDelay(500);
+    if(toRemove > 0) {
+      dealDamage(player, enemy, toRemove);
+    }
+  }
+  regenerateDescription(player) {
+    return `移除敌人至多${this.stack}层/effect{燃烧}，造成等量伤害`;
+  }
+}
+
+// 退火术（C-)
+// 咏唱：每回合开始时，移除2层燃烧
+export class Annealing extends Skill {
+  constructor() {
+    super('退火术', 'fire', 1, 0, 1, 1);
+    this.cardMode = 'chant';
+    this.listener_ = () => {
+      const player = backendGameState.player;
+      const burn = player.effects['燃烧'] || 0;
+      if (burn > 0) {
+        const toRemove = Math.min(Math.max(2 + this.power, 1), burn);
+        player.removeEffect('燃烧', toRemove);
+      }
+    };
+  }
+  onEnable(player) {
+    super.onEnable(player);
+    backendGameState.eventBus.on(EventNames.Battle.PLAYER_TURN, this.listener_);
+  }
+  onDisable(player) {
+    super.onDisable(player, reason);
+    backendGameState.eventBus.off(EventNames.Battle.PLAYER_TURN, this.listener_);
+  }
+}
 
 // 焰涌（C-）
 // 消耗8层燃烧，获得1集中
@@ -385,6 +460,30 @@ export class FieryPunch extends Skill {
       return `造成${this.getDamage(player) + player.attack}点伤害`;
     }
     return `造成【${this.baseDamage} + /effect{燃烧}层数】点伤害`;
+  }
+}
+
+// 爆火
+// 移除敌人至多5层燃烧，造成三倍伤害
+export class ExplosiveFire extends Skill {
+  constructor() {
+    super('爆火', 'fire', 1, 0, 1, 1);
+    this.baseColdDownTurns = 1;
+  }
+  get stack () {
+    return Math.max(5 + 3 * this.power, 1);
+  }
+  use(player, enemy) {
+    const burnEffect = enemy.effects['燃烧'] || 0;
+    const toRemove = Math.min(this.stack, burnEffect);
+    enemy.removeEffect('燃烧', toRemove);
+    enqueueDelay(500);
+    if(toRemove > 0) {
+      dealDamage(player, enemy, toRemove * 3);
+    }
+  }
+  regenerateDescription(player) {
+    return `移除敌人至多${this.stack}层/effect{燃烧}，造成3倍伤害`;
   }
 }
 
@@ -506,6 +605,7 @@ export class HeatResistance extends Skill {
   }
   onDisable(player, reason) {
     super.onDisable(player, reason);
+    player.removeModifier(this.modifier_);
   }
   regenerateDescription(player) {
     return `获得${this.stacks}层/effect{火焰抗性}`;

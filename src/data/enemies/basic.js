@@ -1,4 +1,4 @@
-import { launchAttack, gainShield } from '../battleUtils.js';
+import {launchAttack, gainShield, discoverSkillCard} from '../battleUtils.js';
 import Enemy from '../enemy.js';
 import { addEnemyActionLog } from '../battleLogUtils.js';
 
@@ -216,8 +216,9 @@ export class SlimySlime extends Enemy {
     const actions = [
       () => {
         // 诅咒
-        player.addBackupSkill(new SlimeCurse());
-        addEnemyActionLog(`${this.name} 喷了你一脸，你的后备技能中多了一张/skill{粘液}！`);
+        const curse = new SlimeCurse();
+        discoverSkillCard(player, curse, 'deck');
+        addEnemyActionLog(`${this.name} 喷了你一脸，你的后备技能中多了一张/skill{${curse.name}}！`);
       },
       () => {
         addEnemyActionLog(`${this.name} 冲撞！`);
