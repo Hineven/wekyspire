@@ -8,7 +8,7 @@ import {
   initializeBattleFlowListeners
 } from './data/battle.js'
 import {
-  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage
+  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage, dropCurrentReward
 } from './data/rest.js'
 
 function startGame() {
@@ -16,7 +16,7 @@ function startGame() {
   dialogues.triggerBeforeGameStart();
 
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
-  const initialSkill1 = SkillManager.getInstance().createSkill('火焰伴身');
+  const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
   // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');
@@ -105,6 +105,9 @@ export function initGameFlowListeners() {
   });
   backendEventBus.on(EventNames.Rest.FINISH, () => {
     backendEventBus.emit(EventNames.Rest.END);
+  });
+  backendEventBus.on(EventNames.Rest.DROP_REWARD, () => {
+    dropCurrentReward();
   });
 
   // 休整结束后继续下一场战斗

@@ -25,14 +25,14 @@ class Skill {
   }
 
   // 简化：统一冷却事件，仅发送 'cooldown-tick'（不再区分 start/progress/end，也无 progress 数值）
-  _emitCooldownTick() {
+  _emitCooldownTick (deltaCooldown = 1) {
     try {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({
         tags: ['skill-cd', `skill-${id}`],
         waitTags: [],
         durationMs: 0,
-        start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick' }),
+        start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick', deltaCooldown: deltaCooldown }),
         meta: { skillId: id, overlay: true, phase: 'cooldown-tick' }
       });
     } catch (_) {}

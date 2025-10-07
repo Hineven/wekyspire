@@ -38,7 +38,7 @@ const namedEntities = {
   '重整': {
     icon: '🔄',
     color: 'green',
-    description: '此技能需要在回合开始进行冷却。'
+    description: '此技能需要在回合结束进行冷却。'
   },
   '消耗': {
     icon: '🔧',

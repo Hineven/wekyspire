@@ -194,3 +194,25 @@ export function setInitialRestStage() {
 export function gotoNextRestStage() {
   gameState.restScreenStage = computeNextRestStage();
 }
+
+export function dropCurrentReward(stage = gameState.restScreenStage) {
+  try {
+    switch(stage) {
+      case 'money':
+        gameState.rewards.money = 0; break;
+      case 'breakthrough':
+        gameState.rewards.breakthrough = false; break;
+      case 'skill':
+        gameState.rewards.skills = []; break;
+      case 'ability':
+        gameState.rewards.abilities = []; break;
+      case 'shop':
+        // 放弃商店阶段：直接结束休整（可按需改成 gotoNextRestStage）
+        backendEventBus.emit(EventNames.Rest.FINISH);
+        return;
+      default:
+        return;
+    }
+    gotoNextRestStage();
+  } catch(_) {}
+}

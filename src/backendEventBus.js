@@ -50,7 +50,8 @@ export const EventNames = {
     PURCHASE_ITEM: 'rest-purchase-item',
     SHOP_REFRESHED: 'rest-shop-refreshed',
     FINISH: 'rest-finish',
-    END: 'rest-end'
+    END: 'rest-end',
+    DROP_REWARD: 'rest-drop-reward'
   },
   Shop: {
     ITEM_PURCHASED: 'item-purchased'
