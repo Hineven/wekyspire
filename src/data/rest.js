@@ -96,6 +96,8 @@ export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
   if (slotIndex >= capacity) slotIndex = capacity - 1;
 
   console.log('领取技能奖励：', skill, '放置于槽位', slotIndex, '（容量', capacity, '）');
+  // 清理技能升级标识
+  if(skill.isUpgradeCandidate) skill.isUpgradeCandidate = false;
   // 放置/替换技能
   if(slotIndex >= gameState.player.cultivatedSkills.length) {
     gameState.player.cultivatedSkills.push(skill);

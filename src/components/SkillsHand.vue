@@ -241,11 +241,13 @@ export default {
     },
     setCardRef(el, id) {
       if (el) {
+        if(this.cardRefs[id] === el) return;
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
         registerCardEl(id, dom);
       } else {
-        unregisterCardEl(id);
+        // 保证销毁的注册表项是本元素注册的DOM，避免因为时序导致的误删（A增加->B增加->A销毁->B注册表项被删）
+        unregisterCardEl(id, this.cardRefs[id]);
         delete this.cardRefs[id];
       }
     },

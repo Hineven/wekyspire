@@ -1,39 +1,39 @@
 // 全局卡牌动画编排器（DOM + GSAP）
 // 仅管理“卡牌相关”的复杂动画，不负责其它类型动画。
 // 特性：
-// - 对每一张卡片（按 uniqueID）维护一个“异步动画播放队列”：
-//   同一张卡的动画指令会按顺序串行执行，不会相互打断；不同卡片的动画可并发播放。
-// - 通过 animateById 进行动画调度与 ghost 创建，其他路径不再创建 ghost。
+// - 對每一張卡片（按 uniqueID）維護一個“異步動畫播放隊列”：
+//   同一張卡的動畫指令會按順序串行執行，不會相互打斷；不同卡片的動畫可並發播放。
+// - 透過 animateById 進行動畫調度與 ghost 創建，其他路徑不再創建 ghost。
 
 import frontendEventBus from '../frontendEventBus.js';
 import gsap from 'gsap';
-import { getCardEl } from './cardDomRegistry.js';
+import cardDomRegistry, { getCardEl } from './cardDomRegistry.js';
 
 /*
-通用卡牌转移动画事件机制（新增）
+通用卡牌轉動畫事件機制（新增）
 ---------------------------------
-为支持“卡牌在多个前端容器之间转移”且保持松耦合，新增以下事件：
+為支持“卡牌在多個前端容器之間轉移”且保持鬆耦合，新增以下事件：
   card-transfer-start
   card-transfer-end
 
-事件在 orchestrator 内部于每次 animateById 任务真正开始前/完成后发射。
-载荷（payload）结构：
+事件在 orchestrator 內部於每次 animateById 任務真正開始前/完成後發射。
+載荷（payload）結構：
 {
   id: <number|string>,            // 卡牌唯一ID
-  kind: <string>,                 // 动画种类（appearFromAnchor / centerThenDeck / flyToDeckFade / exhaust ...）
-  type: <string>,                 // 语义化转移类型（如 'appear' / 'move' / 'focus' / 'exhaust' 等，具体由调用方或自动推断）
-  from: <string|undefined>,       // 来源容器标识（可选）
-  to: <string|undefined>,         // 目标容器标识（可选）
-  token: <string>,                // 唯一标记（如果调用方未提供将自动生成）
-  phase: 'start' | 'end'          // 事件阶段
+  kind: <string>,                 // 動畫種類（appearFromAnchor / centerThenDeck / flyToDeckFade / exhaust ...）
+  type: <string>,                 // 語義化轉移類型（如 'appear' / 'move' / 'focus' / 'exhaust' 等，具體由調用方或自動推斷）
+  from: <string|undefined>,       // 來源容器標識（可選）
+  to: <string|undefined>,         // 目標容器標識（可選）
+  token: <string>,                // 唯一標記（如果調用方未提供將自動生成）
+  phase: 'start' | 'end'          // 事件階段
 }
 
-当前仅在 kind === 'appearFromAnchor' 且调用方未提供 transfer 时自动生成：
+當前僅在 kind === 'appearFromAnchor' 且調用方未提供 transfer 時自動生成：
   { type: 'appear', from: options.anchor || 'deck', to: options.toContainer || 'skills-hand' }
 
-调用方也可在触发 'animate-card-by-id' 时传入自定义 transfer 对象，以覆盖/补充以上字段。
+調用方也可在觸發 'animate-card-by-id' 時傳入自定義 transfer 對象，以覆蓋/補充以上字段。
 
-容器组件（如 SkillsHand）应监听 card-transfer-end，匹配自身 containerKey === payload.to 后再执行显示/状态更新，避免硬编码某个旧事件名。
+容器組件（如 SkillsHand）應監聽 card-transfer-end，匹配自身 containerKey === payload.to 後再執行顯示/狀態更新，避免硬編碼某個舊事件名。
 */
 
 const defaultEase = 'power2.out';
@@ -104,9 +104,9 @@ const orchestrator = {
       ];
     },
     appearFromAnchor({ durationMs = 300 } = {}) {
-      // 需配合 initialFromAnchor 使用
+      // 已废弃 toBase：统一使用 toCard:true 将卡牌对齐到其当前 DOM 位置
       return [
-        { toBase: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
+        { toCard: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
       ];
     }
   },
@@ -278,7 +278,9 @@ const orchestrator = {
     const { ghost, startEl } = entry;
     try { gsap.killTweensOf(ghost); } catch (_) {}
     try { ghost.remove(); } catch (_) {}
-    if (restoreStart) { try { startEl.style.visibility = ''; } catch (_) {} }
+    // 优先还原注册表内的 card DOM，兜底尝试 startEl
+    const originalEl = getCardEl(id) || startEl;
+    if (restoreStart) { try { originalEl.style.visibility = ''; } catch (_) {} }
     this._ghostRegistry.delete(id);
   },
 
@@ -331,8 +333,22 @@ const orchestrator = {
       } else if (step.delta) {
         props.x = `+=${step.delta.dx || 0}`;
         props.y = `+=${step.delta.dy || 0}`;
-      } else if (step.toBase) {
-        props.x = 0; props.y = 0;
+      } /* 移除旧的 toBase 分支 */ else if (step.toCard) {
+        // 新增：动态对齐到指定卡片（或自身ID）当前 DOM 位置，避免出现 ActivatedSkillsBar 跳变
+        try {
+          const targetId = step.toCard === true ? id : step.toCard; // true 表示使用当前动画卡片自身
+          const targetEl = getCardEl(targetId);
+          const rect = targetEl ? this.getRect(targetEl) : null;
+          if (rect) {
+            const targetPoint = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            const o = this.offsetsToPoint(baseRect, targetPoint);
+            props.x = o.x; props.y = o.y;
+          } else {
+            props.x = '+=0'; props.y = '+=0';
+          }
+        } catch (_) {
+          props.x = '+=0'; props.y = '+=0';
+        }
       }
       if (typeof step.scale === 'number') props.scale = step.scale;
       if (typeof step.rotate === 'number') props.rotate = step.rotate;
@@ -476,7 +492,6 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         const { durationMs = 300, startScale = 0.6, fade = true } = options || {};
         const built = orchestrator.buildSteps.appearFromAnchor({ durationMs });
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore', initialFromAnchor: (options.anchor || 'deck'), startScale, fade });
-        // 兼容旧事件（将在后续版本废弃）
         try { frontendEventBus.emit('card-appear-finished', { id }); } catch (_) {}
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
@@ -508,7 +523,7 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         break;
       }
       case 'exhaust':
-      case 'burn': { // burn 兼容旧名称
+      case 'burn': {
         const built = orchestrator.buildSteps.exhaustBurn(options || {});
         try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });

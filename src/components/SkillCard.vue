@@ -11,7 +11,6 @@
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
 
     <div class="upgrade-badge" v-if="skill.isUpgradeCandidate">升级</div>
-    <div v-if="isChant" class="chant-badge" title="咏唱型卡牌：可持续激活">咏</div>
     <div v-if="hovered && skill.isUpgradeCandidate && skill.upgradedFrom" class="upgrade-replace-tooltip">
       将替换：{{ skill.upgradedFrom }}
     </div>
@@ -21,15 +20,14 @@
 
     <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
 
-
     <div class="skill-card-panel">
       <!-- 名称/副标题子组件 -->
       <SkillMeta :skill="skill" :hovered="hovered" :background-color="skillBackgroundColor" />
       <div class="skill-description">
         <ColoredText :text="skillDescription" />
       </div>
-      <!-- 装填/冷却子组件 -->
-      <SkillUses :skill="skill" :preview-mode="previewMode" />
+      <!-- 卡牌特性/装填/冷却子组件 -->
+      <SkillFeaturesAndUses :skill="skill" :preview-mode="previewMode" />
     </div>
   </div>
 </template>
@@ -39,14 +37,14 @@ import ColoredText from './ColoredText.vue';
 import { getSkillTierColor, getSkillTierLabel } from '../utils/tierUtils.js';
 import frontendEventBus from '../frontendEventBus.js';
 import SkillCosts from './skillCard/SkillCosts.vue';
-import SkillUses from './skillCard/SkillUses.vue';
+import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../utils/colorUtils";
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
 
 export default {
   name: 'SkillCard',
-  components: { ColoredText, SkillCosts, SkillUses, SkillMeta },
+  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta },
   props: {
     skill: { type: Object, required: true },
     player: { type: Object, default: null },
@@ -55,7 +53,7 @@ export default {
     previewMode: { type: Boolean, default: false },
     canClick: { type: Boolean, default: true },
     suppressActivationAnimationOnClick: { type: Boolean, default: false },
-    // 当父组件已手动注册 DOM（如 SkillsHand）时，关闭此项以避免重复注册
+    // 当父组件已手动注册 DOM时，关闭此项以避免重复注册
     autoRegisterInRegistry: { type: Boolean, default: true }
   },
   data() {
@@ -210,8 +208,9 @@ export default {
   box-shadow: 0 0 4px rgba(0,0,0,0.4);
   z-index: 2;
 }
-.chant-badge { position:absolute; top:4px; left:4px; background:linear-gradient(135deg,#6a5af9,#3b2dbc); color:#fff; font-weight:bold; padding:2px 6px; border-radius:4px; font-size:12px; box-shadow:0 0 4px rgba(0,0,0,0.4); z-index:2; }
+
 .skill-card.chant-mode { box-shadow:0 0 0 2px #6a5af9, 0 0 8px rgba(106,90,249,0.6); }
+
 .upgrade-replace-tooltip {
   position: absolute;
   bottom: -6px;

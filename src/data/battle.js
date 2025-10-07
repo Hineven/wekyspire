@@ -224,8 +224,8 @@ function activateChantSkill(skill) {
   // Transition animation
   enqueueAnimateCardById({
     id: skill.uniqueID,
-    steps: [ { toAnchor: 'activated', scale: 1.0, duration: 400, ease: 'power2.inOut' } ],
-    options: { endMode: 'destroy' },
+    steps: [ { toCard: true, scale: 1.0, duration: 400, ease: 'power2.inOut' } ],
+    options: { endMode: 'restore' },
     transfer: { type: 'activate', from: 'skills-hand', to: 'activated-bar' }
   }, { tags: ['ui'], waitTags: ['state'] });
 }
@@ -239,8 +239,6 @@ function manualStopActivatedSkill(skill) {
   if (skill.canUse(player)) {
     skill.consumeResources(player);
     if (activateSkill(skill)) return;
-  } else {
-    addSystemLog(`${skill.name} 无法再次发动，直接结束咏唱。`);
   }
   if (checkBattleVictory()) return;
   backendEventBus.emit(EventNames.Player.SKILL_USED, { player, skill, manualStop: true });

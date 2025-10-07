@@ -11,12 +11,6 @@
                  :auto-register-in-registry="false"
                  :ref="el => setCardRef(el, skill.uniqueID)"
                  :preview-mode="false" />
-      <div class="chant-actions" v-if="skill.cardMode==='chant' && canInteract">
-        <button class="stop-btn" @click.stop="stopChant(skill)">停止</button>
-      </div>
-    </div>
-    <div v-for="n in emptySlots" :key="'empty-'+n" class="activated-slot placeholder">
-      <div class="placeholder-inner">空</div>
     </div>
   </div>
 </template>
@@ -82,11 +76,13 @@ export default {
   methods: {
     setCardRef(el, id) {
       if (el) {
+        if(this.cardRefs[id] === el) return ; // no change
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
         registerCardEl(id, dom);
       } else {
-        unregisterCardEl(id);
+        // 解绑，保证删除的注册表项是本组件注册的项，避免因为时许原因误删其他元素注册的项
+        unregisterCardEl(id, this.cardRefs[id]);
         delete this.cardRefs[id];
       }
     },
@@ -100,12 +96,17 @@ export default {
     onTransferEnd(payload = {}) {
       if (payload.phase !== 'end') return;
       const { id, to, from } = payload;
-      if (to === this.containerKey && this.appearing[id]) delete this.appearing[id];
-      if (from === this.containerKey && this.leaving[id]) delete this.leaving[id];
+      if (to === this.containerKey && this.appearing[id]) {
+        delete this.appearing[id];
+      }
+      if (from === this.containerKey && this.leaving[id]) {
+        delete this.leaving[id];
+      }
     },
     slotStyle(idx, skill) {
       const baseX = idx * 210; // spacing
       const hidden = !!this.appearing[skill.uniqueID];
+      console.log(hidden);
       return {
         transform: `translateX(${baseX}px)` ,
         visibility: hidden ? 'hidden' : 'visible'
@@ -123,9 +124,20 @@ export default {
 </script>
 
 <style scoped>
-.activated-skills-bar { position: absolute; left: 50%; bottom: 300px; transform: translateX(-50%); height: 280px; pointer-events: auto; min-width: 220px; }
-.activated-slot { position: absolute; top: 0; transition: transform .25s ease, visibility 0s linear; }
-.activated-slot.placeholder { width:198px; height:266px; border:2px dashed rgba(255,255,255,0.3); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; color:#ccc; }
+.activated-skills-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 350px;
+  transform: translateX(-50%);
+  height: 280px;
+  pointer-events: auto;
+  min-width: 220px;
+}
+.activated-slot {
+  position: absolute;
+  top: 0;
+  transition: transform .25s ease, visibility 0s linear;
+}
 .chant-actions { position:absolute; bottom:4px; right:4px; }
 .stop-btn { font-size:12px; padding:2px 6px; cursor:pointer; }
 </style>
