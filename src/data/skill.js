@@ -20,7 +20,8 @@ class Skill {
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
     this.baseColdDownTurns = 0;
     this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
-    // 新增：卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
+    this.canSpawnAsReward_ = true; // 是否可以自然生成为奖励，某些特殊技能（如大力一击等战斗中生成的卡牌）不可自然生成
+    // 卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
     this.cardMode = 'normal';
   }
 

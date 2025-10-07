@@ -110,6 +110,8 @@ export class Player extends Unit {
     // 咏唱位：当前激活的咏唱型技能
     this.activatedSkills = [];
     this.maxActivatedSkills = 1; // 默认一个咏唱位
+    // 新增：临时覆盖技能容器（用于新发现/战斗中选牌的技能显示与动画 DOM 来源）
+    this.overlaySkills = [];
   }
 
   // 计算属性

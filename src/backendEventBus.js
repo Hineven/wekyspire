@@ -55,6 +55,9 @@ export const EventNames = {
   },
   Shop: {
     ITEM_PURCHASED: 'item-purchased'
+  },
+  Overlay: {
+    CONFIRM_OVERLAY_SKILL_SELECTIONS: 'overlay-confirm-skill-selections'
   }
 };
 

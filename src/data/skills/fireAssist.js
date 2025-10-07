@@ -220,7 +220,6 @@ export class FireTransport extends Skill {
   }
 }
 
-
 // 温暖拥抱（C-）
 // 受3伤害，向敌人转移至多9层燃烧
 export class WarmHug extends Skill {
@@ -301,6 +300,68 @@ export class DisperseFire extends Skill {
   }
 }
 
+
+// 焰涌（C-）
+// 消耗8层燃烧，获得1集中
+export class FlameSurge extends Skill {
+  constructor() {
+    super('焰涌', 'fire', 1, 0, 2, 2);
+  }
+  get stacks() {
+    return Math.max(8 - 2 * this.power, 1);
+  }
+  canUse(player) {
+    if(super.canUse(player)) {
+      const burnEffect = player.effects['燃烧'] || 0;
+      return burnEffect >= this.stacks;
+    }
+    return false;
+  }
+
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      const burnEffect = player.effects['燃烧'] || 0;
+      player.removeEffect('燃烧', Math.min(this.stacks, burnEffect));
+      enqueueDelay(200);
+      return false;
+    } else {
+      player.addEffect('集中', 1);
+      return true;
+    }
+  }
+
+  regenerateDescription(player) {
+    return `消耗${this.stacks}层/effect{燃烧}，获得1层/effect{集中}`;
+  }
+}
+
+// 自热（C-）
+// 获得10层燃烧，恢复8生命
+export class SelfHeat extends Skill {
+  constructor() {
+    super('自热', 'fire', 1, 0, 0, Infinity);
+  }
+  get stacks() {
+    return Math.max(10, 1);
+  }
+  get heal() {
+    return Math.max(8 + 3 * this.power, 1);
+  }
+  use(player, enemy, stage) {
+    if(stage === 0) {
+      player.addEffect('燃烧', this.stacks);
+      enqueueDelay(500);
+      return false;
+    } else {
+      applyHeal(player, this.heal);
+      return true;
+    }
+  }
+  regenerateDescription(player) {
+    return `获得${this.stacks}层/effect{燃烧}，恢复${this.heal}点生命`;
+  }
+}
+
 // 火爆冲拳（C+）
 // 造成7 + 你燃烧层数点伤害
 export class FieryPunch extends Skill {
@@ -327,7 +388,7 @@ export class FieryPunch extends Skill {
   }
 }
 
-// 三发火弹
+// 三发火弹（C+）
 // 造成【15 + 1x灵能】伤害三次
 export class TripleFireshot extends Skill {
   constructor() {

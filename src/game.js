@@ -16,7 +16,7 @@ function startGame() {
   dialogues.triggerBeforeGameStart();
 
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
-  const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
+  const initialSkill1 = SkillManager.getInstance().createSkill('蓄力');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
   // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');

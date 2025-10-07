@@ -104,11 +104,22 @@ const orchestrator = {
       ];
     },
     appearFromAnchor({ durationMs = 300 } = {}) {
-      // 已废弃 toBase：统一使用 toCard:true 将卡牌对齐到其当前 DOM 位置
       return [
         { toCard: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
       ];
-    }
+    },
+    // 新增：原地淡入（依赖已在 cardDomRegistry 注册的 DOM 位置，不做位移，仅淡入，可选配置）
+    appearInPlace({ durationMs = 300, finalScale = 1, fromOpacity = 0, toOpacity = 1 } = {}) {
+      return [
+        { toCard: true, scale: finalScale, opacity: toOpacity, duration: durationMs, ease: defaultEase }
+      ];
+    },
+    // 令ghost飞回cardDomRegistry中注册的DOM位置，实际逻辑和appearFromAnchor类似
+    flyToInPlace({ durationMs = 300 } = {}) {
+      return [
+        { toCard: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
+      ];
+    },
   },
 
   init({ overlayEl, centerAnchorEl, deckAnchorEl, ghostContainerEl }) {
@@ -454,6 +465,8 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         preOpts.initialFromAnchor = options.anchor || 'deck';
         preOpts.startScale = (options && options.startScale) != null ? options.startScale : 0.6;
         preOpts.fade = (options && options.fade) != null ? options.fade : true;
+      } else if (kind === 'appearInPlace') {
+        preOpts.preGhostInvisible = true; // 原地淡入：先隐藏 ghost，播放时再显示
       } else {
         preOpts.preGhostInvisible = true;
       }
@@ -469,6 +482,10 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
       to: options.toContainer || 'skills-hand'
     };
   }
+  // appearInPlace 默认也可归类为 appear，但无需 from/to（保持最小语义即可）
+  // 可选：如需事件，可解除注释
+  // if (!transfer && kind === 'appearInPlace') { transfer = { type: 'appear', to: options.toContainer }; }
+
   // 生成 token（可由外部预先提供）
   if (transfer) {
     if (!transfer.token) transfer.token = `${Date.now()}-${id}-${Math.random().toString(36).slice(2, 10)}`;
@@ -510,7 +527,23 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         const { durationMs = 300, startScale = 0.6, fade = true } = options || {};
         const built = orchestrator.buildSteps.appearFromAnchor({ durationMs });
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore', initialFromAnchor: (options.anchor || 'deck'), startScale, fade });
-        try { frontendEventBus.emit('card-appear-finished', { id }); } catch (_) {}
+        emitEnd();
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
+        break;
+      }
+      case 'appearInPlace': {
+        const { durationMs = 300 } = options || {};
+        const built = orchestrator.buildSteps.appearInPlace({ durationMs });
+        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore' });
+        emitEnd();
+        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
+        break;
+      }
+      // 尝试飞回card注册的DOM位置
+      case 'flyToInPlace': {
+        const { durationMs = 300} = options || {};
+        const built = orchestrator.buildSteps.flyToInPlace({ durationMs });
+        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: false, endMode: 'restore' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
@@ -549,7 +582,7 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      default: {
+      default: { // fly to center
         const built = orchestrator.buildSteps.flyToCenter(options || {});
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
         try { orchestrator._addToCenter(id); } catch (_) {}

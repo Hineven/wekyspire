@@ -1,5 +1,5 @@
 import Skill from '../skill.js';
-import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard} from '../battleUtils.js';
+import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard, discoverSkillCard} from '../battleUtils.js';
 
 // 拳打脚踢技能
 export class PunchKick extends Skill {
@@ -28,10 +28,11 @@ export class PunchKick extends Skill {
 export class CarelessPunchKick extends Skill {
   constructor() {
     super('莽撞攻击', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 1;
   }
 
   get coldDownTurns() {
-    return Math.max(1 - this.power, 0);
+    return Math.max(super.coldDownTurns - this.power, 0);
   }
 
   // 使用技能
@@ -60,10 +61,7 @@ export class CarelessPunchKick extends Skill {
 export class SpeedyPunchKick extends Skill {
   constructor() {
     super('快速打击', 'normal', 0, 0, 1, 1);
-  }
-
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
 
   get damage () {
@@ -108,10 +106,7 @@ export class SpeedyPunchKick extends Skill {
 export class PrecisePunchKick extends Skill {
   constructor() {
     super('精准打击', 'normal', 0, 0, 1, 1);
-  }
-
-  get coldDownTurns() {
-    return 1;
+    this.baseColdDownTurns = 1;
   }
   
   get damage () {
@@ -139,10 +134,7 @@ export class PrecisePunchKick extends Skill {
 export class PowerPunchKick extends Skill {
   constructor() {
     super('重击', 'normal', 0, 0, 2, 1);
-  }
-
-  get coldDownTurns() {
-    return 2;
+    this.baseColdDownTurns = 2;
   }
   
   get damage () {
@@ -172,10 +164,7 @@ export class PowerPunchKick extends Skill {
 export class OffPowerPunchKick extends Skill {
   constructor() {
     super('脱力打击', 'normal', 0, 0, 1, 1);
-  }
-
-  get coldDownTurns() {
-    return 2;
+    this.baseColdDownTurns = 2;
   }
   
   get damage () {
@@ -222,10 +211,11 @@ export class FinalPunchKick extends Skill {
 export class AgilePunchKick extends Skill {
   constructor() {
     super('敏捷打击', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 3;
   }
 
   get coldDownTurns() {
-    return Math.max(3 - this.power, 1);
+    return Math.max(super.coldDownTurns - this.power, 1);
   }
 
   get damage() {
@@ -247,5 +237,46 @@ export class AgilePunchKick extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     return `造成${this.damage + (player?.attack ?? 0)}点伤害，造成伤害则抽牌`;
+  }
+}
+
+// 大力一击
+// 伤害由构造函数传入，不可自然生成
+export class HeavyPunchKick extends Skill {
+  constructor(damage) {
+    super('大力一击', 'normal', 0, 0, 1, 1);
+    this.fixedDamage = damage;
+    this.canSpawnAsReward_ = false;
+  }
+  get damage() {
+    return this.fixedDamage;
+  }
+  use(player, enemy, stage) {
+    launchAttack(player, enemy, this.damage);
+    return true;
+  }
+  regenerateDescription(player) {
+    return `造成${this.damage + (player?.attack ?? 0)}点伤害`;
+  }
+}
+
+// 蓄力
+// 发现【大力一击】进入牌库
+export class ChargePunchKick extends Skill { // 原名 SpeedyPunchKick（与“快速打击”冲突）
+  constructor() {
+    super('蓄力', 'normal', 0, 0, 1, 1);
+    this.baseColdDownTurns = 2;
+  }
+  get damage() {
+    return Math.max(15 + 5 * this.power, 10);
+  }
+  use(player, enemy, stage) {
+    const skill = new HeavyPunchKick(this.damage);
+    // 发现到牌库：正确调用 discoverSkillCard(player, skill, 'deck')
+    discoverSkillCard(player, skill, 'hand');
+    return true;
+  }
+  regenerateDescription(player) {
+    return `发现/skill{大力一击}进入牌库`;
   }
 }

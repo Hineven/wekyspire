@@ -468,6 +468,38 @@ export function enqueueUnitDeath({ unitId } = {}) {
   });
 }
 
+// —— 新增：多卡选牌输入指令序列 ——
+// enqueueCardSelectionInput 会一次性入队三条指令：
+// 1) LockControl（不等待除 unlocking/mount 外的其它指令，尽快锁定交互，防止误操作）
+// 2) 选牌指令本身（tags: ['ui','card-selection']，等待所有前序；开始时发出 'start-card-selection'，并监听 'card-selection-finished' 以结束）
+// 3) UnlockControl（等待所有前序，确保选牌真正结束后再解锁）
+// 返回值：选牌指令的 id（可选：用于后续诊断）
+export function enqueueCardSelectionInput({ maxSelectable = 1 } = {}) {
+  // 1. 锁定控制（立即尝试生效）
+  enqueueLockControl();
+  // 2. 选牌指令
+  const selectionId = enqueueInstruction({
+    tags: ['ui', 'card-selection'],
+    waitTags: ['all'],
+    durationMs: Infinity, // 仅由前端事件驱动完成
+    start: ({ id, emit }) => {
+      const token = id; // 使用指令 id 作为会话令牌
+      const handler = (msg = {}) => {
+        if (msg?.token === token) {
+          frontendEventBus.off('card-selection-finished', handler);
+          frontendEventBus.emit('animation-instruction-finished', { id });
+        }
+      };
+      frontendEventBus.on('card-selection-finished', handler);
+      try { emit('start-card-selection', { token, maxSelectable }); }
+      catch (_) { frontendEventBus.off('card-selection-finished', handler); }
+    }
+  });
+  // 3. 解锁控制（默认等待 all，会自动等待 card-selection 指令结束）
+  enqueueUnlockControl();
+  return selectionId;
+}
+
 export default {
   captureSnapshot,
   applyProjectionToDisplay,
@@ -487,4 +519,5 @@ export default {
   DEFAULT_STATE_CHANGE_DURATION,
   enqueueHurtAnimation,
   enqueueUnitDeath,
+  enqueueCardSelectionInput, // ...新增导出
 };

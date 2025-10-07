@@ -4,7 +4,7 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
-import {captureSnapshot, enqueueAnimateCardById, enqueueState} from "./animationInstructionHelpers";
+import {captureSnapshot, enqueueAnimateCardById, enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 import {enqueueHurtAnimation, enqueueUnitDeath} from "./animationInstructionHelpers";
 import backendEventBus, {EventNames} from "../backendEventBus";
 
@@ -181,6 +181,50 @@ export function drawSkillCard(player, number = 1) {
   return returnSkill;
 }
 
+export function drawSelectedSkillCard (player, skillID) {
+  if (!skillID) {
+    console.warn('未指定技能ID，无法抽取指定技能。');
+    return null;
+  }
+  if (player.frontierSkills.length >= player.maxHandSize) {
+    // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
+    return null;
+  }
+  // 先尝试牌库
+  const index = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
+  if (index !== -1) {
+    // 播放动画
+    enqueueAnimateCardById( {id: skillID, kind: 'draw'});
+    // 执行逻辑
+    const [drawnSkill] = player.backupSkills.splice(index, 1);
+    player.frontierSkills.push(drawnSkill);
+    return drawnSkill;
+  } else {
+    // 尝试从 overlaySkills 抽取（新发现的卡牌）
+    const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
+    if(overlayIndex !== -1) {
+      // 先飞到中间（创建幽灵并中转，这是Card在两个容器间移动的必要操作）
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'flyToCenter'
+      });
+      const [drawnSkill] = player.overlaySkills.splice(overlayIndex, 1);
+      player.frontierSkills.push(drawnSkill);
+      enqueueDelay(0);
+      // 然后飞回手牌
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'flyToInPlace',
+        transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'hand' }
+      });
+      return drawnSkill;
+    } else {
+      console.warn(`技能ID为 ${skillID} 的技能不在后备/Overlay列表中，无法抽取。`);
+      return null;
+    }
+  }
+}
+
 export function dropSkillCard(player, skillID) {
   const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
   if (index !== -1) {
@@ -204,7 +248,20 @@ export function dropSkillCard(player, skillID) {
       player.backupSkills.push(droppedSkill);
       backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
     } else {
-      console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位列表中，无法丢弃。`);
+      // 最后尝试从 overlaySkills 丢弃（新发现的卡牌）
+      const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
+      if(overlayIndex !== -1) {
+        enqueueAnimateCardById( {
+          id: skillID,
+          kind: 'drop',
+          transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'deck' }
+        });
+        const [droppedSkill] = player.overlaySkills.splice(overlayIndex, 1);
+        player.backupSkills.push(droppedSkill);
+        backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+      } else {
+        console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位/Overlay列表中，无法丢弃。`);
+      }
     }
   }
 }
@@ -260,4 +317,29 @@ export function willSkillBurn(skill) {
   // 与之前逻辑： (coldDownTurns !== 0 || maxUses === Infinity || remainingUses > 0) 则不 burn 相反
   const canReturn = (skill.coldDownTurns !== 0) || (skill.maxUses === Infinity) || (skill.remainingUses > 0);
   return !canReturn;
+}
+
+// 发现一张卡牌，并立刻进入牌库或手牌
+// destination 可选 'hand'（前台）或 'deck'（后备），默认为 'hand'
+export function discoverSkillCard(player, skill, destination='hand') {
+  if (!skill || !(skill instanceof Object) || !skill.uniqueID) {
+    console.warn('尝试发现非法的技能卡牌：', skill);
+    return;
+  }
+  const skillID = skill.uniqueID;
+  // 先放入 overlaySkills 以注册卡牌原始DOM元素
+  player.overlaySkills.push(skill);
+  enqueueDelay(0);
+  enqueueAnimateCardById({
+    id: skill.uniqueID,
+    kind: 'appearInPlace'
+  });
+  if (destination === 'hand') {
+    if (player.frontierSkills.length >= player.maxHandSize
+      || drawSelectedSkillCard(player, skill.uniqueID) === null) {
+      burnSkillCard(player, skill.uniqueID)
+    }
+  } else {
+    dropSkillCard(player, skill.uniqueID);
+  }
 }
