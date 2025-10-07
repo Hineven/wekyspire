@@ -192,7 +192,20 @@ export function dropSkillCard(player, skillID) {
     // 触发技能丢弃事件
     backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
   } else {
-    console.warn(`技能 ${skillID} 不在前台技能列表中，无法丢弃。`);
+    // 尝试从咏唱位丢弃
+    const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
+    if(activatedIndex !== -1) {
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'drop',
+        transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
+      });
+      const [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
+      player.backupSkills.push(droppedSkill);
+      backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+    } else {
+      console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位列表中，无法丢弃。`);
+    }
   }
 }
 

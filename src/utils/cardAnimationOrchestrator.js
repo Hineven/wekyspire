@@ -139,7 +139,7 @@ const orchestrator = {
       this._centerIds.splice(0, this._centerIds.length);
     }
   },
-  // 根据 centerAnchor 对 _centerIds 的幽灵进行横向排布
+  // 根据 centerAnchor 对 _centerIds 的幽灵进行横向排布（改：直接使用 left/top，不再依赖 baseRect 偏移）
   _layoutCenter() {
     try {
       if (!this._centerIds.length) return;
@@ -152,10 +152,13 @@ const orchestrator = {
         const entry = this._ghostRegistry.get(id);
         if (!entry) continue;
         const { ghost, baseRect } = entry;
-        const targetPoint = { x: anchor.x + (i - half) * gap, y: anchor.y };
-        const o = this.offsetsToPoint(baseRect, targetPoint);
+        const targetCenter = { x: anchor.x + (i - half) * gap, y: anchor.y };
+        const targetLeft = targetCenter.x - baseRect.width / 2;
+        const targetTop = targetCenter.y - baseRect.height / 2;
         try {
-          gsap.to(ghost, { x: o.x, y: o.y, scale: 1.2, duration: Math.max(0.001, this._layoutCenterDurationMs / 1000), ease: defaultEase });
+          // 归零平移 transform，防止遗留 x/y 影响绝对定位
+          gsap.set(ghost, { x: 0, y: 0 });
+          gsap.to(ghost, { left: targetLeft, top: targetTop, scale: 1.2, duration: Math.max(0.001, this._layoutCenterDurationMs / 1000), ease: defaultEase });
           ghost.style.zIndex = String(100 + i);
         } catch (_) {}
       }
@@ -196,6 +199,7 @@ const orchestrator = {
     });
     ghost.classList.add('animation-ghost');
     this.ghostContainerEl.appendChild(ghost);
+    // 移除旧的平移 transform，只保留 scale/rotate 等
     gsap.set(ghost, { x: 0, y: 0, force3D: true });
     // 禁用克隆来的 CSS 动画，避免与 GSAP transform 冲突
     ghost.classList.remove('activating');
@@ -203,12 +207,7 @@ const orchestrator = {
     ghost.style.animationName = 'none';
     return ghost;
   },
-  offsetsToPoint(startRect, point) {
-    return {
-      x: point.x - startRect.left - startRect.width / 2,
-      y: point.y - startRect.top - startRect.height / 2
-    };
-  },
+
 
   // 通用粒子发射（基于配置）
   _emitParticles(ghost, { burst = 10, particleConfig = {} } = {}) {
@@ -262,10 +261,14 @@ const orchestrator = {
     if (hideStart) { try { startEl.style.visibility = 'hidden'; } catch (_) {} }
     if (initialFromAnchor) {
       const anchorPoint = this.getAnchorPoint(initialFromAnchor);
-      const fromOffset = this.offsetsToPoint(baseRect, anchorPoint);
-      gsap.set(ghost, { x: fromOffset.x, y: fromOffset.y, scale: startScale, autoAlpha: fade ? 0 : 1, force3D: true });
+      const left = anchorPoint.x - baseRect.width / 2;
+      const top = anchorPoint.y - baseRect.height / 2;
+      ghost.style.left = `${left}px`;
+      ghost.style.top = `${top}px`;
+      gsap.set(ghost, { scale: startScale, autoAlpha: fade ? 0 : 1, x: 0, y: 0, force3D: true });
     } else {
-      gsap.set(ghost, { x: 0, y: 0, scale: 1, autoAlpha: preGhostInvisible ? 0 : 1, force3D: true });
+      // 直接使用原位置；为避免之后使用 left/top 出现偏移，保持 x/y 为 0
+      gsap.set(ghost, { scale: 1, autoAlpha: preGhostInvisible ? 0 : 1, x: 0, y: 0, force3D: true });
     }
     const entry = { ghost, baseRect, startEl };
     if (id !== null && id !== undefined) this._ghostRegistry.set(id, entry);
@@ -284,7 +287,7 @@ const orchestrator = {
     this._ghostRegistry.delete(id);
   },
 
-  // 使用“已存在”的ghost执行 steps；本函数不创建 ghost
+  // 使用“已存在”的ghost执行 steps；本函数不创建 ghost（改：基于 ghost 当前绝对 left/top 计算）
   async playCardSequenceById(startEl, id, steps = [], options = {}) {
     if (!this.overlayEl) return;
     const { hideStart = true, endMode = 'keep', scheduledEpoch, revealGhostOnStart = true } = options;
@@ -308,6 +311,13 @@ const orchestrator = {
     if (revealGhostOnStart) { try { gsap.set(ghost, { autoAlpha: 1 }); } catch (_) {} }
 
     try { gsap.killTweensOf(ghost); } catch (_) {}
+    // 确保无残留平移
+    gsap.set(ghost, { x: 0, y: 0 });
+
+    // 当前 left/top（数值）
+    let curLeft = parseFloat(ghost.style.left) || (ghost.getBoundingClientRect().left);
+    let curTop = parseFloat(ghost.style.top) || (ghost.getBoundingClientRect().top);
+
     const tl = gsap.timeline();
 
     for (const step of steps) {
@@ -317,39 +327,47 @@ const orchestrator = {
           try { step.call({ ghost, baseRect, orchestrator: this }); } catch (_) {}
         });
         // 支持 call 后的等待
-        if (step.holdMs && step.holdMs > 0) tl.to(ghost, { x: '+=0', duration: step.holdMs / 1000, ease: 'none' });
+        if (step.holdMs && step.holdMs > 0) tl.to(ghost, { left: `+=0`, duration: step.holdMs / 1000, ease: 'none' });
         continue;
       }
 
       const { duration = 350, ease = defaultEase, holdMs = 0, emitParticles } = step;
       const props = {};
+
+      // 计算目标 left/top
       if (step.toPoint) {
-        const o = this.offsetsToPoint(baseRect, step.toPoint);
-        props.x = o.x; props.y = o.y;
+        const targetLeft = step.toPoint.x - baseRect.width / 2;
+        const targetTop = step.toPoint.y - baseRect.height / 2;
+        props.left = targetLeft;
+        props.top = targetTop;
+        curLeft = targetLeft; curTop = targetTop;
       } else if (step.toAnchor) {
-        const p = this.getAnchorPoint(step.toAnchor);
-        const o = this.offsetsToPoint(baseRect, p);
-        props.x = o.x; props.y = o.y;
+        const p = this.getAnchorPoint(step.toAnchor); // p 为目标中心
+        const targetLeft = p.x - baseRect.width / 2;
+        const targetTop = p.y - baseRect.height / 2;
+        props.left = targetLeft; props.top = targetTop;
+        curLeft = targetLeft; curTop = targetTop;
       } else if (step.delta) {
-        props.x = `+=${step.delta.dx || 0}`;
-        props.y = `+=${step.delta.dy || 0}`;
-      } /* 移除旧的 toBase 分支 */ else if (step.toCard) {
-        // 新增：动态对齐到指定卡片（或自身ID）当前 DOM 位置，避免出现 ActivatedSkillsBar 跳变
+        const dx = step.delta.dx || 0;
+        const dy = step.delta.dy || 0;
+        const targetLeft = curLeft + dx;
+        const targetTop = curTop + dy;
+        props.left = targetLeft; props.top = targetTop;
+        curLeft = targetLeft; curTop = targetTop;
+      } else if (step.toCard) { /* 动态对齐到指定卡片（或自身ID）当前 DOM 位置 */
         try {
-          const targetId = step.toCard === true ? id : step.toCard; // true 表示使用当前动画卡片自身
+          const targetId = step.toCard === true ? id : step.toCard;
           const targetEl = getCardEl(targetId);
           const rect = targetEl ? this.getRect(targetEl) : null;
           if (rect) {
-            const targetPoint = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            const o = this.offsetsToPoint(baseRect, targetPoint);
-            props.x = o.x; props.y = o.y;
-          } else {
-            props.x = '+=0'; props.y = '+=0';
+            const targetLeft = rect.left + rect.width / 2 - baseRect.width / 2;
+            const targetTop = rect.top + rect.height / 2 - baseRect.height / 2;
+            props.left = targetLeft; props.top = targetTop;
+            curLeft = targetLeft; curTop = targetTop;
           }
-        } catch (_) {
-          props.x = '+=0'; props.y = '+=0';
-        }
+        } catch (_) {}
       }
+
       if (typeof step.scale === 'number') props.scale = step.scale;
       if (typeof step.rotate === 'number') props.rotate = step.rotate;
       if (typeof step.opacity === 'number') props.autoAlpha = step.opacity;
@@ -361,7 +379,7 @@ const orchestrator = {
         let lastEmit = -1;
         tl.to(ghost, {
           ...props,
-            duration: Math.max(0.001, duration / 1000),
+          duration: Math.max(0.001, duration / 1000),
           ease,
           onUpdate: () => {
             const elapsed = tl.time() * 1000; // timeline time in ms
@@ -375,7 +393,7 @@ const orchestrator = {
         tl.to(ghost, { ...props, duration: Math.max(0.001, duration / 1000), ease });
       }
 
-      if (holdMs > 0) tl.to(ghost, { x: '+=0', duration: holdMs / 1000, ease: 'none' });
+      if (holdMs > 0) tl.to(ghost, { left: '+=0', duration: holdMs / 1000, ease: 'none' });
     }
 
     await new Promise(resolve => {
@@ -551,3 +569,4 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
 frontendEventBus.on('animate-card-by-id', async (payload = {}) => { try { await animateById(payload || {}); } catch (_) {} });
 frontendEventBus.on('clear-card-animations', () => { orchestrator.resetAllGhosts({ restoreStart: true }); try { orchestrator._clearCenter(); } catch (_) {} });
 export { animateById }; export default orchestrator;
+

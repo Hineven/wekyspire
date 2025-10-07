@@ -246,19 +246,10 @@ function manualStopActivatedSkill(skill) {
   // 生命周期结束回调
   try { skill.onDisable(player, 'manual'); } catch (_) {}
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
-  // 从激活位移除（在 burnSkillCard 内部也会处理，但仅限 activatedSkills；为稳妥先手动移除，burnSkillCard 再次检查无副作用）
-  const idx = player.activatedSkills.indexOf(skill);
-  if (idx !== -1) player.activatedSkills.splice(idx, 1);
   if (willBurnCurrent) {
     burnSkillCard(player, skill.uniqueID);
   } else {
-    enqueueAnimateCardById({
-      id: skill.uniqueID,
-      kind: 'drop',
-      transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
-    });
-    player.backupSkills.push(skill);
-    enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+    dropSkillCard(player, skill.uniqueID);
   }
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
 }

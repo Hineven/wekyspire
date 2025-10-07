@@ -222,7 +222,7 @@ export class FireTransport extends Skill {
 
 
 // 温暖拥抱（C-）
-// 受3伤害，将你一半燃烧赋予对手
+// 受3伤害，向敌人转移至多9层燃烧
 export class WarmHug extends Skill {
   constructor() {
     super('温暖拥抱', 'fire', 1, 0, 1, 2);
@@ -233,7 +233,7 @@ export class WarmHug extends Skill {
   }
   getStacks(player) {
     const stacks = player.effects['燃烧'] || 0;
-    const baseTransferStacks = Math.ceil(stacks / 2);
+    const baseTransferStacks = Math.min(stacks, 9);
     return Math.max(0, baseTransferStacks);
   }
 
@@ -264,14 +264,14 @@ export class WarmHug extends Skill {
 
   regenerateDescription(player) {
     if(player) {
-      return `${this.damageText}转移${this.getStacks(player)}层/effect{燃烧}给对手`;
+      return `${this.damageText}向敌人转移${this.getStacks(player)}层/effect{燃烧}`;
     }
-    return `${this.damageText}转移你一半燃烧给对手`;
+    return `${this.damageText}向敌人转移至多9层燃烧`;
   }
 }
 
 // 散火（C-）
-// 丢弃前方所有牌，并失去所有燃烧
+// 丢弃前方所有牌，每张失去3层燃烧
 export class DisperseFire extends Skill {
   constructor() {
     super('散火', 'fire', 1, 0, 1, 1);
@@ -283,25 +283,21 @@ export class DisperseFire extends Skill {
   }
 
   use(player, enemy, stage) {
-    if(stage === 0) {
-      while (player.frontierSkills.length > 0) {
-        const skill = player.frontierSkills[0];
-        if(skill === this) {
-          break;
-        }
-        dropSkillCard(player, skill.uniqueID);
+    while (player.frontierSkills.length > 0) {
+      const skill = player.frontierSkills[0];
+      if(skill === this) {
+        break;
       }
-      return false;
-    } else {
-      const burnEffect = player.effects['燃烧'];
-      if (burnEffect) {
-        player.removeEffect('燃烧', burnEffect);
-      }
-      return true;
+      dropSkillCard(player, skill.uniqueID);
+      const toRemove = Math.min(player.effects['燃烧'], 3);
+      enqueueDelay(200);
+      player.removeEffect('燃烧', toRemove);
     }
+    return true;
+
   }
   regenerateDescription(player) {
-    return `丢弃/named{前方}所有牌，失去所有/effect{燃烧}`;
+    return `丢弃/named{前方}所有牌，每张移除3层/effect{燃烧}`;
   }
 }
 
@@ -418,17 +414,37 @@ export class ScorchingCurse extends Skill {
 }
 
 // 耐热（C+）
-// 获得5层火焰抗性
+// 咏唱：获得6层火焰抗性
 export class HeatResistance extends Skill {
   constructor() {
-    super('耐热', 'fire', 2, 2, 1, 1);
+    super('耐热', 'fire', 2, 0, 1, 1);
+    this.cardMode = 'chant';
+    this.modifier_ = (player) => {
+      const self = this;
+      return new Proxy(player, {
+        get(target, prop) {
+          if (prop === 'effects') {
+            const effects = {...target.effects};
+            effects['火焰抗性'] = (effects['火焰抗性'] || 0) + self.stacks;
+            return effects;
+          }
+          return target[prop];
+        }
+      });
+    };
   }
   get stacks() {
-    return Math.max(5 + 2 * this.power, 1);
+    return Math.max(6 + 3 * this.power, 1);
   }
   use(player, enemy, stage) {
-    player.addEffect('火焰抗性', this.stacks);
     return true;
+  }
+  onEnable(player) {
+    super.onEnable(player);
+    player.addModifier(this.modifier_);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
   }
   regenerateDescription(player) {
     return `获得${this.stacks}层/effect{火焰抗性}`;
@@ -481,25 +497,41 @@ export class HeatAbsorptionI extends Skill {
 }
 
 // 火焰伴身（B-）
-// 每3层燃烧转化为1点集中
+// 咏唱：每5层燃烧提供1点集中
 export class FireAssistance extends Skill {
   constructor() {
     super('火焰伴身', 'fire', 3, 1, 1, 1);
+    this.cardMode = 'chant';
+    this.modifier_ = (player) => {
+      const self = this;
+      return new Proxy(player, {
+        get(target, prop) {
+          if (prop === 'magic') {
+            const burnEffect = target.effects['燃烧'] || 0;
+            return Math.floor(burnEffect / self.conversionRate) + target.magic;
+          }
+          return target[prop];
+        }
+      });
+    };
   }
   get conversionRate() {
-    return Math.max(3 - this.power, 1);
+    return Math.max(5 - this.power, 4);
   }
   use(player, enemy, stage) {
-    const burnEffect = player.effects['燃烧'];
-    if (burnEffect) {
-      const convertableStacks = Math.ceil(burnEffect / this.conversionRate);
-      player.removeEffect('燃烧', burnEffect);
-      player.addEffect('集中', convertableStacks);
-    }
     return true;
   }
+  onEnable(player) {
+    super.onEnable(player);
+    this.baseActionPointCost = 0;
+    player.addModifier(this.modifier_);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
+    player.removeModifier(this.modifier_);
+  }
   regenerateDescription(player) {
-    return `每${this.conversionRate}层/effect{燃烧}转化为1层/effect{集中}`;
+    return `每${this.conversionRate}层/effect{燃烧}提供1层/effect{集中}`;
   }
 }
 

@@ -1,7 +1,8 @@
 <template>
   <div class="activated-skills-bar" ref="barRoot">
     <div class="activated-slot" v-for="(skill, idx) in visibleSkills" :key="skill.uniqueID"
-         :style="slotStyle(idx, skill)" :class="{'leaving': leaving[skill.uniqueID]}"
+         :style="slotDynamicStyle(idx, skill)"
+         :class="{'leaving': leaving[skill.uniqueID], 'chanting': isChanting(skill) && !leaving[skill.uniqueID]}"
          @click="onSkillClick(skill)">
       <SkillCard :skill="skill"
                  :player="player"
@@ -20,6 +21,7 @@ import SkillCard from './SkillCard.vue';
 import frontendEventBus from '../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../backendEventBus.js';
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
+import { getSkillTierColor } from '../utils/tierUtils.js';
 
 export default {
   name: 'ActivatedSkillsBar',
@@ -106,11 +108,23 @@ export default {
     slotStyle(idx, skill) {
       const baseX = idx * 210; // spacing
       const hidden = !!this.appearing[skill.uniqueID];
-      console.log(hidden);
       return {
-        transform: `translateX(${baseX}px)` ,
+        transform: `translateX(${baseX}px)`,
         visibility: hidden ? 'hidden' : 'visible'
       };
+    },
+    // 新增：是否为咏唱状态
+    isChanting(skill) { return !!(skill && skill.cardMode === 'chant'); },
+    // 新增：获取 tier 色
+    tierColor(skill) {
+      if (!skill) return '#ffffff';
+      const tier = (skill.tier != null ? String(skill.tier) : (skill.skillTier != null ? String(skill.skillTier) : ''));
+      return getSkillTierColor(tier) || '#ffffff';
+    },
+    // 新增：整合动态样式（注入颜色变量）
+    slotDynamicStyle(idx, skill) {
+      const base = this.slotStyle(idx, skill);
+      return { ...base, '--tier-color': this.tierColor(skill) };
     },
     onSkillClick(skill) {
       // 默认点击行为：如果是咏唱牌，等同停止按钮
@@ -138,7 +152,27 @@ export default {
   top: 0;
   transition: transform .25s ease, visibility 0s linear;
 }
-.chant-actions { position:absolute; bottom:4px; right:4px; }
-.stop-btn { font-size:12px; padding:2px 6px; cursor:pointer; }
-</style>
+/* 咏唱 ring-light：慢速脉动，仅淡入，不淡出；离开时移除 .chanting class 立即终止 */
+.activated-slot.chanting::after {
+  content: '';
+  position: absolute;
+  inset: 0px;
+  border-radius: 18px;
+  pointer-events: none;
+  /* 使用双层阴影：第一层紧贴，第二层外扩发光 */
+  box-shadow: 0 0 0 0 var(--tier-color, #fff), 0 0 0 0 var(--tier-color, #fff);
+  border: 2px solid var(--tier-color, #fff);
+  opacity: 0; /* 仅初始为 0，动画前段淡入后保持 */
+  animation: ringLightPulse 3.6s ease-in infinite;
+  filter: blur(1px) saturate(1.1);
+  z-index: -1;
+}
+@keyframes ringLightPulse {
+  0% { opacity: 0.2; box-shadow: 0 0 8px 2px var(--tier-color, #fff), 0 0 20px 8px var(--tier-color, #fff);}
+  12% { box-shadow: 0 0 16px 6px var(--tier-color, #fff), 0 0 34px 14px var(--tier-color, #fff); }
+  28% { box-shadow: 0 0 10px 4px var(--tier-color, #fff), 0 0 26px 12px var(--tier-color, #fff); }
+  50% { opacity: 1; box-shadow: 0 0 13px 5px var(--tier-color, #fff), 0 0 28px 12px var(--tier-color, #fff); }
+  0% { box-shadow: 0 0 8px 2px var(--tier-color, #fff), 0 0 20px 8px var(--tier-color, #fff);}
+}
 
+</style>
