@@ -210,12 +210,11 @@ export function drawSelectedSkillCard (player, skillID) {
       });
       const [drawnSkill] = player.overlaySkills.splice(overlayIndex, 1);
       player.frontierSkills.push(drawnSkill);
-      enqueueDelay(0);
       // 然后飞回手牌
       enqueueAnimateCardById( {
         id: skillID,
         kind: 'flyToInPlace',
-        transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'hand' }
+        transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'skills-hand' }
       });
       return drawnSkill;
     } else {
@@ -320,8 +319,8 @@ export function willSkillBurn(skill) {
 }
 
 // 发现一张卡牌，并立刻进入牌库或手牌
-// destination 可选 'hand'（前台）或 'deck'（后备），默认为 'hand'
-export function discoverSkillCard(player, skill, destination='hand') {
+// destination 可选 'skills-hand'（前台）或 'deck'（后备），默认为 'skills-hand'
+export function discoverSkillCard(player, skill, destination='skills-hand') {
   if (!skill || !(skill instanceof Object) || !skill.uniqueID) {
     console.warn('尝试发现非法的技能卡牌：', skill);
     return;
@@ -334,12 +333,15 @@ export function discoverSkillCard(player, skill, destination='hand') {
     id: skill.uniqueID,
     kind: 'appearInPlace'
   });
-  if (destination === 'hand') {
+  if (destination === 'skills-hand') {
     if (player.frontierSkills.length >= player.maxHandSize
       || drawSelectedSkillCard(player, skill.uniqueID) === null) {
       burnSkillCard(player, skill.uniqueID)
     }
+  } else if(destination === 'deck') {
+    dropSkillCard(player, skill.uniqueID);
   } else {
+    console.warn('未知的发现卡牌目标容器：', destination, '，默认放入牌库。');
     dropSkillCard(player, skill.uniqueID);
   }
 }

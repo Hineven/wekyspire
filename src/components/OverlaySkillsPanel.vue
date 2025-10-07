@@ -91,7 +91,7 @@ export default {
     frontendEventBus.off('card-transfer-start', this.onTransferStart);
     frontendEventBus.off('card-transfer-end', this.onTransferEnd);
     frontendEventBus.off('start-card-selection', this.onStartCardSelection);
-    for (const id of Object.keys(this.cardRefs)) unregisterCardEl(id);
+    for (const id of Object.keys(this.cardRefs)) unregisterCardEl(id, 'overlay-skills-panel');
   },
   methods: {
     onStartCardSelection(payload = {}) {
@@ -126,7 +126,7 @@ export default {
       // 移除不存在的
       for (const id of Object.keys(this.cardRefs)) {
         if (!currentIds.has(id)) {
-          unregisterCardEl(id, this.cardRefs[id]);
+          unregisterCardEl(id, 'overlay-skills-panel');
           delete this.cardRefs[id];
           this.selectedIds = this.selectedIds.filter(x => x !== id);
         }
@@ -138,9 +138,9 @@ export default {
         if (this.cardRefs[id] === el) return;
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
-        registerCardEl(id, dom);
+        registerCardEl(id, dom, 'overlay-skills-panel');
       } else {
-        unregisterCardEl(id, this.cardRefs[id]);
+        unregisterCardEl(id, 'overlay-skills-panel');
         delete this.cardRefs[id];
       }
     },

@@ -236,10 +236,10 @@ export default {
         if(this.cardRefs[id] === el) return;
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
-        registerCardEl(id, dom);
+        registerCardEl(id, dom, this.transferContainerKey);
       } else {
         // 保证销毁的注册表项是本元素注册的DOM，避免因为时序导致的误删（A增加->B增加->A销毁->B注册表项被删）
-        unregisterCardEl(id, this.cardRefs[id]);
+        unregisterCardEl(id, this.transferContainerKey);
         delete this.cardRefs[id];
       }
     },

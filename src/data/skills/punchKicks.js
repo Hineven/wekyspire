@@ -272,8 +272,7 @@ export class ChargePunchKick extends Skill { // 原名 SpeedyPunchKick（与“�
   }
   use(player, enemy, stage) {
     const skill = new HeavyPunchKick(this.damage);
-    // 发现到牌库：正确调用 discoverSkillCard(player, skill, 'deck')
-    discoverSkillCard(player, skill, 'hand');
+    discoverSkillCard(player, skill, 'deck');
     return true;
   }
   regenerateDescription(player) {

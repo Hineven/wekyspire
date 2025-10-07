@@ -39,7 +39,7 @@ import cardDomRegistry, { getCardEl } from './cardDomRegistry.js';
 const defaultEase = 'power2.out';
 
 const orchestrator = {
-  overlayEl: null,
+  overlayEl: null, // 用于存储所有ghost的overlay DOM element
   centerAnchorEl: null,
   deckAnchorEl: null,
   ghostContainerEl: null,
@@ -294,7 +294,11 @@ const orchestrator = {
     try { ghost.remove(); } catch (_) {}
     // 优先还原注册表内的 card DOM，兜底尝试 startEl
     const originalEl = getCardEl(id) || startEl;
-    if (restoreStart) { try { originalEl.style.visibility = ''; } catch (_) {} }
+    if (restoreStart) {
+      try {
+        originalEl.style.visibility = '';
+      } catch (_) {}
+    }
     this._ghostRegistry.delete(id);
   },
 
@@ -375,6 +379,8 @@ const orchestrator = {
             const targetTop = rect.top + rect.height / 2 - baseRect.height / 2;
             props.left = targetLeft; props.top = targetTop;
             curLeft = targetLeft; curTop = targetTop;
+          } else {
+            console.warn('找不到目标卡片 DOM，无法对齐：', targetId, targetEl);
           }
         } catch (_) {}
       }
