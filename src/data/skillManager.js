@@ -94,11 +94,12 @@ class SkillManager {
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
     const playerSkillNames = playerSkills.map(skill => skill.name);
 
-    // 过滤掉玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
+    // 过滤掉不可生成为奖励的技能、玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
     const baseAvailableSkills = allSkills.filter(skill =>
       !playerSkillNames.includes(skill.name) &&
       !playerSkillSeries.includes(skill.series) &&
-      skill.tier <= playerTier
+      skill.tier <= playerTier &&
+      skill.canSpawnAsReward_
     );
 
     // —— 收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——

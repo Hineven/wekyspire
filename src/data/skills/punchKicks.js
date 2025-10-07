@@ -1,5 +1,6 @@
 import Skill from '../skill.js';
 import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard, discoverSkillCard} from '../battleUtils.js';
+import {signedNumberString, signedNumberStringW0} from "../../utils/nameUtils";
 
 // 拳打脚踢技能
 export class PunchKick extends Skill {
@@ -245,11 +246,10 @@ export class AgilePunchKick extends Skill {
 export class HeavyPunchKick extends Skill {
   constructor(damage) {
     super('大力一击', 'normal', 0, 0, 1, 1);
-    this.fixedDamage = damage;
     this.canSpawnAsReward_ = false;
   }
   get damage() {
-    return this.fixedDamage;
+    return Math.max(15 + 5 * this.power, 7);
   }
   use(player, enemy, stage) {
     launchAttack(player, enemy, this.damage);
@@ -267,15 +267,12 @@ export class ChargePunchKick extends Skill { // 原名 SpeedyPunchKick（与“�
     super('蓄力', 'normal', 0, 0, 1, 1);
     this.baseColdDownTurns = 2;
   }
-  get damage() {
-    return Math.max(15 + 5 * this.power, 10);
-  }
   use(player, enemy, stage) {
     const skill = new HeavyPunchKick(this.damage);
     discoverSkillCard(player, skill, 'deck');
     return true;
   }
   regenerateDescription(player) {
-    return `发现/skill{大力一击}进入牌库`;
+    return `发现/skill{大力一击${signedNumberStringW0(this.power)}}进入牌库`;
   }
 }
