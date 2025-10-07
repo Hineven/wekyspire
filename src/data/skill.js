@@ -1,3 +1,5 @@
+import animationSequencer from './animationSequencer.js';
+
 // 技能抽象类
 class Skill {
   constructor(name, type, tier, baseManaCost, baseActionPointCost, baseMaxUses, skillSeriesName = undefined, spawnWeight = undefined) {
@@ -20,6 +22,34 @@ class Skill {
     this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
     // 新增：卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
     this.cardMode = 'normal';
+  }
+
+  // 简化：统一冷却事件，仅发送 'cooldown-tick'（不再区分 start/progress/end，也无 progress 数值）
+  _emitCooldownTick() {
+    try {
+      const id = this.uniqueID;
+      animationSequencer.enqueueInstruction({
+        tags: ['skill-cd', `skill-${id}`],
+        waitTags: [],
+        durationMs: 0,
+        start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick' }),
+        meta: { skillId: id, overlay: true, phase: 'cooldown-tick' }
+      });
+    } catch (_) {}
+  }
+
+  // 升级覆盖层事件（升级闪光）
+  _emitUpgradeFlash(deltaPower = 1) {
+    try {
+      const id = this.uniqueID;
+      animationSequencer.enqueueInstruction({
+        tags: ['skill-upgrade', `skill-${id}`],
+        waitTags: [],
+        durationMs: 0,
+        start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'upgrade-flash', 'deltaPower': deltaPower }),
+        meta: { skillId: id, overlay: true, phase: 'upgrade-flash' }
+      });
+    } catch (_) {}
   }
 
   get slowStart () {
@@ -51,24 +81,36 @@ class Skill {
 
   // 回合开始时或被手动调用时，推进冷却流程
   coldDown() {
-    if(this.coldDownTurns !== 0) {
-      if(this.remainingUses !== this.maxUses) {
-        this.remainingColdDownTurns --;
-        if(this.remainingColdDownTurns <= 0) {
+    if (this.coldDownTurns !== 0) {
+      if (this.remainingUses !== this.maxUses) {
+        this.remainingColdDownTurns--;
+        let charged = false;
+        if (this.remainingColdDownTurns <= 0) {
           this.remainingColdDownTurns = this.coldDownTurns;
           this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
+          charged = true;
         }
+        // 无论是否完成一段充能，只要 remainingColdDownTurns 发生了变化就发一次 tick
+        this._emitCooldownTick();
       } else {
         this.resetColdDownProcess();
       }
     }
   }
 
+  // power变化（升级/降级）
+  powerUp(deltaPower = 1) {
+    this.power += deltaPower;
+    this._emitUpgradeFlash(deltaPower);
+  }
+
   // 立刻冷却
   instantColdDown() {
-    if(this.canColdDown()) {
+    if (this.canColdDown()) {
       this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
       this.resetColdDownProcess();
+      // 重置后也算一次冷却状态变化
+      this._emitCooldownTick();
     }
   }
 
@@ -104,7 +146,10 @@ class Skill {
   }
 
   consumeUses () {
-    this.remainingUses --;
+    const prevUses = this.remainingUses;
+    this.remainingUses--;
+    // 使用技能本身不改变 remainingColdDownTurns，故不发送 tick；进入冷却的首个 tick 等待下一次 coldDown() 推进后发送
+    try { if (prevUses === this.maxUses && this.canColdDown()) { /* 进入冷却但不发送事件 */ } } catch (_) {}
   }
 
   consumeResources (player) {
@@ -128,6 +173,7 @@ class Skill {
   // 升级技能，子类可以重写此方法
   upgrade(deltaPower) {
     this.power += deltaPower;
+    this._emitUpgradeFlash();
   }
 
   // 咏唱型技能启用/停用生命周期钩子（仅 cardMode === 'chant' 使用）

@@ -7,6 +7,9 @@
     :style="skillCardStyle"
     ref="root"
   >
+    <!-- Overlay 动画层（冷却/升级等） -->
+    <SkillCardAnimationOverlay :skill="skill" :disabled="previewMode" />
+    <!-- 背景 -->
     <div class="skill-card-background-paper"></div>
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
 
@@ -41,10 +44,11 @@ import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../utils/colorUtils";
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
+import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
 
 export default {
   name: 'SkillCard',
-  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta },
+  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta, SkillCardAnimationOverlay },
   props: {
     skill: { type: Object, required: true },
     player: { type: Object, default: null },
