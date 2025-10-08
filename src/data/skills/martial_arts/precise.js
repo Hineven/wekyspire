@@ -49,19 +49,19 @@ export class PreciseAttack extends Skill {
 }
 
 // 精准一击（C-）（精准）
-// 造成15伤害
+// 造成19伤害
 export class PreciseSingleAttack extends PreciseAttack {
   constructor() {
-    super('精心一击', 1, 15, 6, 1);
+    super('精心一击', 1, 19, 6, 1);
     this.precessor = null;
   }
 }
 
 // 精心二击（C+）（精心一击延伸卡）
-// 造成9伤害2次
+// 造成11伤害2次
 export class PreciseDoubleAttack extends PreciseAttack {
   constructor() {
-    super('精心二击', 2, 9, 3, 2);
+    super('精心二击', 2, 11, 3, 2);
     this.precessor = '精心一击';
   }
 }
@@ -91,15 +91,15 @@ export class PalmStrike extends PreciseAttack {
 }
 
 // 弱点攻击（B-）（精准）
-// 造成20伤害，若敌人虚弱，伤害增13
+// 造成23伤害，若敌人虚弱，伤害增16
 export class WeakPointAttack extends PreciseAttack {
   constructor(name = '弱点攻击', tier = 3) {
-    super(name, tier, 20, 8, 1);
+    super(name, tier, 23, 8, 1);
     this.precessor = '精准一击';
   }
 
   get extraDamage() {
-    return 13 + this.power * 4;
+    return 16 + this.power * 4;
   }
 
   shouldApplyExtraDamage(enemy) {
@@ -124,7 +124,7 @@ export class WeakPointAttack extends PreciseAttack {
 }
 
 // 摘云手（B+）（精准）
-// 造成20伤害2次，若敌人虚弱，伤害增13
+// 造成23伤害2次，若敌人虚弱，伤害增16
 export class CloudHandAttack extends WeakPointAttack {
   constructor() {
     super('摘云手', 5);
@@ -134,7 +134,7 @@ export class CloudHandAttack extends WeakPointAttack {
 }
 
 // 摘星手（A-）（精准）
-// 造成20伤害3次，若敌人虚弱，伤害增13
+// 造成23伤害3次，若敌人虚弱，伤害增16
 export class StarHandAttack extends WeakPointAttack {
   constructor() {
     super('摘星手', 6);

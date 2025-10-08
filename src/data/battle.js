@@ -63,14 +63,25 @@ function startBattle() {
     skill.onBattleStart();
   });
 
+  console.log(gameState.player.skills);
+
   // 调用卡牌进入战斗事件
   gameState.player.skills.forEach(skill => {
     skill.onEnterBattle(gameState.player.getModifiedPlayer());
   });
 
+  const modPlayer = gameState.player.getModifiedPlayer();
+
   // 搞定后立刻锁定操作面板
   enqueueLockControl();
 
+  // 初始化前台技能
+  const drawCount = Math.min(
+    modPlayer.initialDrawFrontierSkills, modPlayer.maxFrontierSkills,
+    modPlayer.backupSkills.length);
+  drawSkillCard(modPlayer, drawCount);
+
+  enqueueDelay(200); // 动画barrier，防止抽卡动画和后面的抽卡动画重叠播放
 
   // 开始玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
@@ -81,8 +92,10 @@ function startPlayerTurn() {
   // 确保这是玩家回合
   gameState.isEnemyTurn = false;
 
+  const modPlayer = gameState.player.getModifiedPlayer();
+
   // 补充行动力
-  gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
+  gameState.player.remainingActionPoints = modPlayer.maxActionPoints;
 
   // 进行技能冷却
   gameState.player.frontierSkills.forEach(skill => {
@@ -93,7 +106,6 @@ function startPlayerTurn() {
   });
 
   // 回合开始时结算效果（使用修正后的玩家对象）
-  const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   const isStunned = processStartOfTurnEffects(modPlayer);
   if(checkBattleVictory()) return ;
 
@@ -101,7 +113,7 @@ function startPlayerTurn() {
   enqueueUnlockControl();
 
   // 填充前台技能
-  fillFrontierSkills(gameState.player);
+  fillFrontierSkills(modPlayer);
 
   if (isStunned) {
     addSystemLog('你被眩晕，跳过回合！');

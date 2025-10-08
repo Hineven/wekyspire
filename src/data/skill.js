@@ -88,10 +88,11 @@ class Skill {
   }
 
   // 回合开始时或被手动调用时，推进冷却流程
-  coldDown() {
+  coldDown(deltaStacks = 1) {
     if (this.coldDownTurns !== 0) {
       if (this.remainingUses !== this.maxUses) {
-        this.remainingColdDownTurns--;
+        this.remainingColdDownTurns = Math.max(this.remainingColdDownTurns - deltaStacks, 0);
+        this.remainingColdDownTurns = Math.min(this.remainingColdDownTurns, this.coldDownTurns);
         let charged = false;
         if (this.remainingColdDownTurns <= 0) {
           this.remainingColdDownTurns = this.coldDownTurns;
@@ -99,7 +100,7 @@ class Skill {
           charged = true;
         }
         // 无论是否完成一段充能，只要 remainingColdDownTurns 发生了变化就发一次 tick
-        this._emitCooldownTick();
+        this._emitCooldownTick(deltaStacks);
       } else {
         this.resetColdDownProcess();
       }

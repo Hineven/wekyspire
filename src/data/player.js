@@ -96,7 +96,8 @@ export class Player extends Unit {
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.burntSkills = []; // 坟地技能列表，存放被焚毁的技能（战斗中完全消耗掉的技能）
     this.maxFrontierSkills = 10; // 最大前台技能数量
-    this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
+    this.initialDrawFrontierSkills = 2; // 战斗开始时，额外抽取前台技能数量
+    this.drawFrontierSkills = 3; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
     this.leinoFactors = {}; // 灵脉强度列表，影响卡牌出现概率，包含 fire, wind, wood, earth, water, thunder, light, dark
     this.abilities = []; // 玩家能力列表

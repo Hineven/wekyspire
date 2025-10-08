@@ -18,12 +18,18 @@ function startGame() {
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
   const initialSkill1 = SkillManager.getInstance().createSkill('拳');
   const initialSkill2 = SkillManager.getInstance().createSkill('拳');
-  // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');
-  // const initialSkill4 = SkillManager.getInstance().createSkill('冲锋盾');
-  const initialSkill3 = SkillManager.getInstance().createSkill('敏捷打击');
-  const initialSkill4 = SkillManager.getInstance().createSkill('狠狠一击');
+  const initialSkill3 = SkillManager.getInstance().createSkill('拳');
+  const initialSkill4 = SkillManager.getInstance().createSkill('拳');
+  const initialSkill5 = SkillManager.getInstance().createSkill('盾');
+  const initialSkill6 = SkillManager.getInstance().createSkill('盾');
+  const initialSkill7 = SkillManager.getInstance().createSkill('盾');
+  const initialSkill8 = SkillManager.getInstance().createSkill('断子绝孙脚');
+  const initialSkill9 = SkillManager.getInstance().createSkill('抱头');
+  // const initialSkill5 = SkillManager.getInstance().createSkill('回旋斩');
 
-  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4];//, initialSkill5];
+  backendGameState.player.cultivatedSkills = [
+      initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5,
+  initialSkill6, initialSkill7, initialSkill8, initialSkill9];
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {

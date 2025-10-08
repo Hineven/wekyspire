@@ -11,7 +11,7 @@ export class HeavyChargedHit extends Skill {
     this.canSpawnAsReward_ = false;
   }
   get damage() {
-    return Math.max(15 + 5 * this.power, 7);
+    return Math.max(14 + 4 * this.power, 7);
   }
   use(player, enemy, stage) {
     launchAttack(player, enemy, this.damage);

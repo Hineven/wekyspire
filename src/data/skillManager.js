@@ -19,11 +19,20 @@ class SkillManager {
 
     // 动态导入所有技能文件
     const skillModules = [
-      await import('./skills/martial_arts/punch.js'),
+      await import('./skills/martial_arts/agileHit.js'),
+      await import('./skills/martial_arts/block.js'),
+      await import('./skills/martial_arts/guardHit.js'),
+      await import('./skills/martial_arts/heavySmash.js'),
+      await import('./skills/martial_arts/machete.js'),
+      await import('./skills/martial_arts/martialArtPose.js'),
+      await import('./skills/martial_arts/misc.js'),
+      await import('./skills/martial_arts/oneHit.js'),
       await import('./skills/martial_arts/precise.js'),
       await import('./skills/martial_arts/preparedHit.js'),
-      await import('./skills/martial_arts/agileHit.js'),
-      await import('./skills/martial_arts/oneHit.js'),
+      await import('./skills/martial_arts/punch.js'),
+      await import('./skills/martial_arts/roundSlash.js'),
+      await import('./skills/martial_arts/shielding.js'),
+      await import('./skills/martial_arts/slash.js'),
       // await import('./skills/blast.js'),
       // await import('./skills/cMinus.js'),
       // await import('./skills/concentration.js'),
@@ -102,12 +111,11 @@ class SkillManager {
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
     const playerSkillNames = playerSkills.map(skill => skill.name);
 
-    // 过滤掉不可生成为奖励的技能、玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
+    // 过滤掉不可生成为奖励的技能，有前置技能的技能，以及等阶大于玩家等阶的技能
     const baseAvailableSkills = allSkills.filter(skill =>
-      !playerSkillNames.includes(skill.name) &&
-      !playerSkillSeries.includes(skill.series) &&
       skill.tier <= playerTier &&
       skill.canSpawnAsReward_ &&
+      skill.precessor === null && // 只能是自由出现的技能
       skill.tier >= 0 // 不能是（-1）特殊卡
     );
 

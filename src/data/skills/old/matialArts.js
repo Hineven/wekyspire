@@ -6,9 +6,8 @@ import {PunchKick} from "./punchKicks";
 // 断子绝孙脚（C-）
 // 造成6伤害，造成生命伤害则赋予虚弱
 export class ElegantKick extends Skill {
-
   constructor() {
-    super('踢击', 'normal', 1, 0, 2, 1);
+    super('断子绝孙脚', 'normal', 1, 0, 2, 1);
     this.baseColdDownTurns = 3;
   }
 

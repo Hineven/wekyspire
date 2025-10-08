@@ -14,3 +14,9 @@ export function countString (num, suffix = '') {
   if(num === 0) return '';
   return `${num}${suffix}`;
 }
+
+export function modifiedNumberString (num, suffix = '') {
+  if(num === 0) return '';
+  if(num < 0) return `/red{${num}${suffix}}`;
+  return `/green{+${num}${suffix}}`;
+}

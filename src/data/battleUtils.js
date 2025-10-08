@@ -190,14 +190,17 @@ export function drawSelectedSkillCard (player, skillID) {
     // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
     return null;
   }
+  enqueueDelay(0);
   // 先尝试牌库
   const index = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
   if (index !== -1) {
-    // 播放动画
-    enqueueAnimateCardById( {id: skillID, kind: 'draw'});
     // 执行逻辑
     const [drawnSkill] = player.backupSkills.splice(index, 1);
     player.frontierSkills.push(drawnSkill);
+    // 播放动画
+    enqueueAnimateCardById(
+      {id: skillID, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}}
+    );
     return drawnSkill;
   } else {
     // 尝试从 overlaySkills 抽取（新发现的卡牌）
