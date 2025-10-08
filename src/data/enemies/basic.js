@@ -186,7 +186,7 @@ export class BuzzlingBugs extends Enemy {
 }
 
 // 黏黏史莱姆敌人
-import { SlimeCurse } from '../skills/curses.js';
+import { SlimeCurse } from '../skills/curse/enemyCurses.js';
 import {enqueueDelay} from "../animationInstructionHelpers";
 
 export class SlimySlime extends Enemy {

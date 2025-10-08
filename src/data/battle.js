@@ -55,13 +55,22 @@ function startBattle() {
   gameState.player.frontierSkills = [];
   gameState.player.burntSkills = [];
 
-  // 搞定后立刻锁定操作面板
-  enqueueLockControl();
+  // 打乱后备技能顺序
+  gameState.player.backupSkills.sort(() => Math.random() - 0.5);
 
   // 调用技能的onBattleStart方法
   gameState.player.skills.forEach(skill => {
     skill.onBattleStart();
   });
+
+  // 调用卡牌进入战斗事件
+  gameState.player.skills.forEach(skill => {
+    skill.onEnterBattle(gameState.player.getModifiedPlayer());
+  });
+
+  // 搞定后立刻锁定操作面板
+  enqueueLockControl();
+
 
   // 开始玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
@@ -334,6 +343,11 @@ function battleVictory(isVictory) {
     gameState.player.activatedSkills = [];
     backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: [] });
   }
+  // 卡牌离场
+  gameState.player.skills.forEach(skill => {
+    try { skill.onLeaveBattle(gameState.player); } catch (_) {}
+  });
+
   gameState.player.skills = [];
   gameState.isEnemyTurn = true;
   

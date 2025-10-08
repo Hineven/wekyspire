@@ -280,6 +280,14 @@ export function burnSkillCard(player, skillID) {
     console.warn(`技能ID为 ${skillID} 的技能不在前台/后备/咏唱位列表中，无法焚烧。`);
     return;
   }
+
+  let exhaustedSkill = null;
+  if(activatedIndex !== -1) exhaustedSkill = player.activatedSkills[activatedIndex];
+  else if(frontierIndex !== -1) exhaustedSkill = player.frontierSkills[frontierIndex];
+  else exhaustedSkill = player.backupSkills[backupIndex];
+  // 卡牌离场
+  exhaustedSkill.onLeaveBattle(player);
+
   // 判定来源容器，用于动画 transfer
   let fromContainer = 'unknown';
   if (activatedIndex !== -1) fromContainer = 'activated-bar';
@@ -289,26 +297,20 @@ export function burnSkillCard(player, skillID) {
   // 动画（先播动画再修改逻辑，以便 orchestrator 拿到当前位置 DOM）
   enqueueAnimateCardById( {id: skillID, kind: 'burn', transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }});
 
-  let exhaustedSkill = null;
   if (activatedIndex !== -1) {
     exhaustedSkill = player.activatedSkills.splice(activatedIndex, 1)[0];
-    // 从总技能数组移除
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
     player.burntSkills.push(exhaustedSkill);
   } else if (frontierIndex !== -1) {
     exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) {
-      const burnt = player.skills.splice(skillListIndex, 1);
-      player.burntSkills.push(burnt[0]);
-    }
+    player.burntSkills.push(exhaustedSkill[0]);
   } else if (backupIndex !== -1) {
     exhaustedSkill = player.backupSkills.splice(backupIndex, 1)[0];
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
     player.burntSkills.push(exhaustedSkill);
   }
+  // 从总技能数组移除
+  const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+  if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+  // 触发技能焚毁事件
   backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
@@ -336,6 +338,9 @@ export function discoverSkillCard(player, skill, destination='skills-hand') {
     id: skill.uniqueID,
     kind: 'appearInPlace'
   });
+  // 触发发现事件
+  backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, { skill: skill, destination: destination });
+
   if (destination === 'skills-hand') {
     if (player.frontierSkills.length >= player.maxHandSize
       || drawSelectedSkillCard(player, skill.uniqueID) === null) {

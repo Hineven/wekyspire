@@ -16,14 +16,14 @@ function startGame() {
   dialogues.triggerBeforeGameStart();
 
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
-  const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
-  const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
-  const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
+  const initialSkill1 = SkillManager.getInstance().createSkill('拳');
+  const initialSkill2 = SkillManager.getInstance().createSkill('拳');
   // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');
-  const initialSkill4 = SkillManager.getInstance().createSkill('冲锋盾');
-  const initialSkill5 = SkillManager.getInstance().createSkill('敏捷打击');
+  // const initialSkill4 = SkillManager.getInstance().createSkill('冲锋盾');
+  const initialSkill3 = SkillManager.getInstance().createSkill('敏捷打击');
+  const initialSkill4 = SkillManager.getInstance().createSkill('狠狠一击');
 
-  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5];
+  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4];//, initialSkill5];
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {
@@ -85,8 +85,8 @@ export function initGameFlowListeners() {
   backendEventBus.on(EventNames.Rest.CLAIM_MONEY, () => {
     claimMoney();
   });
-  backendEventBus.on(EventNames.Rest.CLAIM_SKILL, ({ skill, slotIndex, clearRewards }) => {
-    claimSkillReward(skill, slotIndex, !!clearRewards);
+  backendEventBus.on(EventNames.Rest.CLAIM_SKILL, ({ skillID, slotIndex, clearRewards }) => {
+    claimSkillReward(skillID, slotIndex, !!clearRewards);
   });
   backendEventBus.on(EventNames.Rest.CLAIM_ABILITY, ({ ability, clearRewards }) => {
     claimAbilityReward(ability, !!clearRewards);

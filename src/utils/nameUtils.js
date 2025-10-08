@@ -9,3 +9,8 @@ export function signedNumberStringW0(num) {
   if(num < 0) return `-${num}`;
   return '';
 }
+
+export function countString (num, suffix = '') {
+  if(num === 0) return '';
+  return `${num}${suffix}`;
+}

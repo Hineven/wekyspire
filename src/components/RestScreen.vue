@@ -138,7 +138,7 @@ export default {
         if(sourceSlotIndex !== -1) {
           const oldSkill = slots[sourceSlotIndex];
           backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-            skill: currentSkill,
+            skillID: currentSkill.uniqueID,
             slotIndex: sourceSlotIndex,
             clearRewards: false
           });
@@ -152,7 +152,7 @@ export default {
       // 回退：未能自动升级则自动增添到末尾（若有空位）
       if(this.gameState.player.cultivatedSkills.length < this.gameState.player.maxSkills) {
         backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-          skill: currentSkill,
+          skillID: currentSkill.uniqueID,
           slotIndex: -1,
           clearRewards: false
         });
@@ -167,7 +167,7 @@ export default {
     },
     onSkillSelected(slotIndex) {
       backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-        skill: this.claimingSkill,
+        skillID: this.claimingSkill.uniqueID,
         slotIndex,
         clearRewards: false
       });

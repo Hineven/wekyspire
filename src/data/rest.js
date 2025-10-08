@@ -18,7 +18,7 @@ export function spawnSkillRewards() {
     if(nextTier) tier = nextTier;
   }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.leino, gameState.player.cultivatedSkills, tier, true // 生成高质量奖励
+    4, gameState.player.leino, gameState.player.cultivatedSkills, tier, true // 生成高质量奖励
   );
 }
 
@@ -73,8 +73,16 @@ export function claimMoney() {
 }
 
 // 领取技能奖励
-export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
-  if (!skill) return;
+export function claimSkillReward(skillID, slotIndex, clearRewardsFlag) {
+  if (!skillID) return;
+  const skill = gameState.rewards.skills.find(s => s && s.uniqueID === skillID);
+  // 技能不存在或已被领取
+  if (!skill) {
+    console.warn('尝试领取不存在的技能奖励：', skillID);
+    return;
+  }
+  // 移除upgrade标签
+  skill.isUpgradeCandidate = false;
   // 先入队飞行动画（以便在状态同步/切换面板前克隆幽灵）
   try {
     enqueueAnimateCardById({
@@ -90,14 +98,20 @@ export function claimSkillReward(skill, slotIndex, clearRewardsFlag) {
     }, { waitTags: ['all'] });
   } catch (_) {}
 
+  // 如果是升级候选，优先自动查找原技能并替换其槽位
+  if (skill.isUpgradeCandidate && skill.upgradedFrom) {
+    const idx = gameState.player.cultivatedSkills.findIndex(s => s && s.name === skill.upgradedFrom);
+    if (idx !== -1) {
+      slotIndex = idx; // 强制替换
+    }
+  }
+
   // 计算可用容量（最多 maxSkills 个）
   const capacity = Math.min(gameState.player.maxSkills || 0, gameState.player.cultivatedSkills.length + 1);
   if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = gameState.player.cultivatedSkills.length;
   if (slotIndex >= capacity) slotIndex = capacity - 1;
 
   console.log('领取技能奖励：', skill, '放置于槽位', slotIndex, '（容量', capacity, '）');
-  // 清理技能升级标识
-  if(skill.isUpgradeCandidate) skill.isUpgradeCandidate = false;
   // 放置/替换技能
   if(slotIndex >= gameState.player.cultivatedSkills.length) {
     gameState.player.cultivatedSkills.push(skill);

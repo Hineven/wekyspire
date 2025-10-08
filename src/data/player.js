@@ -10,12 +10,11 @@ export function upgradePlayerTier (player) {
   const nextTier = getNextPlayerTier(player.tier);
   if (nextTier !== undefined) {
     player.tier = nextTier;
-    player.maxMana += 1;
     if (player.tier === 1) {
-      // 特殊：第一次升级时多获得一点魏启
-      player.maxMana += 1;
+      // 特殊：第一次升级时给5魏启上限
+      player.maxMana = 5;
     }
-    if (player.maxActionPoints < 8) {
+    if (player.maxActionPoints < 7) {
       player.maxActionPoints++;
     }
   }
@@ -87,7 +86,7 @@ export class Player extends Unit {
     this.remainingActionPoints = 3;
     this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
-    this.tier = 0; // 等阶
+    this.tier = 1; // 等阶，默认为见习灵御（故事模式才从旅人开始）
     // 技能养成：玩家拥有的总技能上限与顺序（替代 skillSlots）
     this.maxSkills = 20; // 玩家拥有的总技能上限
     this.cultivatedSkills = []; // 已培养技能（顺序即为战斗中的默认顺序）
@@ -99,7 +98,7 @@ export class Player extends Unit {
     this.maxFrontierSkills = 10; // 最大前台技能数量
     this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
-    this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
+    this.leinoFactors = {}; // 灵脉强度列表，影响卡牌出现概率，包含 fire, wind, wood, earth, water, thunder, light, dark
     this.abilities = []; // 玩家能力列表
 
     this.uniqueID = 'playeruniqueid'; // 玩家唯一ID（用于动画同步等）
@@ -112,6 +111,21 @@ export class Player extends Unit {
     this.maxActivatedSkills = 1; // 默认一个咏唱位
     // 新增：临时覆盖技能容器（用于新发现/战斗中选牌的技能显示与动画 DOM 来源）
     this.overlaySkills = [];
+  }
+
+  addLeino(type, value) {
+    if (this.leinoFactors[type]) {
+      this.leinoFactors[type] += value;
+    }
+    else {
+      this.leinoFactors[type] = value;
+    }
+  }
+  getLeinoWeight(type) {
+    return Math.max(this.leinoFactors[type] || 0, 0);
+  }
+  getAllLeinoWeight() {
+    return Object.values(this.leinoFactors).reduce((sum, val) => sum + val, 0);
   }
 
   // 计算属性

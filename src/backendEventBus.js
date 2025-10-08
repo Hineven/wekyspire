@@ -13,17 +13,20 @@ export const EventNames = {
     GAME_OVER: 'game-over',
   },
   Player: {
-    FRONTIER_UPDATED: 'player-frontier-skills-updated',
+    // 休息/通用事件
     TIER_UPGRADED: 'player-tier-upgraded',
     ABILITY_CLAIMED: 'player-ability-claimed',
-    SKILL_BURNT: 'player-skill-burnt',
     MONEY_CLAIMED: 'player-money-claimed',
-    SKILL_USED: 'player-skill-used',
-    SKILL_DROPPED: 'player-skill-dropped',
     SKILL_REWARD_CLAIMED: 'player-skill-claimed',
+    // 战斗事件
+    FRONTIER_UPDATED: 'player-frontier-skills-updated',
     ACTIVATED_SKILLS_UPDATED: 'player-activated-skills-updated',
     ACTIVATED_SKILL_ENABLED: 'player-activated-skill-enabled',
-    ACTIVATED_SKILL_DISABLED: 'player-activated-skill-disabled'
+    ACTIVATED_SKILL_DISABLED: 'player-activated-skill-disabled',
+    SKILL_BURNT: 'player-skill-burnt',
+    SKILL_DISCOVERED: 'player-skill-discovered',
+    SKILL_USED: 'player-skill-used',
+    SKILL_DROPPED: 'player-skill-dropped'
   },
   Battle: {
     BATTLE_START: 'battle-battle-start',
