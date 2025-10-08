@@ -165,11 +165,6 @@ class SkillManager {
         modifyFactor = 0.70;
       }
 
-      // 增加当前等阶的技能出现权重
-      if(tierDifference < 3) modifyFactor *= 1.4;
-      if(tierDifference < 2) modifyFactor *= 1.2;
-      if(tierDifference < 1) modifyFactor *= 1.1;
-
       // 高质量奖励中，贴近玩家等级上限技能概率大幅提升
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;

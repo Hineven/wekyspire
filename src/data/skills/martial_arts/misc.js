@@ -88,7 +88,8 @@ export class CunningPunch extends Skill {
     } else {
       if(player.skills.length > 1) {
         const leftSkill = player.skills[0];
-        dropSkillCard(player, skillID, 0);
+        if(leftSkill.uniqueID !== this.uniqueID)
+          dropSkillCard(player, leftSkill.uniqueID, 0);
       }
       return true;
     }

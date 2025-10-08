@@ -49,7 +49,7 @@ export function spawnRewards() {
   );
   if(haveAbilityReward) {
     gameState.rewards.abilities = AbilityManager.getInstance().getRandomAbilities(
-      3, gameState.player.tier
+      0, gameState.player.tier
     );
   } else {
     gameState.rewards.abilities = [];

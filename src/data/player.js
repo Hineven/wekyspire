@@ -75,9 +75,9 @@ export class Player extends Unit {
     super();
     this.type = 'player';
     this.name = "你";
-    this.hp = 40;
+    this.hp = 65;
     this.shield = 0;
-    this.maxHp = 40;
+    this.maxHp = 65;
     this.mana = 0;
     this.maxMana = 0;
     this.baseAttack = 0;

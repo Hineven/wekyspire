@@ -3,6 +3,8 @@
 import Skill from '../../skill.js';
 import { launchAttack, dealDamage, gainShield } from '../../battleUtils.js';
 import {SkillTier} from "../../../utils/tierUtils";
+import {backendGameState} from "../../gameState";
+import backendEventBus, {EventNames} from "../../../backendEventBus";
 
 // 盾（D）（护盾系列）
 export class BasicShielding extends Skill {
@@ -63,7 +65,7 @@ export class EmergencyShield extends Skill {
   }
 
   get coldDownTurns () {
-    return this.extraColdDownTurns + Math.max(this.baseColdDownTurns - this.power, 1);
+    return this.extraColdDownTurns + Math.max(super.coldDownTurns - this.power, 1);
   }
 
   get shield() {
@@ -80,6 +82,66 @@ export class EmergencyShield extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     return `获得${this.shield}/named{护盾}，使用后/named{冷却}时间增1`;
+  }
+}
+
+// 持续警戒（C+）（单卡）
+// 咏唱：回合开始时，获得警戒
+export class SustainedVigilance extends Skill {
+  constructor(name = '持续警戒', tier = SkillTier.C_PLUS) {
+    super(name, 'normal', tier, 0, 1, 1);
+    this.baseColdDownTurns = 3;
+    this.cardMode = 'chant';
+    this.listener_ = null;
+  }
+
+  get coldDownTurns () {
+    return Math.max(super.coldDownTurns - this.power, 1);
+  }
+
+  onEnable(player) {
+    super.onEnable(player);
+    this.listener_ = () => {
+      const player = backendGameState.player.getModifiedPlayer();
+      player.addEffect('警戒', 1);
+    };
+    backendEventBus.on(EventNames.Battle.PLAYER_TURN, this.listener_);
+  }
+
+  onDisable(player) {
+    super.onDisable(player);
+    if (this.listener_) {
+      backendEventBus.off(EventNames.Battle.PLAYER_TURN, this.listener_);
+      this.listener_ = null;
+    }
+  }
+}
+
+// 固化护盾（C+）（单卡）
+// 每有7护盾，获得1格挡
+export class SolidifyShield extends Skill {
+  constructor(name = '固化护盾', tier = SkillTier.C_PLUS) {
+    super(name, 'normal', tier, 0, 1, 1);
+  }
+
+  get factor() {
+    return Math.max(7 - this.power, 4);
+  }
+
+  use(player, enemy) {
+    const shieldAmount = player.shield;
+    if (shieldAmount > 0) {
+      const blockAmount = Math.floor(shieldAmount / this.factor);
+      if (blockAmount > 0) {
+        player.addEffect('格挡', blockAmount);
+      }
+    }
+    return true;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return `每有${this.factor}护盾获得1层/named{格挡}`;
   }
 }
 
