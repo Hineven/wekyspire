@@ -40,7 +40,7 @@ export default {
         if (!id || payload.id !== id || this.disabled) return;
         const t = payload.type;
         if (t === 'cooldown-tick') {
-          if(payload.deltaCooldown > 0) return;  // 仅在正向冷却时触发
+          if(payload.deltaCooldown < 0) return;  // 仅在正向冷却时触发
           // 重新触发绿色覆盖动画
           this.cooldownPulseKey = Date.now();
           return;
