@@ -119,7 +119,7 @@ export class ProbingPunch extends Skill {
     }
   }
   regenerateDescription(player) {
-    return `造成${this.damage + (player?.attack ?? 0)}点伤害，获得1格挡`;
+    return `造成${this.damage + (player?.attack ?? 0)}点伤害，获得1/effect{格挡}`;
   }
 }
 

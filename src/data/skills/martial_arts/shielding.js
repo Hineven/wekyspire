@@ -32,7 +32,7 @@ export class BasicShielding extends Skill {
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `获得${this.shield}/named{护盾}${this.blockAmount > 0 ? `、${this.blockAmount}层/named{格挡}` : ''}`;
+    return `获得${this.shield}/named{护盾}${this.blockAmount > 0 ? `、${this.blockAmount}层/effect{格挡}` : ''}`;
   }
 }
 
@@ -141,7 +141,7 @@ export class SolidifyShield extends Skill {
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `每有${this.factor}护盾获得1层/named{格挡}`;
+    return `每有${this.factor}护盾获得1层/effect{格挡}`;
   }
 }
 

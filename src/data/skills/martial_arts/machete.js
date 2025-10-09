@@ -22,6 +22,7 @@ export class Machete extends Skill {
     this.powerMultiplier = powerMultiplier; // 每点力量增加的伤害
     this.times = times; // 攻击次数
     this.breakAtSelf = breakAtSelf; // 是否在自己位置断开丢卡
+    this.selectiveDrop = selectiveDrop;
   }
 
   get damage() {
@@ -34,13 +35,13 @@ export class Machete extends Skill {
       const selfIndex = gameState.player.frontierSkills.findIndex(skill => skill.uniqueID === this.uniqueID);
       if (selfIndex === -1 || selfIndex !== 0) {
         if (gameState.player.frontierSkills.length > 0) {
-          if(selectiveDrop) selectAndDropFrontierSkillCard(player, [this.uniqueID]);
+          if(this.selectiveDrop) selectAndDropFrontierSkillCard(player, [this.uniqueID]);
           else dropSkillCard(player, player.frontierSkills[0].uniqueID);
         }
       } else {
         if (this.breakAtSelf) return true;
         if (gameState.player.frontierSkills.length > 1) {
-          if(selectiveDrop) selectAndDropFrontierSkillCard(player, [this.uniqueID]);
+          if(this.selectiveDrop) selectAndDropFrontierSkillCard(player, [this.uniqueID]);
           else dropSkillCard(player, player.frontierSkills[1].uniqueID);
         }
       }
