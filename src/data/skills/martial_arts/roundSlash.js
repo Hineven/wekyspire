@@ -1,4 +1,5 @@
-// 回转（C-）（回转）
+// 回转
+// 从牌库末抽卡
 import Skill from "../../skill";
 import {drawSelectedSkillCard, launchAttack} from "../../battleUtils";
 import { backendGameState as gameState } from '../../gameState.js';
@@ -6,6 +7,7 @@ import {countString} from "../../../utils/nameUtils";
 import {SkillTier} from "../../../utils/tierUtils";
 
 // 回旋斩（C-）（回转）
+// 从牌库末抽卡
 export class RoundSlash extends Skill {
   constructor(name = '回旋斩', tier = SkillTier.C_MINUS, damage = 9, powerMultiplier = 5, drawCardCount = 1, apConsumption = 2, coldDownTurns = 3) {
     super(name, 'normal', tier, 0, apConsumption, 1, '回转');

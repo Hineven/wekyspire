@@ -10,8 +10,8 @@ import {SkillTier} from "../../../utils/tierUtils";
 
 // 拳（D）（拳系列）
 export class Punch extends Skill {
-  constructor(name='拳', tier = SkillTier.D, baseDamage = 6, powerMultiplier = 2) {
-    super(name, 'normal', tier, 0, 1, Infinity, '拳');
+  constructor(name='拳', tier = SkillTier.D, baseDamage = 6, powerMultiplier = 2, apCost = 1) {
+    super(name, 'normal', tier, 0, apCost, Infinity, '拳');
     this.baseDamage = baseDamage;
     this.powerMultiplier = powerMultiplier;
   }
@@ -75,14 +75,15 @@ export class ExplosivePunch extends Skill {
 // 疾猛拳（B）（拳系列）
 export class SwiftFiercePunch extends Punch {
   constructor() {
-    super('疾猛拳', SkillTier.B, 12, 5);
+    super('疾猛拳', SkillTier.B, 16, 5);
     this.precessor = '猛拳';
   }
 }
 // 真拳（A-）（拳系列）
+// 开销降到0
 export class TruePunch extends Punch {
   constructor() {
-    super('真拳', SkillTier.A_MINUS, 14, 6);
+    super('真拳', SkillTier.A_MINUS, 19, 6, 0);
     this.precessor = '疾猛拳';
   }
 }
