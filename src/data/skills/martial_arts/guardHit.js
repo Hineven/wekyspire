@@ -50,10 +50,10 @@ export class Disassemble extends BreakMomentum {
 }
 
 // 贯心（A-）（破势）
-// 造成22伤害，失去所有格挡，提升9倍失去层数伤害
+// 造成22伤害，失去所有格挡，提升12倍失去层数伤害
 export class HeartPiercingStrike extends BreakMomentum {
   constructor() {
-    super('贯心', SkillTier.A_MINUS, 22, 7, Infinity, 9);
+    super('贯心', SkillTier.A_MINUS, 22, 7, Infinity, 12);
     this.precessor = '解体';
   }
   regenerateDescription(player) {

@@ -131,6 +131,9 @@ export function addEffect(target, effectName, stacks = 1) {
   } else {
     target.effects[effectName] = stacks;
   }
+  if(target.type === 'player') {
+    backendEventBus.emit(EventNames.Player.EFFECT_CHANGED, { effectName, deltaStacks: stacks });
+  }
 }
 
 // 统一的效果移除入口
@@ -171,6 +174,10 @@ export function drawSkillCard(player, number = 1) {
     if(i === 0) {
       returnSkill = firstSkill;
     }
+    // TODO: 此时，事件在动画入队前触发，如果需要在事件内继续加入动画，则可能出现问题。
+    // 但这在目前结构下难以避免，如果要让抽卡动画批量丝滑播放，则只能在所有DOM对齐（后端状态更新完毕）后才能入队动画。
+    // 以后可能会更新前端动画引擎，让卡牌动画动态跟踪最新DOM位置。
+    backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: firstSkill.uniqueID });
   }
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
   ids.forEach((id) => {
@@ -202,6 +209,7 @@ export function drawSelectedSkillCard (player, skillID) {
     enqueueAnimateCardById(
       {id: skillID, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}}
     );
+    backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
     return drawnSkill;
   } else {
     // 尝试从 overlaySkills 抽取（新发现的卡牌）
@@ -221,6 +229,7 @@ export function drawSelectedSkillCard (player, skillID) {
         kind: 'flyToInPlace',
         transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'skills-hand' }
       });
+      backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
       return drawnSkill;
     } else {
       console.warn(`技能ID为 ${skillID} 的技能不在后备/Overlay列表中，无法抽取。`);

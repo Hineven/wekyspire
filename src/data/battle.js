@@ -120,6 +120,7 @@ function startPlayerTurn() {
 
   // 填充前台技能
   fillFrontierSkills(modPlayer);
+  if(checkBattleVictory()) return ;
 
   if (isStunned) {
     addSystemLog('你被眩晕，跳过回合！');

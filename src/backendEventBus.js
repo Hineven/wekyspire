@@ -23,10 +23,12 @@ export const EventNames = {
     ACTIVATED_SKILLS_UPDATED: 'player-activated-skills-updated',
     ACTIVATED_SKILL_ENABLED: 'player-activated-skill-enabled',
     ACTIVATED_SKILL_DISABLED: 'player-activated-skill-disabled',
+    EFFECT_CHANGED: 'player-effect-changed', // param: effectName, deltaStacks
     SKILL_BURNT: 'player-skill-burnt',
     SKILL_DISCOVERED: 'player-skill-discovered',
     SKILL_USED: 'player-skill-used',
-    SKILL_DROPPED: 'player-skill-dropped'
+    SKILL_DROPPED: 'player-skill-dropped',
+    SKILL_DRAWN: 'player-skill-drawn' // param: skillID
   },
   // 新增：玩家操作事件（仅由前端发起，用于告知后端进行结算/流程推进）
   PlayerOperations: {

@@ -27,6 +27,7 @@ class SkillManager {
       await import('./skills/martial_arts/martialArtPose.js'),
       await import('./skills/martial_arts/misc.js'),
       await import('./skills/martial_arts/oneHit.js'),
+      await import('./skills/martial_arts/peakMartialArt.js'),
       await import('./skills/martial_arts/precise.js'),
       await import('./skills/martial_arts/preparedHit.js'),
       await import('./skills/martial_arts/punch.js'),
@@ -246,4 +247,3 @@ class SkillManager {
 }
 
 export default SkillManager;
-
