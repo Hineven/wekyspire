@@ -48,15 +48,21 @@ export const EventNames = {
     CONFIRM_OVERLAY_SKILL_SELECTIONS: 'overlay-confirm-skill-selections'
   },
   Battle: {
+    // 战斗流程事件
     BATTLE_START: 'battle-battle-start',
+    // 玩家回合阶段事件（用于区分顺序）
+    PRE_PLAYER_TURN_START: 'battle-pre-player-turn-start',
+    PLAYER_TURN_START: 'battle-player-turn-start',
     PLAYER_TURN: 'battle-player-turn',
+    PLAYER_TURN_END: 'battle-player-turn-end',
+    POST_PLAYER_TURN_END: 'battle-post-player-turn-end',
+    // 敌人回合阶段事件（整合自 Enemy）
     ENEMY_TURN: 'battle-enemy-turn',
+    ENEMY_TURN_START: 'battle-enemy-turn-start',
+    ENEMY_ACTION_END: 'battle-enemy-action-end',
+    ENEMY_TURN_END: 'battle-enemy-turn-end',
+    // 结算
     BATTLE_VICTORY: 'battle-victory',
-  },
-  Enemy: {
-    TURN_START: 'enemy-turn-start',
-    ACTION_END: 'enemy-action-end',
-    TURN_END: 'enemy-turn-end',
   },
   Rest: {
     REWARDS_SPAWNED: 'rewards-spawned',

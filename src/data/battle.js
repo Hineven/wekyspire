@@ -3,7 +3,7 @@
 import EnemyFactory from './enemyFactory.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects } from './effectProcessor.js'
-import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
+import { addSystemLog, addPlayerActionLog, addEnemyActionLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
 import {
   enqueueDelay,
@@ -92,6 +92,9 @@ function startPlayerTurn() {
   // 确保这是玩家回合
   gameState.isEnemyTurn = false;
 
+  // 新增：玩家回合开始前事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PRE_PLAYER_TURN_START, {});
+
   const modPlayer = gameState.player.getModifiedPlayer();
 
   // 补充行动力
@@ -108,6 +111,9 @@ function startPlayerTurn() {
   // 回合开始时结算效果（使用修正后的玩家对象）
   const isStunned = processStartOfTurnEffects(modPlayer);
   if(checkBattleVictory()) return ;
+
+  // 新增：玩家回合开始事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PLAYER_TURN_START, {});
 
   // 解锁操作面板
   enqueueUnlockControl();
@@ -286,11 +292,18 @@ function endPlayerTurn() {
   }
   // 马上锁定，防止玩家反复点击结束回合
   enqueueLockControl();
+
+  // 新增：玩家回合结束（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PLAYER_TURN_END, {});
+
   // 回合结束时结算效果（使用修正后的玩家）
   const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   processEndOfTurnEffects(modPlayer);
 
   if(checkBattleVictory()) return ;
+
+  // 新增：玩家回合结束后的事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.POST_PLAYER_TURN_END, {});
 
   // 进入敌人回合
   backendEventBus.emit(EventNames.Battle.ENEMY_TURN, {})
@@ -305,8 +318,8 @@ function enemyTurn() {
 
   enqueueDelay(500);
 
-  // 触发敌人回合开始事件
-  backendEventBus.emit(EventNames.Enemy.TURN_START);
+  // 触发敌人回合开始事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_TURN_START);
 
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.enemy);
@@ -324,16 +337,16 @@ function enemyTurn() {
   if(checkBattleVictory()) return ;
   enqueueDelay(500);
 
-  // 触发敌人行动结束事件，通知BattleScreen组件
-  backendEventBus.emit(EventNames.Enemy.ACTION_END);
+  // 触发敌人行动结束事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_ACTION_END);
   // 结算敌人回合结束效果
   processEndOfTurnEffects(gameState.enemy);
 
   if(checkBattleVictory()) return ;
   enqueueDelay(500);
 
-  // 触发敌人回合结束事件，通知BattleScreen组件
-  backendEventBus.emit(EventNames.Enemy.TURN_END);
+  // 触发敌人回合结束事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_TURN_END);
   // 敌人行动结束后进入玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
 }

@@ -7,7 +7,7 @@ import {SkillTier} from "../../../utils/tierUtils";
 
 // 斩（C-）
 export class BasicSlash extends Skill {
-  constructor(name = '斩', tier = SkillTier.C_MINUS, damage = 26, powerMultiplier = 7, coldDown = 5, cardForegroundColdDownDecay = 3) {
+  constructor(name = '斩', tier = SkillTier.C_MINUS, damage = 26, powerMultiplier = 7, coldDown = 5, cardForegroundColdDownDecay = 1) {
     super(name, 'normal', tier, 0, 2, 1, '斩');
     this.baseColdDownTurns = coldDown; // 基础冷却时间
     this.baseSlowStart = true; // 慢启动
@@ -27,7 +27,7 @@ export class BasicSlash extends Skill {
         this.coldDown(-this.cardForegroundColdDownDecay);
       }
     };
-    // backendEventBus.on(EventNames.Battle.PLAYER_END_TURN, this.listener_);
+    backendEventBus.on(EventNames.Battle.POST_PLAYER_TURN_END, this.listener_);
   }
 
   get damage () {
@@ -48,7 +48,7 @@ export class BasicSlash extends Skill {
 // 伤害提升
 export class StoneCleaveSlash extends BasicSlash {
   constructor() {
-    super('裂石斩', SkillTier.B_MINUS, 41, 21, 6, 4);
+    super('裂石斩', SkillTier.B_MINUS, 41, 21, 6, 2);
     this.precessor = '斩';
   }
 }
@@ -57,7 +57,7 @@ export class StoneCleaveSlash extends BasicSlash {
 // 伤害大幅提升
 export class MountainCrushSlash extends BasicSlash {
   constructor() {
-    super('崩山斩', SkillTier.B_PLUS, 72, 33, 7, 5);
+    super('崩山斩', SkillTier.B_PLUS, 72, 33, 7, 3);
     this.precessor = '斩';
   }
 }
@@ -66,7 +66,7 @@ export class MountainCrushSlash extends BasicSlash {
 // 伤害极大提升
 export class SeaDivideSlash extends BasicSlash {
   constructor() {
-    super('分海斩', SkillTier.A_MINUS, 130, 60, 8, 6);
+    super('分海斩', SkillTier.A_MINUS, 130, 60, 8, 4);
     this.precessor = '斩';
   }
 }
@@ -74,7 +74,7 @@ export class SeaDivideSlash extends BasicSlash {
 // 伤害极大提升
 export class SkyRendSlash extends BasicSlash {
   constructor() {
-    super('开天斩', SkillTier.A_PLUS, 230, 105, 9, 7);
+    super('开天斩', SkillTier.A_PLUS, 230, 105, 9, 5);
     this.precessor = '斩';
   }
 }

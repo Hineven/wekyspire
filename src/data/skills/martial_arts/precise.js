@@ -4,6 +4,8 @@
 import Skill from "../../skill";
 import {dealDamage, launchAttack} from "../../battleUtils";
 import {enqueueDelay} from "../../animationInstructionHelpers";
+import {SkillTier} from "../../../utils/tierUtils";
+import enemy from "../../enemy";
 
 // 精准一击（D）（精准）
 // 此技能只有当此技能前方所有技能都可用时才可用，造成13伤害
@@ -15,6 +17,7 @@ export class PreciseAttack extends Skill {
     this.powerMultiplier = powerMultiplier;
     this.times = times;
     this.directDamage = directDamage;
+    this.postEffect = null;
   }
 
   get damage () {
@@ -32,8 +35,10 @@ export class PreciseAttack extends Skill {
 
   use(player, enemy) {
     for (let i = 0; i < this.times; i++) {
-      if(!this.directDamage) launchAttack(player, enemy, this.getDamage(enemy));
-      else dealDamage(player, enemy, this.getDamage(enemy));
+      let res = null;
+      if(!this.directDamage) res = launchAttack(player, enemy, this.getDamage(enemy));
+      else res = dealDamage(player, enemy, this.getDamage(enemy));
+      if(this.postEffect) this.postEffect(player, enemy, res);
       enqueueDelay(300);
     }
     return true;
@@ -90,8 +95,8 @@ export class PalmStrike extends PreciseAttack {
   }
 }
 
-// 弱点攻击（B-）（精准）
-// 造成23伤害，若敌人虚弱，伤害增16
+// 弱点攻击（B-）（精准一击衍生卡）
+// 造成23伤害，敌人虚弱则额外造成16伤害
 export class WeakPointAttack extends PreciseAttack {
   constructor(name = '弱点攻击', tier = 3) {
     super(name, tier, 23, 8, 1);
@@ -117,27 +122,62 @@ export class WeakPointAttack extends PreciseAttack {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `${this.damage + (player?.attack ?? 0)}伤害，敌人/named{虚弱}则伤害增${this.extraDamage}，/named{前方}牌可用时可用`;
+      return `${this.damage + (player?.attack ?? 0)}伤害，敌人/effect{虚弱}则伤害增${this.extraDamage}，/named{前方}牌可用时可用`;
     }
-    return `${this.damage}伤害，敌人/named{虚弱}则伤害增${this.extraDamage}，/named{前方}牌可用时可用`;
+    return `${this.damage}伤害，敌人/effect{虚弱}则伤害增${this.extraDamage}，/named{前方}牌可用时可用`;
   }
 }
 
-// 摘云手（B+）（精准）
-// 造成23伤害2次，若敌人虚弱，伤害增16
-export class CloudHandAttack extends WeakPointAttack {
+// 折杨手（B-）（精准）
+// 造成23伤害，命中则获得格挡
+export class SwiftHandAttack extends PreciseAttack {
+  constructor(name = '折杨手', tier = SkillTier.B_MINUS, damage = 23) {
+    super(name, tier, damage, 8, 1);
+    this.precessor = '精准一击';
+  }
+
+  onEnterBattle(player) {
+    super.onEnterBattle(player);
+    this.postEffect = (player, enemy, attackResult) => {
+      if(attackResult.passThoughDamage > 0) {
+        player.addEffect('格挡', 1);
+      }
+    };
+  }
+
+  onLeaveBattle(player) {
+    super.onLeaveBattle(player);
+    this.postEffect = null;
+  }
+
+  use(player, enemy) {
+    return super.use(player, enemy);
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    if (player) {
+      return `${this.damage + (player?.attack ?? 0)}伤害，命中则获得/effect{格挡}，/named{前方}牌可用时可用`;
+    }
+    return `${this.damage}伤害，命中则获得/effect{格挡}，/named{前方}牌可用时可用`;
+  }
+}
+
+// 揽云手（B+）（精准）
+// 造成23伤害2次，命中则获得格挡
+export class CloudHandAttack extends SwiftHandAttack {
   constructor() {
-    super('摘云手', 5);
+    super('摘云手', SkillTier.B_PLUS);
     this.times = 2;
     this.precessor = '弱点攻击';
   }
 }
 
 // 摘星手（A-）（精准）
-// 造成23伤害3次，若敌人虚弱，伤害增16
-export class StarHandAttack extends WeakPointAttack {
+// 造成23伤害3次，命中则获得格挡
+export class StarHandAttack extends SwiftHandAttack {
   constructor() {
-    super('摘星手', 6);
+    super('摘星手', SkillTier.A_MINUS);
     this.times = 3;
     this.precessor = '摘云手';
   }

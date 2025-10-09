@@ -39,8 +39,7 @@ class Skill {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({
         tags: ['skill-cd', `skill-${id}`],
-        waitTags: [],
-        durationMs: 0,
+        durationMs: 100,
         start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick', deltaCooldown: deltaCooldown }),
         meta: { skillId: id, overlay: true, phase: 'cooldown-tick' }
       });
@@ -56,8 +55,7 @@ class Skill {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({
         tags: ['skill-upgrade', `skill-${id}`],
-        waitTags: [],
-        durationMs: 0,
+        durationMs: 100,
         start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'upgrade-flash', 'deltaPower': deltaPower }),
         meta: { skillId: id, overlay: true, phase: 'upgrade-flash' }
       });
