@@ -175,7 +175,7 @@ export default {
       if (!this.canConfirm) return;
       const selectedSkills = this.overlaySkills.filter(s => this.selectedIds.includes(s.uniqueID));
       try {
-        backendEventBus.emit(EventNames.Overlay.CONFIRM_OVERLAY_SKILL_SELECTIONS, {
+        backendEventBus.emit(EventNames.PlayerOperations.CONFIRM_OVERLAY_SKILL_SELECTIONS, {
           selected: [...this.selectedIds],
           skills: selectedSkills
         });

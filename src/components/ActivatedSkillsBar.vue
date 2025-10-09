@@ -131,7 +131,7 @@ export default {
       if (skill.cardMode === 'chant' && this.canInteract) this.stopChant(skill);
     },
     stopChant(skill) {
-      backendEventBus.emit(EventNames.Battle.PLAYER_STOP_ACTIVATED_SKILL, skill.uniqueID);
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_STOP_ACTIVATED_SKILL, skill.uniqueID);
     }
   }
 };

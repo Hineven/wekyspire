@@ -12,7 +12,7 @@ import {
   enqueueLockControl, enqueueClearCardAnimations, enqueueState, captureSnapshot
 } from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard, willSkillBurn} from "./battleUtils";
-
+import { enqueueCardDropToDeck } from './animationInstructionHelpers';
 // 开始战斗
 export function enterBattleStage() {
   
@@ -117,8 +117,8 @@ function startPlayerTurn() {
 
   if (isStunned) {
     addSystemLog('你被眩晕，跳过回合！');
-    // 触发玩家回合结束事件
-    backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN, {});
+    // 后端直接推进阶段，而不是发起“玩家操作事件”
+    endPlayerTurn();
     return ;
   }
 
@@ -185,7 +185,7 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'}, { tags: ['ui'], waitTags: [] });
+  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 }}, { tags: ['ui'], waitTags: [] });
   enqueueDelay(0);
 
   // 资源结算
@@ -225,11 +225,7 @@ function activateChantSkill(skill) {
         burnSkillCard(player, replaced.uniqueID);
       } else {
         // 非焚毁：动画 drop + 从 activated 移除并进后备
-        enqueueAnimateCardById({
-          id: replaced.uniqueID,
-          kind: 'drop',
-          transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
-        });
+        enqueueCardDropToDeck(replaced.uniqueID, { }, { });
         // 修改状态
         player.activatedSkills.shift();
         player.backupSkills.push(replaced);
@@ -255,7 +251,7 @@ function activateChantSkill(skill) {
 function manualStopActivatedSkill(skill) {
   const player = gameState.player;
   addPlayerActionLog(`你停止了 /blue{${skill.name}} 的咏唱！`);
-  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToCenter' }, { tags: ['ui'], waitTags: [] });
+  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 } }, { tags: ['ui'], waitTags: [] });
   enqueueDelay(0);
   if (skill.canUse(player)) {
     skill.consumeResources(player);
@@ -275,8 +271,8 @@ function manualStopActivatedSkill(skill) {
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
 }
 
-// 监听手动停止事件
-backendEventBus.on(EventNames.Battle.PLAYER_STOP_ACTIVATED_SKILL, (uniqueID) => {
+// 监听手动停止事件（前端操作）
+backendEventBus.on(EventNames.PlayerOperations.PLAYER_STOP_ACTIVATED_SKILL, (uniqueID) => {
   const skill = gameState.player.activatedSkills.find(s => s.uniqueID === uniqueID);
   if (skill) manualStopActivatedSkill(skill);
   else console.warn('未找到要停止的咏唱技能', uniqueID);
@@ -439,8 +435,8 @@ export function initializeBattleFlowListeners() {
   });
 
 
-  // 玩家使用技能
-  backendEventBus.on(EventNames.Battle.PLAYER_USE_SKILL, (uniqueID) => {
+  // 玩家使用技能（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_USE_SKILL, (uniqueID) => {
     const skill = gameState.player.frontierSkills.find(s => s.uniqueID === uniqueID);
     console.log('使用技能：', skill);
     if (skill) {
@@ -456,13 +452,13 @@ export function initializeBattleFlowListeners() {
     }
   });
 
-  // 玩家丢弃最左侧技能
-  backendEventBus.on(EventNames.Battle.PLAYER_DROP_SKILL, () => {
+  // 玩家丢弃最左侧技能（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_DROP_SKILL, () => {
     dropLeftmostSkill();
   });
 
-  // 玩家结束回合
-  backendEventBus.on(EventNames.Battle.PLAYER_END_TURN, () => {
+  // 玩家结束回合（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_END_TURN, () => {
     endPlayerTurn();
   });
 

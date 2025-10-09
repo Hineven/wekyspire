@@ -20,11 +20,14 @@ export class BasicSlash extends Skill {
   onEnterBattle(player) {
     super.onEnterBattle(player);
     this.listener_ = () => {
-      const isInFrontier = -1 !== gameState.player.frontierSkills.findIndex(skill => skill.uniqueID === this.uniqueID);
+      const isInFrontier = -1 !== player.frontierSkills.findIndex(
+        skill => skill.uniqueID === this.uniqueID
+      );
       if(isInFrontier) {
         this.coldDown(-this.cardForegroundColdDownDecay);
       }
     };
+    // backendEventBus.on(EventNames.Battle.PLAYER_END_TURN, this.listener_);
   }
 
   get damage () {

@@ -488,9 +488,6 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
       to: options.toContainer || 'skills-hand'
     };
   }
-  // appearInPlace 默认也可归类为 appear，但无需 from/to（保持最小语义即可）
-  // 可选：如需事件，可解除注释
-  // if (!transfer && kind === 'appearInPlace') { transfer = { type: 'appear', to: options.toContainer }; }
 
   // 生成 token（可由外部预先提供）
   if (transfer) {
@@ -545,7 +542,6 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      // 尝试飞回card注册的DOM位置
       case 'flyToInPlace': {
         const { durationMs = 300} = options || {};
         const built = orchestrator.buildSteps.flyToInPlace({ durationMs });
@@ -554,45 +550,27 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'centerThenDeck': {
-        const built = orchestrator.buildSteps.centerThenDeck(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+      case 'flyToAnchor': {
+        const { durationMs = 350, anchor = 'center', scale = 1.2, rotate, ease } = options || {};
+        const step = { toAnchor: anchor, scale, duration: durationMs };
+        if (typeof rotate === 'number') step.rotate = rotate;
+        if (ease) step.ease = ease;
+        await orchestrator.playCardSequenceById(el, id, [step], { scheduledEpoch, hideStart: hideStart !== false, endMode: options?.endMode || 'keep' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'flyToCenter': {
-        const built = orchestrator.buildSteps.flyToCenter(options || {});
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
-        try { orchestrator._addToCenter(id); } catch (_) {}
-        emitEnd();
-        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
-        break;
-      }
-      case 'flyToDeckFade':
-      case 'drop': {
-        const built = orchestrator.buildSteps.flyToDeckFade(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
-        emitEnd();
-        if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
-        break;
-      }
-      case 'exhaust':
       case 'burn': {
         const built = orchestrator.buildSteps.exhaustBurn(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      default: { // fly to center
-        const built = orchestrator.buildSteps.flyToCenter(options || {});
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
-        try { orchestrator._addToCenter(id); } catch (_) {}
-        emitEnd();
+      default: {
+        // 未指定或未知 kind：若无 steps，则不执行；避免隐式行为
+        console.warn('[cardAnimationOrchestrator] Unknown kind or missing steps; nothing to play:', kind, id);
+        emitEnd({ skipped: true });
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
       }
     }

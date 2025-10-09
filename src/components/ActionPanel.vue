@@ -108,10 +108,10 @@ export default {
   },
   methods: {
     onEndTurnButtonClicked() {
-      backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN);
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_END_TURN);
     },
     onDropSkillButtonClicked() {
-      backendEventBus.emit(EventNames.Battle.PLAYER_DROP_SKILL);
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_DROP_SKILL);
     },
     onDeckClick() {
       // 打开牌库覆盖面板，并隐藏悬浮tooltip

@@ -1,4 +1,5 @@
 import animationSequencer from './animationSequencer.js';
+import {enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 
 // 技能抽象类
 class Skill {
@@ -43,6 +44,9 @@ class Skill {
         start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick', deltaCooldown: deltaCooldown }),
         meta: { skillId: id, overlay: true, phase: 'cooldown-tick' }
       });
+      if(deltaCooldown !== 0) {
+        enqueueDelay(0);
+      }
     } catch (_) {}
   }
 

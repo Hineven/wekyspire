@@ -55,7 +55,7 @@ export class Machete extends Skill {
       return `丢弃/named{前方}所有卡，每张造成${this.damage + (player?.attack ?? 0)}伤害`;
     }
     if(this.times > 1) {
-      return `${this.damage + (player?.attack ?? 0)}伤害，丢弃最左侧卡，重复${this.times > 1 ? this.times + '张' : '一张'}`;
+      return `${this.damage + (player?.attack ?? 0)}伤害，丢弃最左侧卡，重复${this.times - 1}`;
     }
     return `${this.damage + (player?.attack ?? 0)}伤害，丢弃最前方卡`;
   }

@@ -17,19 +17,9 @@ function startGame() {
 
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
   const initialSkill1 = SkillManager.getInstance().createSkill('拳');
-  const initialSkill2 = SkillManager.getInstance().createSkill('拳');
-  const initialSkill3 = SkillManager.getInstance().createSkill('拳');
-  // const initialSkill4 = SkillManager.getInstance().createSkill('拳');
-  // const initialSkill5 = SkillManager.getInstance().createSkill('盾');
-  const initialSkill4 = SkillManager.getInstance().createSkill('盾');
-  const initialSkill5 = SkillManager.getInstance().createSkill('盾');
-  const initialSkill6 = SkillManager.getInstance().createSkill('断子绝孙脚');
-  const initialSkill7 = SkillManager.getInstance().createSkill('抱头');
-  // const initialSkill5 = SkillManager.getInstance().createSkill('回旋斩');
+  const initialSkill2 = SkillManager.getInstance().createSkill('敏捷打击');
 
-  backendGameState.player.cultivatedSkills = [
-      initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5,
-  initialSkill6, initialSkill7];//, initialSkill8, initialSkill9];
+  backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2];//, initialSkill3, initialSkill4, initialSkill5];
 
   // 升满级调试
   // while(backendGameState.player.tier < 9) {
@@ -88,31 +78,39 @@ export function initGameFlowListeners() {
   });
 
   // 休整阶段：事件驱动的后端结算与流程推进
-  backendEventBus.on(EventNames.Rest.CLAIM_MONEY, () => {
+  backendEventBus.on(EventNames.PlayerOperations.CLAIM_MONEY, () => {
     claimMoney();
   });
-  backendEventBus.on(EventNames.Rest.CLAIM_SKILL, ({ skillID, slotIndex, clearRewards }) => {
-    claimSkillReward(skillID, slotIndex, !!clearRewards);
+  backendEventBus.on(EventNames.PlayerOperations.CLAIM_SKILL, ({ skill, skillID, slotIndex, clearRewards }) => {
+    let resolved = skill;
+    if (!resolved && skillID) {
+      try { resolved = (gameState.rewards.skills || []).find(s => s && s.uniqueID === skillID) || null; } catch (_) {}
+    }
+    if (!resolved) {
+      console.warn('[game] CLAIM_SKILL 无法解析技能：缺少 skill 对象或无法根据 skillID 定位到奖励技能。payload=', { skill, skillID });
+      return;
+    }
+    claimSkillReward(resolved, slotIndex, !!clearRewards);
   });
-  backendEventBus.on(EventNames.Rest.CLAIM_ABILITY, ({ ability, clearRewards }) => {
+  backendEventBus.on(EventNames.PlayerOperations.CLAIM_ABILITY, ({ ability, clearRewards }) => {
     claimAbilityReward(ability, !!clearRewards);
   });
-  backendEventBus.on(EventNames.Rest.CLAIM_BREAKTHROUGH, () => {
+  backendEventBus.on(EventNames.PlayerOperations.CLAIM_BREAKTHROUGH, () => {
     claimBreakthroughReward();
   });
-  backendEventBus.on(EventNames.Rest.REORDER_SKILLS, ({skillIDs}) => {
+  backendEventBus.on(EventNames.PlayerOperations.REORDER_SKILLS, ({skillIDs}) => {
     reorderSkills(skillIDs);
   });
-  backendEventBus.on(EventNames.Rest.PURCHASE_ITEM, ({ item }) => {
+  backendEventBus.on(EventNames.PlayerOperations.PURCHASE_ITEM, ({ item }) => {
     const ok = purchaseItem(item);
     if (ok) {
       // TODO 刷新商店物品
     }
   });
-  backendEventBus.on(EventNames.Rest.FINISH, () => {
+  backendEventBus.on(EventNames.PlayerOperations.FINISH, () => {
     backendEventBus.emit(EventNames.Rest.END);
   });
-  backendEventBus.on(EventNames.Rest.DROP_REWARD, () => {
+  backendEventBus.on(EventNames.PlayerOperations.DROP_REWARD, () => {
     dropCurrentReward();
   });
 

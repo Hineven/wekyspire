@@ -6,6 +6,7 @@ import {
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
 import {captureSnapshot, enqueueAnimateCardById, enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 import {enqueueHurtAnimation, enqueueUnitDeath} from "./animationInstructionHelpers";
+import { enqueueCardDropToDeck } from './animationInstructionHelpers';
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -209,7 +210,8 @@ export function drawSelectedSkillCard (player, skillID) {
       // 先飞到中间（创建幽灵并中转，这是Card在两个容器间移动的必要操作）
       enqueueAnimateCardById( {
         id: skillID,
-        kind: 'flyToCenter'
+        kind: 'flyToAnchor',
+        options: { anchor: 'center', scale: 1.2 }
       });
       const [drawnSkill] = player.overlaySkills.splice(overlayIndex, 1);
       player.frontierSkills.push(drawnSkill);
@@ -231,8 +233,8 @@ export function dropSkillCard(player, skillID, inDeckOrder = -1) {
   const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
   let droppedSkill = null;
   if (index !== -1) {
-    // 播放动画
-    enqueueAnimateCardById( {id: skillID, kind: 'drop'});
+    // 播放动画 => 统一使用 dropToDeck 组合原语
+    enqueueCardDropToDeck(skillID, { /* default duration */ }, { });
     // 执行逻辑
     [droppedSkill] = player.frontierSkills.splice(index, 1);
 
@@ -240,21 +242,13 @@ export function dropSkillCard(player, skillID, inDeckOrder = -1) {
     // 尝试从咏唱位丢弃
     const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
     if(activatedIndex !== -1) {
-      enqueueAnimateCardById( {
-        id: skillID,
-        kind: 'drop',
-        transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
-      });
+      enqueueCardDropToDeck(skillID, { }, { });
       [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
     } else {
       // 最后尝试从 overlaySkills 丢弃（新发现的卡牌）
       const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
       if(overlayIndex !== -1) {
-        enqueueAnimateCardById( {
-          id: skillID,
-          kind: 'drop',
-          transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'deck' }
-        });
+        enqueueCardDropToDeck(skillID, { }, { });
         [droppedSkill] = player.overlaySkills.splice(overlayIndex, 1);
       } else {
         console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位/Overlay列表中，无法丢弃。`);
