@@ -42,7 +42,7 @@ export class CarelessPunchKick extends Skill {
       launchAttack(player, enemy, 10);
       return false;
     } else { 
-      dealDamage(player, player, 3);
+      dealDamage(player, player, 3, true);
       return true;
     }
   }
