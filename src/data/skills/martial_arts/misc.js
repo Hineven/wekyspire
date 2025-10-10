@@ -96,8 +96,8 @@ export class CunningPunch extends Skill {
       launchAttack(player, enemy, this.damage);
       return false;
     } else {
-      if(player.skills.length > 1) {
-        const leftSkill = player.skills[0];
+      if(player.frontierSkills.length > 1) {
+        const leftSkill = player.frontierSkills[0];
         if(leftSkill.uniqueID !== this.uniqueID)
           dropSkillCard(player, leftSkill.uniqueID, 0);
       }
