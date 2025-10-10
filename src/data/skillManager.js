@@ -19,14 +19,14 @@ class SkillManager {
 
     // 动态导入所有技能文件
     const skillModules = [
-      await import('./skills/martial_arts/agileHit.js'),
+      await import('./skills/martial_arts/agilePunch.js'),
       await import('./skills/martial_arts/block.js'),
       await import('./skills/martial_arts/guardHit.js'),
       await import('./skills/martial_arts/heavySmash.js'),
       await import('./skills/martial_arts/machete.js'),
       await import('./skills/martial_arts/martialArtPose.js'),
       await import('./skills/martial_arts/misc.js'),
-      await import('./skills/martial_arts/oneHit.js'),
+      await import('./skills/martial_arts/onePunch.js'),
       await import('./skills/martial_arts/peakMartialArt.js'),
       await import('./skills/martial_arts/precise.js'),
       await import('./skills/martial_arts/preparedHit.js'),
@@ -34,6 +34,8 @@ class SkillManager {
       await import('./skills/martial_arts/roundSlash.js'),
       await import('./skills/martial_arts/shielding.js'),
       await import('./skills/martial_arts/slash.js'),
+      await import('./skills/martial_arts/shapelessPunch.js'),
+      await import('./skills/martial_arts/taiji.js'),
       // await import('./skills/blast.js'),
       // await import('./skills/cMinus.js'),
       // await import('./skills/concentration.js'),

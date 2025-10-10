@@ -97,7 +97,7 @@ export class Player extends Unit {
     this.burntSkills = []; // 坟地技能列表，存放被焚毁的技能（战斗中完全消耗掉的技能）
     this.maxFrontierSkills = 10; // 最大前台技能数量
     this.initialDrawFrontierSkills = 2; // 战斗开始时，额外抽取前台技能数量
-    this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
+    this.drawFrontierSkills = 3; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
     this.leinoFactors = {}; // 灵脉强度列表，影响卡牌出现概率，包含 fire, wind, wood, earth, water, thunder, light, dark
     this.abilities = []; // 玩家能力列表
@@ -146,6 +146,10 @@ export class Player extends Unit {
   }
   clearModifiers() {
     this.modifiers = [];
+  }
+
+  get maxDrawSkillCardCount() {
+    return (this.effects['滞气'] || 0) > 0 ? 0 : Infinity;
   }
 
   // 获取顺序应用所有修正器后的“修正玩家对象”。

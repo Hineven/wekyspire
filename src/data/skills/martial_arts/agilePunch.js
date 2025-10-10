@@ -80,11 +80,11 @@ export class AgileLightningPunch extends AgilePunch {
   }
 }
 
-// 雷形拳（A）（敏捷打击）
+// 光速连击（A）（敏捷打击）
 // 攻击六次
 export class ThunderFist extends AgilePunch {
   constructor() {
-    super('雷形拳', 7, 10, 7, 6);
+    super('光速连击', 7, 10, 7, 6);
     this.precessor = '疾风连击';
   }
 }

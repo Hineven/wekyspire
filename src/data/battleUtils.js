@@ -152,6 +152,7 @@ export function applyHeal(target, heal) {
 }
 
 export function drawSkillCard(player, number = 1) {
+  number = Math.min(number, player.maxDrawSkillCardCount);
   let returnSkill = null;
   let ids = [];
   for (let i = 0; i < number; i++) {
@@ -196,6 +197,9 @@ export function drawSelectedSkillCard (player, skillID) {
   }
   if (player.frontierSkills.length >= player.maxHandSize) {
     // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
+    return null;
+  }
+  if(player.maxDrawSkillCardCount <= 0) {
     return null;
   }
   enqueueDelay(0);
