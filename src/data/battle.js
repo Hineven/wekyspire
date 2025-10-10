@@ -13,6 +13,7 @@ import {
 } from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard, willSkillBurn} from "./battleUtils";
 import { enqueueCardDropToDeck } from './animationInstructionHelpers';
+import skill from "./skill";
 // 开始战斗
 export function enterBattleStage() {
   
@@ -468,7 +469,17 @@ export function initializeBattleFlowListeners() {
 
   // 玩家丢弃最左侧技能（前端操作）
   backendEventBus.on(EventNames.PlayerOperations.PLAYER_DROP_SKILL, () => {
-    dropLeftmostSkill();
+    if (gameState.player.frontierSkills.length === 0) {
+      console.warn('前台技能列表为空，无法丢弃技能。');
+      return ;
+    }
+    if(gameState.player.remainingActionPoints < 1) {
+      console.warn('行动力不足，无法丢弃技能。');
+      return ;
+    }
+    // 丢弃最左侧技能
+    gameState.player.consumeActionPoints(1);
+    dropSkillCard(gameState.player, gameState.player.frontierSkills[0]?.uniqueID);
   });
 
   // 玩家结束回合（前端操作）
