@@ -19,15 +19,14 @@ export class FinalStrike extends Skill {
 
   onEnterBattle() {
     super.onEnterBattle();
-    // 事件监听器：动态查找当前（已被 Vue 包装的）技能实例，避免因引用克隆原始对象导致的非响应式更新
     if (!this.listener_) {
-      const uid = this.uniqueID;
-      let shouldColdDown = true;
-      if(!this.canColdDownInBackground) {
-        if(-1 === gameState.player.frontierSkills.findIndex(skill => skill.uniqueID === uid))
-          shouldColdDown = false;
-      }
       this.listener_ = () => {
+        const uid = this.uniqueID;
+        let shouldColdDown = true;
+        if(!this.canColdDownInBackground) {
+          if(-1 === gameState.player.frontierSkills.findIndex(skill => skill.uniqueID === uid))
+            shouldColdDown = false;
+        }
         for (let i = 0; i < this.cardActivationColdDown; i++) {
           if (shouldColdDown && this.canColdDown()) {
             this.coldDown();
