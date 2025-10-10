@@ -105,15 +105,23 @@ export class SustainedVigilance extends Skill {
       const player = backendGameState.player.getModifiedPlayer();
       player.addEffect('警戒', 1);
     };
-    backendEventBus.on(EventNames.Battle.PLAYER_TURN, this.listener_);
+    backendEventBus.on(EventNames.Battle.PRE_PLAYER_TURN_START, this.listener_);
   }
 
   onDisable(player) {
     super.onDisable(player);
     if (this.listener_) {
-      backendEventBus.off(EventNames.Battle.PLAYER_TURN, this.listener_);
+      backendEventBus.off(EventNames.Battle.PRE_PLAYER_TURN_START, this.listener_);
       this.listener_ = null;
     }
+  }
+
+  use(player, enemy) {
+    return true;
+  }
+
+  regenerateDescription(player) {
+    return `回合开始前，获得1层/effect{警戒}`;
   }
 }
 

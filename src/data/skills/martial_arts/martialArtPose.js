@@ -78,6 +78,7 @@ export class BasicFightPose extends Skill {
     this.multiplier = multiplier;
     this.powerUpMultiplier = powerUpMultiplier; // 获得格挡时提升力量
     this.listener_ = null;
+    this.modifier_ = null;
   }
 
   get actionPointCost() {
@@ -87,7 +88,7 @@ export class BasicFightPose extends Skill {
   onEnable(player) {
     super.onEnable(player);
     if(this.powerUpMultiplier > 0) {
-      this.listener_ = (effectName, deltaStacks) => {
+      this.listener_ = ({effectName, deltaStacks}) => {
         if(effectName === '格挡' && deltaStacks > 0) {
           const player = backendGameState.player.getModifiedPlayer();
           player.addEffect('力量', this.powerUpMultiplier);
@@ -95,8 +96,8 @@ export class BasicFightPose extends Skill {
       };
       backendEventBus.on(EventNames.Player.EFFECT_CHANGED, this.listener_);
     }
-    player.addModifier(
-      (player) => {
+    if(this.multiplier > 0) {
+      this.modifier_ = (player) => {
         const self = this;
         return new Proxy(player, {
           get(target, prop, receiver) {
@@ -106,8 +107,9 @@ export class BasicFightPose extends Skill {
             return target[prop];
           }
         });
-      }
-    );
+      };
+      player.addModifier(this.modifier_);
+    }
   }
 
   onDisable(player) {
@@ -115,6 +117,10 @@ export class BasicFightPose extends Skill {
     if(this.listener_) {
       backendEventBus.off(EventNames.Player.EFFECT_CHANGED, this.listener_);
       this.listener_ = null;
+    }
+    if (this.modifier_) {
+      player.removeModifier(this.modifier_);
+      this.modifier_ = null;
     }
   }
 

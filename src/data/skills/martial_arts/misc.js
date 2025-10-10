@@ -38,7 +38,7 @@ export class CarelessPunch extends Skill {
 }
 
 // 飞刀（C-）（单卡）
-// 攻击并丢弃相邻牌
+// 攻击并丢弃相邻牌，需要前后都有牌
 export class SpeedyPunch extends Skill {
   constructor() {
     super('飞刀', 'normal', SkillTier.C_PLUS, 0, 1, 1);
@@ -47,6 +47,16 @@ export class SpeedyPunch extends Skill {
 
   get damage () {
     return Math.max(16 + 7 * this.power, 5);
+  }
+
+  canUse(player) {
+    if(super.canUse(player)) {
+      const index = this.getInBattleIndex(player);
+      if(index > 0 && index < player.frontierSkills.length - 1) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // 使用技能
@@ -67,7 +77,7 @@ export class SpeedyPunch extends Skill {
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `造成${this.damage + (player?.attack ?? 0)}点伤害，丢弃两侧卡`;
+    return `${this.damage + (player?.attack ?? 0)}伤害，丢弃两侧卡，发动需两侧有卡`;
   }
 }
 
