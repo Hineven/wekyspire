@@ -29,8 +29,8 @@
 </template>
 
 <script>
-import ColoredText from './ColoredText.vue';
-import { getAbilityTierLabel } from '../utils/tierUtils.js';
+import ColoredText from '../global/ColoredText.vue';
+import { getAbilityTierLabel } from '../../utils/tierUtils.js';
 
 export default {
   name: 'AbilityRewardPanel',

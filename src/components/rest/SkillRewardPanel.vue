@@ -15,7 +15,7 @@
 </template>
 
 <script>
-import SkillCard from './SkillCard.vue';
+import SkillCard from '../global/SkillCard.vue';
 export default {
   name: 'SkillRewardPanel',
   components: {

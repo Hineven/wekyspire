@@ -14,7 +14,7 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
+import frontendEventBus from '../../frontendEventBus.js';
 
 export default {
   name: 'BurntSkillsIcon',

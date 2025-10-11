@@ -15,7 +15,7 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
+import frontendEventBus from '../../frontendEventBus.js';
 import ColoredText from '../global/ColoredText.vue';
 
 export default {

@@ -6,7 +6,7 @@
 </template>
 
 <script>
-import backendEventBus, { EventNames } from '../backendEventBus.js';
+import backendEventBus, { EventNames } from '../../backendEventBus.js';
 
 export default {
   name: 'MoneyRewardPanel',

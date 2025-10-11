@@ -11,8 +11,8 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
-import orchestrator from '../utils/cardAnimationOrchestrator.js';
+import frontendEventBus from '../../frontendEventBus.js';
+import orchestrator from '../../utils/cardAnimationOrchestrator.js';
 export default {
   name: 'RestControlPanel',
   props: {

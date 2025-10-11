@@ -12,8 +12,8 @@
 </template>
 
 <script>
-import namedEntities from '../data/namedEntities.js';
-import frontendEventBus from '../frontendEventBus.js';
+import namedEntities from '../../data/namedEntities.js';
+import frontendEventBus from '../../frontendEventBus.js';
 
 export default {
   name: 'NamedEntity',
