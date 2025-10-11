@@ -29,7 +29,7 @@ export class BasicTranscendence extends Skill {
   }
 
   regenerateDescription (player) {
-    return `获得${this.apGain}行动点`;
+    return `获得${this.apGain}行动点${this.stall > 0 ? `，${this.stall}层/effect{滞气}` : ''}`;
   }
 }
 

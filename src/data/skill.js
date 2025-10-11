@@ -12,7 +12,7 @@ class Skill {
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.baseManaCost = baseManaCost || 0; // 魏启消耗
-    this.baseActionPointCost = baseActionPointCost || 1; // 行动点消耗，默认为1
+    this.baseActionPointCost = (baseActionPointCost !== undefined) ? baseActionPointCost : 1; // 行动点消耗，默认为1
     this.baseMaxUses = baseMaxUses || 1; // 基础最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称

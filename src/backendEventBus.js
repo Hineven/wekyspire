@@ -34,7 +34,7 @@ export const EventNames = {
   PlayerOperations: {
     // 战斗内玩家操作
     PLAYER_USE_SKILL: 'battle-player-use-skill',
-    PLAYER_DROP_SKILL: 'battle-player-drop-skill',
+    PLAYER_SHIFT_SKILL: 'battle-player-shift-skill',
     PLAYER_END_TURN: 'player-end-turn',
     PLAYER_STOP_ACTIVATED_SKILL: 'battle-player-stop-activated-skill',
     // 休整阶段操作

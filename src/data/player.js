@@ -106,6 +106,10 @@ export class Player extends Unit {
 
     // 属性修正器管线（按顺序应用）
     this.modifiers = [];
+    this.modified = false;
+
+    this.initialShiftSkillActionPointCost = 0; // 每场战斗第一次换卡的行动点消耗
+    this.currentShiftSkillActionPointCost = this.initialShiftSkillActionPointCost; // 当前换卡行动点消耗，每丢一次消耗增1
 
     // 咏唱位：当前激活的咏唱型技能
     this.activatedSkills = [];
@@ -127,6 +131,10 @@ export class Player extends Unit {
   }
   getAllLeinoWeight() {
     return Object.values(this.leinoFactors).reduce((sum, val) => sum + val, 0);
+  }
+
+  canShiftSkill () {
+    return this.frontierSkills.length > 0 && this.remainingActionPoints >= this.currentShiftSkillActionPointCost;
   }
 
   // 计算属性
@@ -156,8 +164,7 @@ export class Player extends Unit {
   // 注意：返回值通常是一个 Proxy，hp/effects 等数据链接保持为原对象引用；
   // 仅 attack/defense/magic 等只读计算属性会被覆盖为修正后的值。
   getModifiedPlayer() {
-    // 无修正器时，直接返回自身，避免不必要的包装
-    if (!this.modifiers || this.modifiers.length === 0) return this;
+    if(this.modified) return this; // 已经是修正过的，直接返回自己，避免重复应用
     let current = this;
     for (const mod of this.modifiers) {
       try {
@@ -167,6 +174,15 @@ export class Player extends Unit {
       } catch (e) {
         console.warn('应用属性修正器时发生错误，已跳过：', e);
       }
+    }
+    // 最后一个修正：将 modified 标记为 true
+    if (!current.modified) {
+      current = new Proxy(current, {
+        get(target, prop, receiver) {
+          if (prop === 'modified') return true;
+          return Reflect.get(target, prop, receiver);
+        }
+      });
     }
     return current;
   }

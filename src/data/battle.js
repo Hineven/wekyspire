@@ -73,6 +73,9 @@ function startBattle() {
 
   const modPlayer = gameState.player.getModifiedPlayer();
 
+  // 重置换卡行动力开销
+  gameState.player.currentShiftSkillActionPointCost = modPlayer.initialShiftSkillActionPointCost;
+
   // 搞定后立刻锁定操作面板
   enqueueLockControl();
 
@@ -468,18 +471,22 @@ export function initializeBattleFlowListeners() {
   });
 
   // 玩家丢弃最左侧技能（前端操作）
-  backendEventBus.on(EventNames.PlayerOperations.PLAYER_DROP_SKILL, () => {
-    if (gameState.player.frontierSkills.length === 0) {
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_SHIFT_SKILL, () => {
+    const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+    if (modPlayer.frontierSkills.length === 0) {
       console.warn('前台技能列表为空，无法丢弃技能。');
       return ;
     }
-    if(gameState.player.remainingActionPoints < 1) {
+    if(modPlayer.remainingActionPoints < modPlayer.currentShiftSkillActionPointCost) {
       console.warn('行动力不足，无法丢弃技能。');
       return ;
     }
-    // 丢弃最左侧技能
-    gameState.player.consumeActionPoints(1);
-    dropSkillCard(gameState.player, gameState.player.frontierSkills[0]?.uniqueID);
+    // 丢弃最左侧技能，抽一张卡
+    gameState.player.consumeActionPoints(modPlayer.currentShiftSkillActionPointCost);
+    // 增加开销
+    modPlayer.currentShiftSkillActionPointCost ++;
+    dropSkillCard(modPlayer, gameState.player.frontierSkills[0]?.uniqueID);
+    drawSkillCard(modPlayer);
   });
 
   // 玩家结束回合（前端操作）
