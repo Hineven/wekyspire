@@ -19,7 +19,7 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
+import frontendEventBus from '../../frontendEventBus.js';
 import SkillCard from './SkillCard.vue';
 
 export default {

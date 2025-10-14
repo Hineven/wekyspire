@@ -14,7 +14,7 @@
 import EffectIcon from './EffectIcon.vue';
 import NamedEntity from './NamedEntity.vue';
 import CardIcon from './CardIcon.vue';
-import namedEntities from '../data/namedEntities.js';
+import namedEntities from '../../data/namedEntities.js';
 
 export default {
   name: 'ColoredText',

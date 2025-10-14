@@ -12,9 +12,9 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
-import SkillManager from '../data/skillManager.js';
-import { getSkillTierColor } from '../utils/tierUtils.js';
+import frontendEventBus from '../../frontendEventBus.js';
+import SkillManager from '../../data/skillManager.js';
+import { getSkillTierColor } from '../../utils/tierUtils.js';
 
 export default {
   name: 'CardIcon',

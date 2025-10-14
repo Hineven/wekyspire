@@ -20,8 +20,8 @@
 </template>
 
 <script>
-import { getPlayerTierLabel } from '../utils/tierUtils.js';
-import frontendEventBus from '../frontendEventBus.js';
+import { getPlayerTierLabel } from '../../utils/tierUtils.js';
+import frontendEventBus from '../../frontendEventBus.js';
 
 export default {
   name: 'PlayerBasicStats',

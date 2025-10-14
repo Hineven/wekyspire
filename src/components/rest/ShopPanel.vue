@@ -28,9 +28,9 @@
 </template>
 
 <script>
-import ColoredText from './ColoredText.vue';
-import { getItemTierLabel } from '../utils/tierUtils.js';
-import backendEventBus, { EventNames } from '../backendEventBus.js';
+import ColoredText from '../global/ColoredText.vue';
+import { getItemTierLabel } from '../../utils/tierUtils.js';
+import backendEventBus, { EventNames } from '../../backendEventBus.js';
 
 export default {
   name: 'ShopPanel',

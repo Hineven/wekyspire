@@ -16,7 +16,7 @@
 </template>
 
 <script>
-import frontendEventBus from '../frontendEventBus.js';
+import frontendEventBus from '../../frontendEventBus.js';
 import BarPoint from './BarPoint.vue';
 
 export default {
