@@ -12,7 +12,7 @@
 
 <script>
 import frontendEventBus from '../../frontendEventBus.js';
-import orchestrator from '../../utils/cardAnimationOrchestrator.js';
+import animator from '../../utils/animator.js';
 export default {
   name: 'RestControlPanel',
   props: {
@@ -26,10 +26,11 @@ export default {
     };
     frontendEventBus.on('rest-deck-bump', this._onDeckBump);
     // 将全局“牌库”锚点定位到该按钮，便于后端动画使用 toAnchor:'deck'
-    try { orchestrator.deckAnchorEl = this.$refs.deckBtn; } catch (_) {}
+    animator.setGlobalAnchorEl('restDeck', this.$refs.deckBtn);
   },
   beforeUnmount() {
     if (this._onDeckBump) frontendEventBus.off('rest-deck-bump', this._onDeckBump);
+    animator.setGlobalAnchorEl('restDeck', null);
   },
   methods: {
     // 返回“牌库”按钮的中心点（用于作为动画目标）

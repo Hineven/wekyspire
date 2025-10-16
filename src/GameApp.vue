@@ -113,16 +113,6 @@ export default {
       // 初始化新动画系统
       animator.init(overlayRefs);
       console.log('[GameApp] Animator initialized with overlay refs:', overlayRefs);
-      
-      // 初始化旧系统（兼容）
-      try {
-        const orchestrator = require('./utils/cardAnimationOrchestrator.js').default;
-        if (orchestrator && orchestrator.init) {
-          orchestrator.init(overlayRefs);
-        }
-      } catch (e) {
-        console.warn('[GameApp] Old orchestrator not available:', e);
-      }
     }
     
     // 初始化交互处理器

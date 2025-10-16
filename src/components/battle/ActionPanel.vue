@@ -116,16 +116,6 @@ export default {
         // 为新的 animator 设置 deck 锚点
         animator.setGlobalAnchorEl('deck', el);
         console.log('[ActionPanel] Set deck anchor to DeckIcon:', el);
-          
-        // 兼容旧系统
-        try {
-          const orchestrator = require('../../utils/cardAnimationOrchestrator.js').default;
-          if (orchestrator) {
-            orchestrator.deckAnchorEl = el;
-          }
-        } catch (e) {
-          // orchestrator 不存在
-        }
       }
     });
     // 监听控制面板禁用事件
