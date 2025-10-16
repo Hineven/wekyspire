@@ -61,7 +61,7 @@ import BurntSkillsIcon from '../global/BurntSkillsIcon.vue';
 import CardsDisplayOverlayPanel from './CardsDisplayOverlayPanel.vue';
 import frontendEventBus from '../../frontendEventBus.js';
 import backendEventBus, { EventNames } from '../../backendEventBus';
-import orchestrator from '../../utils/cardAnimationOrchestrator.js';
+import animator from '../../utils/animator.js';
 import {backendGameState} from "../../data/gameState";
 
 export default {
@@ -99,11 +99,34 @@ export default {
     }
   },
   mounted() {
-    // 将动画的“牌库锚点”指向 DeckIcon 的根元素
+    // 将动画的"牌库锚点"指向 DeckIcon 的根元素
     this.$nextTick(() => {
       const r = this.$refs.deckAnchor;
       const el = r && r.$el ? r.$el : r;
-      if (el) orchestrator.deckAnchorEl = el;
+      if (el) {
+        // 调试：打印 DeckIcon 的位置信息
+        const rect = el.getBoundingClientRect();
+        console.log('[ActionPanel] DeckIcon rect:', rect);
+        console.log('[ActionPanel] DeckIcon center:', {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        });
+        console.log('[ActionPanel] Window size:', window.innerWidth, 'x', window.innerHeight);
+        
+        // 为新的 animator 设置 deck 锚点
+        animator.setGlobalAnchorEl('deck', el);
+        console.log('[ActionPanel] Set deck anchor to DeckIcon:', el);
+          
+        // 兼容旧系统
+        try {
+          const orchestrator = require('../../utils/cardAnimationOrchestrator.js').default;
+          if (orchestrator) {
+            orchestrator.deckAnchorEl = el;
+          }
+        } catch (e) {
+          // orchestrator 不存在
+        }
+      }
     });
     // 监听控制面板禁用事件
     frontendEventBus.on('disable-controls', () => {

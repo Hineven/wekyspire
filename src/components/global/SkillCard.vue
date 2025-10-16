@@ -43,8 +43,19 @@ import SkillCosts from './skillCard/SkillCosts.vue';
 import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../../utils/colorUtils";
-import { registerCardEl, unregisterCardEl } from '../../utils/cardDomRegistry.js';
 import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
+
+// Legacy registry import (kept for backward compatibility)
+let registerCardEl, unregisterCardEl;
+try {
+  const registry = require('../../utils/cardDomRegistry.js');
+  registerCardEl = registry.registerCardEl;
+  unregisterCardEl = registry.unregisterCardEl;
+} catch (e) {
+  // Registry not available, skip registration
+  registerCardEl = () => {};
+  unregisterCardEl = () => {};
+}
 
 export default {
   name: 'SkillCard',

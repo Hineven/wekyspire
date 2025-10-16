@@ -6,6 +6,14 @@ import {toRaw, watch} from 'vue';
 import { backendGameState, displayGameState } from './gameState.js';
 import animationSequencer from './animationSequencer.js';
 import frontendEventBus from '../frontendEventBus.js';
+import { 
+  enqueueCardAnimation,
+  enqueueCardBurn,
+  enqueueCardCenterThenDeck,
+  enqueueCardDropToDeck,
+  enqueueCardAppearInPlace,
+  enqueueDelay as animHelpersDelay
+} from '../utils/animationHelpers.js';
 
 // 内部：S 子集规则
 function isWritableProperty(target, key) {
@@ -261,12 +269,7 @@ export function enqueueInstruction(payload) {
 
 // 兼容：延时（纯等待型指令）
 export function enqueueDelay(durationMs = 0, { tags = [], waitTags } = {}) {
-  return enqueueInstruction({
-    tags,
-    waitTags,
-    durationMs: Math.max(0, durationMs),
-    start: () => {},
-  });
+  return animHelpersDelay(durationMs, { tags, waitTags });
 }
 
 // 兼容原接口：enqueueUI(name, payload = {}, options = {})
@@ -441,11 +444,10 @@ export function enqueueUnlockControl(options = {}) {
 
 // 受伤/治疗动画指令：由后端调用，以动画节奏发送到前端
 export function enqueueHurtAnimation({ unitId, hpDamage = 0, passThroughDamage = 0 } = {}) {
-  // 计算一个与现有实现接近的时长：
   const isHealing = hpDamage < 0;
   const durationMs = isHealing ? 400 : Math.min(200 + Math.max(0, passThroughDamage) * 2, 600);
   return enqueueInstruction({
-    tags: ['ui'],
+    tags: ['ui', 'hurt-anim'],
     waitTags: ['all'],
     durationMs,
     start: ({ emit }) => {
@@ -456,10 +458,9 @@ export function enqueueHurtAnimation({ unitId, hpDamage = 0, passThroughDamage =
 
 // 死亡动画指令
 export function enqueueUnitDeath({ unitId } = {}) {
-  // 参考 HurtAnimationWrapper：抖动/闪烁/爆炸总计 ~1400ms
   const durationMs = 1500;
   return enqueueInstruction({
-    tags: ['ui'],
+    tags: ['ui', 'death-anim'],
     waitTags: ['all'],
     durationMs,
     start: ({ emit }) => {
@@ -468,34 +469,21 @@ export function enqueueUnitDeath({ unitId } = {}) {
   });
 }
 
-// 组合步骤 helper：center -> hold -> deck（销毁）
-export function buildCenterThenDeckSteps({ centerHoldMs = 350, totalMs = 900 } = {}) {
-  const first = 350;
-  const rest = Math.max(300, totalMs - first - centerHoldMs);
-  return [
-    { toAnchor: 'center', scale: 1.2, duration: first, ease: 'power2.out', holdMs: centerHoldMs },
-    { toAnchor: 'deck', scale: 0.5, rotate: 20, duration: rest, ease: 'power2.in' }
-  ];
+// ==================== 卡牌动画相关（使用新动画系统）====================
+
+// 封装：播放 center-then-deck 序列（使用新系统）
+export function enqueueCardCenterThenDeckAnim(id, { centerHoldMs = 350, totalMs = 900 } = {}, instrOptions = {}) {
+  return enqueueCardCenterThenDeck(id, { holdMs: centerHoldMs, duration: totalMs, waitTags: instrOptions.waitTags });
 }
 
-// 组合步骤 helper：飞到牌库并淡出（销毁）
-export function buildDropToDeckSteps({ durationMs = 400 } = {}) {
-  return [
-    { toAnchor: 'deck', scale: 0.5, rotate: 20, duration: durationMs, ease: 'power2.in' },
-    { opacity: 0, duration: 120 }
-  ];
+// 封装：丢弃到牌库（飞入并淡出销毁，使用新系统）
+export function enqueueCardDropToDeckAnim(id, { durationMs = 400 } = {}, instrOptions = {}) {
+  return enqueueCardDropToDeck(id, { duration: durationMs, waitTags: instrOptions.waitTags });
 }
 
-// 封装：播放 center-then-deck 序列
-export function enqueueCardCenterThenDeck(id, { centerHoldMs, totalMs, transfer } = {}, instrOptions = {}) {
-  const steps = buildCenterThenDeckSteps({ centerHoldMs, totalMs });
-  return enqueueAnimateCardById({ id, steps, options: { endMode: 'destroy' }, transfer }, instrOptions);
-}
-
-// 封装：丢弃到牌库（飞入并淡出销毁）
-export function enqueueCardDropToDeck(id, { durationMs, transfer } = {}, instrOptions = {}) {
-  const steps = buildDropToDeckSteps({ durationMs });
-  return enqueueAnimateCardById({ id, steps, options: { endMode: 'destroy' }, transfer }, instrOptions);
+// 封装：焚毁卡牌动画（使用新系统）
+export function enqueueCardBurnAnim(id, instrOptions = {}) {
+  return enqueueCardBurn(id, { waitTags: instrOptions.waitTags });
 }
 
 export default {
@@ -517,8 +505,12 @@ export default {
   DEFAULT_STATE_CHANGE_DURATION,
   enqueueHurtAnimation,
   enqueueUnitDeath,
-  buildCenterThenDeckSteps,
-  buildDropToDeckSteps,
-  enqueueCardCenterThenDeck,
-  enqueueCardDropToDeck,
+  enqueueCardCenterThenDeckAnim,
+  enqueueCardDropToDeckAnim,
+  enqueueCardBurnAnim,
 };
+
+// Re-export for backward compatibility with old code
+export { enqueueCardCenterThenDeckAnim as enqueueCardCenterThenDeck };
+export { enqueueCardDropToDeckAnim as enqueueCardDropToDeck };
+export { enqueueCardBurnAnim as enqueueCardBurn };
