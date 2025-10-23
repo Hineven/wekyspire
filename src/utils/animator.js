@@ -129,6 +129,11 @@ class Animator {
     frontendEventBus.on('animate-element-to-anchor', (payload) => {
       this.animateToAnchor(payload.id, payload.anchor || 'rest', payload);
     });
+    
+    // 监听恢复跟踪指令
+    frontendEventBus.on('resume-element-tracking', (payload) => {
+      this.resumeTracking(payload.id, payload);
+    });
   }
 
   // ========== 注册表管理 ==========
@@ -157,6 +162,11 @@ class Animator {
     }
 
     // 状态机：'idle' | 'tracking' | 'animating' | 'dragging'
+    // 每个可动画元素能且仅能属于一个状态
+    // idle: 待命，无动画
+    // tracking: 平滑地跟踪到锚点，比如手牌，使用一个动态更新目标参数的长时动画实现
+    // animating: 执行指令动画，比如刚刚打出、抽取、发动的卡牌
+    // dragging: 特殊，一般用于被玩家使用鼠标拖拽中的卡牌上，一般用于在休整时切换排序和卡牌上下场
     this._registry.set(id, {
       element,
       adapterType,
@@ -254,51 +264,92 @@ class Animator {
   }
 
   /**
-   * 开始跟踪锚点（仅在 idle 状态下调用）
+   * 计算锚点目标属性（内部助手函数）
+   * @private
    */
-  _startTrackingAnchor(entry, anchor) {
-    if (!entry || !anchor || !entry.element) return;
-    if (entry.state !== 'idle') return; // 只有 idle 状态才能进入跟踪
+  _computeAnchorTargetProps(element, anchor) {
+    if (!element || !anchor) return null;
+    
+    const rect = element.getBoundingClientRect();
+    return {
+      x: anchor.x - rect.width / 2,
+      y: anchor.y - rect.height / 2,
+      scale: anchor.scale || 1,
+      rotation: anchor.rotation || 0
+    };
+  }
+
+  /**
+   * 创建跟踪动画（核心逻辑，被多个方法复用）
+   * @private
+   * @param {Object} entry - 注册表项
+   * @param {Object} anchor - 锚点对象
+   * @param {Object} options - 选项
+   * @param {number} options.duration - 时长（秒）
+   * @param {string} options.ease - 缓动函数
+   * @param {Function} options.onComplete - 完成回调（可选）
+   * @param {Function} options.onInterrupt - 中断回调（可选）
+   * @returns {Object} GSAP tween 对象
+   */
+  _createTrackingTween(entry, anchor, options = {}) {
+    if (!entry || !anchor || !entry.element) return null;
     
     const { element } = entry;
-    const rect = element.getBoundingClientRect();
+    const targetProps = this._computeAnchorTargetProps(element, anchor);
+    if (!targetProps) return null;
     
-    // 计算目标位置（锚点是中心点）
-    const targetX = anchor.x - rect.width / 2;
-    const targetY = anchor.y - rect.height / 2;
-    const targetScale = anchor.scale || 1;
-    const targetRotation = anchor.rotation || 0;
+    // 使用默认配置或自定义参数
+    const duration = options.duration != null ? options.duration : this._anchorTrackingDuration;
+    const ease = options.ease || this._anchorTrackingEase;
     
-    // 转换到 tracking 状态
-    entry.state = 'tracking';
-    
-    // 关键改进：使用普通的 gsap.to 代替 quickTo
-    // 设置一个长时间运行的动画，通过 overwrite: true 确保单一通道
+    // 创建跟踪动画
     const tween = gsap.to(element, {
-      x: targetX,
-      y: targetY,
-      scale: targetScale,
-      rotation: targetRotation,
-      duration: this._anchorTrackingDuration,
-      ease: this._anchorTrackingEase,
-      overwrite: true, // 关键：覆盖之前的所有动画
+      ...targetProps,
+      duration,
+      ease,
+      overwrite: true,
       onComplete: () => {
+        // 默认行为：完成后回到 idle
         if (entry.state === 'tracking') {
           entry.state = 'idle';
         }
         if (entry.currentTween === tween) {
           entry.currentTween = null;
         }
+        // 执行自定义回调
+        if (options.onComplete) {
+          options.onComplete();
+        }
       },
       onInterrupt: () => {
         if (entry.currentTween === tween) {
           entry.currentTween = null;
         }
+        // 执行自定义回调
+        if (options.onInterrupt) {
+          options.onInterrupt();
+        }
       }
     });
     
-    // 保存到 currentTween，确保可以被后续的 kill() 中断
-    entry.currentTween = tween;
+    return tween;
+  }
+
+  /**
+   * 开始跟踪锚点（仅在 idle 状态下调用）
+   */
+  _startTrackingAnchor(entry, anchor) {
+    if (!entry || !anchor || !entry.element) return;
+    if (entry.state !== 'idle') return; // 只有 idle 状态才能进入跟踪
+    
+    // 转换到 tracking 状态
+    entry.state = 'tracking';
+    
+    // 使用公共方法创建跟踪动画
+    const tween = this._createTrackingTween(entry, anchor);
+    if (tween) {
+      entry.currentTween = tween;
+    }
   }
   
   /**
@@ -308,47 +359,17 @@ class Animator {
     if (!entry || !anchor || !entry.element) return;
     if (entry.state !== 'tracking') return; // 只在 tracking 状态下更新
     
-    const { element } = entry;
-    const rect = element.getBoundingClientRect();
-    
-    // 计算新的目标位置
-    const targetX = anchor.x - rect.width / 2;
-    const targetY = anchor.y - rect.height / 2;
-    const targetScale = anchor.scale || 1;
-    const targetRotation = anchor.rotation || 0;
-    
-    // 关键改进：直接重启跟踪动画
     // 杀死当前的 tracking tween
     if (entry.currentTween) {
       entry.currentTween.kill();
       entry.currentTween = null;
     }
     
-    // 创建新的跟踪动画
-    const tween = gsap.to(element, {
-      x: targetX,
-      y: targetY,
-      scale: targetScale,
-      rotation: targetRotation,
-      duration: this._anchorTrackingDuration,
-      ease: this._anchorTrackingEase,
-      overwrite: true,
-      onComplete: () => {
-        if (entry.state === 'tracking') {
-          entry.state = 'idle';
-        }
-        if (entry.currentTween === tween) {
-          entry.currentTween = null;
-        }
-      },
-      onInterrupt: () => {
-        if (entry.currentTween === tween) {
-          entry.currentTween = null;
-        }
-      }
-    });
-    
-    entry.currentTween = tween;
+    // 使用公共方法创建新的跟踪动画
+    const tween = this._createTrackingTween(entry, anchor);
+    if (tween) {
+      entry.currentTween = tween;
+    }
   }
   
   /**
@@ -423,7 +444,7 @@ class Animator {
    * 执行动画指令
    */
   animate(payload) {
-    const { id, to = {}, duration = 300, ease = defaultEase, anchor, instructionId, effect } = payload;
+    const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId, effect } = payload;
 
     const entry = this._registry.get(id);
     if (!entry) {
@@ -452,14 +473,10 @@ class Animator {
     // 处理特殊效果
     if (effect === 'shake') {
       this._applyShakeEffect(element, payload);
-      // shake 执行后回到 idle
+      // shake 执行后回到 idle（不自动恢复跟踪）
       setTimeout(() => {
         if (entry.state === 'animating') {
           entry.state = 'idle';
-          // 尝试恢复锚点跟踪
-          if (entry.anchor && this._anchorTrackingEnabled) {
-            this._startTrackingAnchor(entry, entry.anchor);
-          }
         }
         if (instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
@@ -473,27 +490,50 @@ class Animator {
       adapter.beforeAnimate(element, payload);
     } catch (_) {}
 
-    // 构建目标属性
-    const props = {};
+    // 构建起始属性 (from)
+    const fromProps = {};
+    
+    // 处理 from.anchor
+    if (from.anchor) {
+      const anchorPoint = this.getAnchorPoint(from.anchor);
+      const rect = element.getBoundingClientRect();
+      fromProps.x = anchorPoint.x - rect.width / 2;
+      fromProps.y = anchorPoint.y - rect.height / 2;
+    }
+    
+    // 合并 from 属性
+    if (from.x != null) fromProps.x = from.x;
+    if (from.y != null) fromProps.y = from.y;
+    if (from.scale != null) fromProps.scale = from.scale;
+    if (from.rotate != null) fromProps.rotate = from.rotate;
+    if (from.opacity != null) fromProps.autoAlpha = from.opacity;
+    
+    // 如果有 from 属性，先立即设置到起始位置
+    if (Object.keys(fromProps).length > 0) {
+      gsap.set(element, fromProps);
+    }
 
-    // 处理锚点
+    // 构建目标属性 (to)
+    const toProps = {};
+
+    // 处理顶层 anchor（目标锚点）
     if (anchor) {
       const anchorPoint = this.getAnchorPoint(anchor);
       const rect = element.getBoundingClientRect();
-      props.x = anchorPoint.x - rect.width / 2;
-      props.y = anchorPoint.y - rect.height / 2;
+      toProps.x = anchorPoint.x - rect.width / 2;
+      toProps.y = anchorPoint.y - rect.height / 2;
     }
 
-    // 合并其他属性
-    if (to.x != null) props.x = to.x;
-    if (to.y != null) props.y = to.y;
-    if (to.scale != null) props.scale = to.scale;
-    if (to.rotate != null) props.rotate = to.rotate;
-    if (to.opacity != null) props.autoAlpha = to.opacity;
+    // 合并 to 属性
+    if (to.x != null) toProps.x = to.x;
+    if (to.y != null) toProps.y = to.y;
+    if (to.scale != null) toProps.scale = to.scale;
+    if (to.rotate != null) toProps.rotate = to.rotate;
+    if (to.opacity != null) toProps.autoAlpha = to.opacity;
 
     // 4. 创建新的动画 tween
     const tween = gsap.to(element, {
-      ...props,
+      ...toProps,
       duration: Math.max(0.001, duration / 1000),
       ease,
       force3D: true,
@@ -504,16 +544,11 @@ class Animator {
           adapter.afterAnimate(element, payload);
         } catch (_) {}
         
-        // 5. 动画完成，回到 idle 状态
+        // 动画完成，回到 idle 状态（不自动恢复跟踪）
         if (entry.state === 'animating') {
           entry.state = 'idle';
         }
         entry.currentTween = null;
-        
-        // 6. 尝试恢复锚点跟踪
-        if (entry.anchor && this._anchorTrackingEnabled && entry.state === 'idle') {
-          this._startTrackingAnchor(entry, entry.anchor);
-        }
         
         // 通知完成
         if (instructionId) {
@@ -628,7 +663,7 @@ class Animator {
   }
 
   /**
-   * 结束拖拽（回到 idle 状态）
+   * 结束拖拽（回到 idle 状态，不自动恢复跟踪）
    */
   stopDragging(id) {
     const entry = this._registry.get(id);
@@ -636,10 +671,75 @@ class Animator {
     
     entry.isDragging = false;
     entry.state = 'idle';
+  }
+
+  /**
+   * 恢复锚点跟踪（从任意状态切换到 tracking 状态）
+   * @param {string|number} id - 元素 ID
+   * @param {Object} options - 选项
+   * @param {number} options.duration - 跟踪动画时长（毫秒）
+   * @param {string} options.ease - 缓动函数
+   * @param {string} options.instructionId - 指令 ID（用于通知完成）
+   */
+  resumeTracking(id, options = {}) {
+    const entry = this._registry.get(id);
+    if (!entry) {
+      console.warn('[animator] resumeTracking: element not registered', id);
+      if (options.instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
+      }
+      return;
+    }
+
+    // 检查是否有锚点
+    if (!entry.anchor) {
+      console.warn('[animator] resumeTracking: element has no anchor', id);
+      if (options.instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
+      }
+      return;
+    }
+
+    // 检查是否启用了锚点跟踪
+    if (!this._anchorTrackingEnabled) {
+      console.warn('[animator] resumeTracking: anchor tracking is disabled');
+      if (options.instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
+      }
+      return;
+    }
+
+    // 停止当前动画（如果有）
+    this._stopTracking(entry);
+    if (entry.currentTween) {
+      entry.currentTween.kill();
+      entry.currentTween = null;
+    }
+
+    // 转换到 tracking 状态
+    entry.state = 'tracking';
     
-    // 恢复锚点跟踪
-    if (this._anchorTrackingEnabled && entry.anchor) {
-      this._startTrackingAnchor(entry, entry.anchor);
+    // 使用公共方法创建跟踪动画（支持自定义参数）
+    const trackingDuration = options.duration != null ? options.duration / 1000 : undefined;
+    const tween = this._createTrackingTween(entry, entry.anchor, {
+      duration: trackingDuration,
+      ease: options.ease,
+      onComplete: () => {
+        // 通知完成
+        if (options.instructionId) {
+          frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
+        }
+      },
+      onInterrupt: () => {
+        // 被中断也通知完成
+        if (options.instructionId) {
+          frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
+        }
+      }
+    });
+    
+    if (tween) {
+      entry.currentTween = tween;
     }
   }
 

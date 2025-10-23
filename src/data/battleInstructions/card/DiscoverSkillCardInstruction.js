@@ -9,7 +9,8 @@ import { DrawSkillCardInstruction } from './DrawSkillCardInstruction.js';
 import { DropSkillCardInstruction } from './DropSkillCardInstruction.js';
 import { BurnSkillCardInstruction } from './BurnSkillCardInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
-import { enqueueDelay, enqueueAnimateCardById } from '../../animationInstructionHelpers.js';
+import { enqueueDelay } from '../../animationInstructionHelpers.js';
+import { enqueueCardAppearInPlace } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DiscoverSkillCardInstruction extends BattleInstruction {
@@ -27,13 +28,10 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
 
   async execute() {
     if (this.executionStage === 0) {
-      // 先放入overlaySkills以注册卡牌DOM元素
+      // 先放入overlaySkills以注册card牌DOM元素
       this.player.overlaySkills.push(this.skill);
       enqueueDelay(0);
-      enqueueAnimateCardById({
-        id: this.skill.uniqueID,
-        kind: 'appearInPlace'
-      });
+      enqueueCardAppearInPlace(this.skill.uniqueID, { duration: 300 });
       
       // 触发发现事件
       backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, {

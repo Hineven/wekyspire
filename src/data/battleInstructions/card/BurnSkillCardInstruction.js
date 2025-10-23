@@ -5,7 +5,8 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { enqueueAnimateCardById, enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import { enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import { enqueueCardBurn } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class BurnSkillCardInstruction extends BattleInstruction {
@@ -48,12 +49,8 @@ export class BurnSkillCardInstruction extends BattleInstruction {
     // 卡牌离场
     exhaustedSkill.onLeaveBattle(this.player);
 
-    // 动画
-    enqueueAnimateCardById({
-      id: this.skillID,
-      kind: 'burn',
-      transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }
-    });
+    // 使用新的焚毁动画系统
+    enqueueCardBurn(this.skillID, { waitTags: ['all'] });
 
     // 修改状态
     if (activatedIndex !== -1) {

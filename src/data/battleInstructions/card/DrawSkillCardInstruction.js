@@ -11,7 +11,8 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { enqueueState, captureSnapshot, enqueueAnimateCardById } from '../../animationInstructionHelpers.js';
+import { enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import { enqueueCardAnimation } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DrawSkillCardInstruction extends BattleInstruction {
@@ -87,19 +88,19 @@ export class DrawSkillCardInstruction extends BattleInstruction {
     
     // 批量入队卡牌出现动画
     ids.forEach((id) => {
-      enqueueAnimateCardById(
-        {
-          id: id,
-          kind: 'appearFromAnchor',
-          options: {
-            anchor: 'deck',
-            durationMs: 500,
-            startScale: 0.6,
-            fade: true
-          }
+      enqueueCardAnimation(id, {
+        from: { 
+          anchor: 'deck', 
+          scale: 0.6, 
+          opacity: 0 
         },
-        { waitTags: ['state', 'ui'], durationMs: 200 }
-      );
+        to: { 
+          scale: 1, 
+          opacity: 1 
+        },
+        duration: 500,
+        ease: 'power2.out'
+      }, { waitTags: ['state', 'ui'] });
     });
     
     // 抽卡完成

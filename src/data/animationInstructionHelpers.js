@@ -294,10 +294,6 @@ export function enqueueUI(name, payload = {}, options = {}) {
     case 'clearBattleLog':
     case 'clearBattleLogUI':
       return enqueueClearBattleLog(options);
-    case 'animateCardById':
-      return enqueueAnimateCardById(payload, options);
-    case 'clearCardAnimations':
-      return enqueueClearCardAnimations(options);
     case 'idle':
       // No-op, immediate finish
       return enqueueInstruction({ tags: ['ui'], waitTags: computeWaitTags(options), durationMs: 0, start: () => {} });
@@ -324,8 +320,6 @@ function uiNameToEvent(name) {
     case 'addBattleLogUI': return 'add-battle-log';
     case 'clearBattleLog':
     case 'clearBattleLogUI': return 'clear-battle-log';
-    case 'animateCardById': return 'animate-card-by-id';
-    case 'clearCardAnimations': return 'clear-card-animations';
     default: return name;
   }
 }
@@ -391,36 +385,6 @@ export function enqueueDialog(dialogItems = [], { tags = ['ui'], waitTags, durat
       frontendEventBus.on('dialog-ended', handler);
       try { emit('display-dialog', dialogItems); } catch (_) { frontendEventBus.off('dialog-ended', handler); }
     },
-  });
-}
-
-export function enqueueAnimateCardById(payload = {}, { tags = ['ui'], waitTags, durationMs = Infinity, ...rest } = {}) {
-  return enqueueInstruction({
-    tags,
-    waitTags: waitTags ?? computeWaitTags(rest),
-    durationMs,
-    start: ({ id, emit }) => {
-      const token = id;
-      const onFinished = (msg = {}) => {
-        const t = msg?.token;
-        if (t === token) {
-          frontendEventBus.off('animation-card-by-id-finished', onFinished);
-          frontendEventBus.emit('animation-instruction-finished', { id });
-        }
-      };
-      frontendEventBus.on('animation-card-by-id-finished', onFinished);
-      try { emit('animate-card-by-id', Object.assign({}, payload || {}, { completionToken: token })); }
-      catch (_) { frontendEventBus.off('animation-card-by-id-finished', onFinished); }
-    },
-  });
-}
-
-export function enqueueClearCardAnimations({ tags = ['ui'], waitTags, durationMs = 0, ...rest } = {}) {
-  return enqueueInstruction({
-    tags,
-    waitTags: waitTags ?? computeWaitTags(rest),
-    durationMs,
-    start: ({ emit }) => { try { emit('clear-card-animations'); } catch (_) {} },
   });
 }
 
@@ -498,8 +462,6 @@ export default {
   enqueueClearBattleLog,
   enqueuePopMessage,
   enqueueDialog,
-  enqueueAnimateCardById,
-  enqueueClearCardAnimations,
   enqueueLockControl,
   enqueueUnlockControl,
   DEFAULT_STATE_CHANGE_DURATION,

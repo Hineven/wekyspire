@@ -176,12 +176,13 @@ export function enqueueCardCenterThenDeck(id, options = {}) {
 export function enqueueCardDropToDeck(id, options = {}) {
   const duration = options.duration || 400;
   
-  // 飞向牌库
+  // 飞向牌库并淡出
   const tag1 = enqueueCardAnimation(id, {
     anchor: 'deck',
     to: { 
       scale: 0.5, 
-      rotate: 20 
+      rotate: 20,
+      opacity: 0
     },
     duration,
     ease: 'power2.in'
@@ -189,15 +190,7 @@ export function enqueueCardDropToDeck(id, options = {}) {
     waitTags: options.waitTags
   });
   
-  // 淡出
-  const tag2 = enqueueCardAnimation(id, {
-    to: { opacity: 0 },
-    duration: 120
-  }, {
-    waitTags: [tag1]
-  });
-  
-  return tag2;
+  return tag1;
 }
 
 /**
@@ -315,6 +308,35 @@ export function enqueuePanelKnockback(panelId, direction = 'right', distance = 5
   return tag2;
 }
 
+/**
+ * 恢复元素锚点跟踪（从任意状态切换到 tracking 状态）
+ * @param {number|string} id - 元素 ID
+ * @param {Object} options - 选项
+ * @param {number} options.duration - 跟踪动画时长（毫秒，默认使用 animator 配置）
+ * @param {string} options.ease - 缓动函数
+ * @param {Array<string>} options.waitTags - 等待的 tags
+ * @returns {string} 生成的 tag
+ */
+export function enqueueAnimatableElementResumeTracking(id, options = {}) {
+  const autoTag = genAutoTag(`resume-tracking-${id}`);
+  
+  animationSequencer.enqueueInstruction({
+    tags: ['resume-tracking', autoTag, ...(options.tags || [])],
+    waitTags: options.waitTags || ['all'],
+    durationMs: options.duration || 300, // 默认 300ms，但会被 animator 的配置覆盖
+    start: ({ emit, id: instructionId }) => {
+      emit('resume-element-tracking', {
+        id,
+        duration: options.duration,
+        ease: options.ease,
+        instructionId
+      });
+    }
+  });
+  
+  return autoTag;
+}
+
 export default {
   enqueueCardAnimation,
   enqueueCardAppear,
@@ -324,5 +346,6 @@ export default {
   enqueueCardAppearInPlace,
   enqueueDelay,
   enqueuePanelHurt,
-  enqueuePanelKnockback
+  enqueuePanelKnockback,
+  enqueueAnimatableElementResumeTracking
 };

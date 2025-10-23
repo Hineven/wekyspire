@@ -14,7 +14,8 @@ import { ConsumeSkillResourcesInstruction } from './ConsumeSkillResourcesInstruc
 import { ActivateSkillInstruction } from './ActivateSkillInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
 import { addPlayerActionLog } from '../../battleLogUtils.js';
-import { enqueueAnimateCardById, enqueueDelay, enqueueState, captureSnapshot, enqueueCardDropToDeck } from '../../animationInstructionHelpers.js';
+import { enqueueDelay, enqueueState, captureSnapshot, enqueueCardDropToDeck } from '../../animationInstructionHelpers.js';
+import { enqueueCardAnimation } from '../../../utils/animationHelpers.js';
 import { burnSkillCard, dropSkillCard, willSkillBurn } from '../../battleUtils.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
@@ -66,11 +67,11 @@ export class UseSkillInstruction extends BattleInstruction {
       addPlayerActionLog(`你使用了 /blue{${this.skill.name}}！`);
       
       // 技能脱手发动动画（卡牌移动到中央）
-      enqueueAnimateCardById({
-        id: this.skill.uniqueID,
-        kind: 'flyToAnchor',
-        options: { anchor: 'center', scale: 1.2 }
-      }, { tags: ['ui'], waitTags: [] });
+      enqueueCardAnimation(this.skill.uniqueID, {
+        anchor: 'center',
+        to: { scale: 1.2 },
+        duration: 350
+      }, { tags: ['card-use'], waitTags: [] });
       enqueueDelay(0);
       
       // 创建资源消耗元语
@@ -184,22 +185,12 @@ export class UseSkillInstruction extends BattleInstruction {
     
     enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
     
-    // Transition animation
-    enqueueAnimateCardById({
-      id: skill.uniqueID,
-      steps: [{
-        toCard: true,
-        scale: 1.0,
-        duration: 400,
-        ease: 'power2.inOut'
-      }],
-      options: { endMode: 'restore' },
-      transfer: {
-        type: 'activate',
-        from: 'skills-hand',
-        to: 'activated-bar'
-      }
-    }, { tags: ['ui'], waitTags: ['state'] });
+    // Transition animation - 卡牌从手牌移动到咏唱位
+    enqueueCardAnimation(skill.uniqueID, {
+      to: { scale: 1.0 },
+      duration: 400,
+      ease: 'power2.inOut'
+    }, { tags: ['card-activate'], waitTags: ['state'] });
   }
 
   /**
