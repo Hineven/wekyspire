@@ -19,7 +19,7 @@
     </div>
 
     <!-- 费用显示子组件 -->
-    <SkillCosts :skill="skill" :player-mana="playerMana" />
+    <SkillCosts :skill="skill" :player-mana="player ? player.mana : Infinity" />
 
     <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
 
@@ -45,34 +45,18 @@ import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../../utils/colorUtils";
 import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
 
-// Legacy registry import (kept for backward compatibility)
-let registerCardEl, unregisterCardEl;
-try {
-  const registry = require('../../utils/cardDomRegistry.js');
-  registerCardEl = registry.registerCardEl;
-  unregisterCardEl = registry.unregisterCardEl;
-} catch (e) {
-  // Registry not available, skip registration
-  registerCardEl = () => {};
-  unregisterCardEl = () => {};
-}
-
 export default {
   name: 'SkillCard',
   components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta, SkillCardAnimationOverlay },
   props: {
     skill: { type: Object, required: true },
     player: { type: Object, default: null },
-    disabled: { type: Boolean, default: false },
-    playerMana: { type: Number, default: Infinity },
     previewMode: { type: Boolean, default: false },
     canClick: { type: Boolean, default: true },
     suppressActivationAnimationOnClick: { type: Boolean, default: false },
-    // 当父组件已手动注册 DOM时，关闭此项以避免重复注册
-    autoRegisterInRegistry: { type: Boolean, default: true }
   },
   data() {
-    return { hovered: false, _registeredSelf: false };
+    return { hovered: false};
   },
   computed: {
     skillDescription() {
@@ -110,19 +94,12 @@ export default {
     skillCardImageStyle() {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
     },
-    isChant() { return this.skill?.cardMode === 'chant'; }
+    isChant() { return this.skill?.cardMode === 'chant'; },
+    disabled() { return this.skill.disabled || (this.player && !this.skill.canUse(this.player)); }
   },
   mounted() {
-    // 仅在需要时由组件自身注册到全局卡片DOM注册表
-    if (this.autoRegisterInRegistry) {
-      try { registerCardEl(this.skill?.uniqueID, this.$refs.root, this.skill.uniqueID); this._registeredSelf = true; } catch (_) {}
-    }
   },
   beforeUnmount() {
-    if (this._registeredSelf) {
-      try { unregisterCardEl(this.skill?.uniqueID, this.skill.uniqueID); } catch (_) {}
-      this._registeredSelf = false;
-    }
   },
   methods: {
     getSkillTierLabel,

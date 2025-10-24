@@ -10,7 +10,7 @@
         :class="{ hidden: !isCardVisible(skill) }"
         :ref="el => registerCard(el, skill.uniqueID)"
         :auto-register-in-registry="false"
-        :preview-mode="true"
+        :preview-mode="false"
         @mousedown="onCardMouseDown(skill.uniqueID, $event)"
         @mouseenter="onCardHover(skill.uniqueID, $event)"
         @mouseleave="onCardLeave(skill.uniqueID, $event)"
