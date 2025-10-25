@@ -95,7 +95,8 @@ export default {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
     },
     isChant() { return this.skill?.cardMode === 'chant'; },
-    disabled() { return this.skill.disabled || (this.player && !this.skill.canUse(this.player)); }
+    disabled() { return this.skill.disabled || (this.player && !this.skill.canUse(this.player)); },
+    backendCanUse() {}
   },
   mounted() {
   },

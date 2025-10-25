@@ -126,6 +126,11 @@ class Animator {
   // 计算元素当前未缩放的基准尺寸（用于按中心对齐）
   _getBaseSize(element) {
     if (!element) return { width: 0, height: 0 };
+    // 使用未受变换影响的布局尺寸，避免旋转与缩放对基准尺寸计算的干扰
+    const ow = (typeof element.offsetWidth === 'number') ? element.offsetWidth : 0;
+    const oh = (typeof element.offsetHeight === 'number') ? element.offsetHeight : 0;
+    if (ow > 0 && oh > 0) return { width: ow, height: oh };
+    // 兜底：用 rect 并除以当前缩放（若存在）
     const rect = element.getBoundingClientRect();
     const sx = parseFloat(gsap.getProperty(element, 'scaleX')) || 1;
     const sy = parseFloat(gsap.getProperty(element, 'scaleY')) || 1;
@@ -753,12 +758,6 @@ class Animator {
 
     // 转换到 tracking 状态
     entry.state = STATES.TRACKING;
-
-    // 若元素还未显现，则显现后开始跟踪
-    const el = entry.element;
-    if (el && el.style.visibility === 'hidden') {
-      try { gsap.set(el, { autoAlpha: 1 }); } catch (_) {}
-    }
 
     // 初始化 quickTo 并应用当前 anchor 目标
     this._ensureQuickSetters(entry, { durationMs: options.duration, ease: options.ease });

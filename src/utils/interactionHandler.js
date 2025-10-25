@@ -15,6 +15,9 @@ let draggingCardId = null;
 let dragStartPos = { x: 0, y: 0 };
 let originalPos = { x: 0, y: 0 };
 
+// 控制冻结标志（外部可设置以禁止交互）
+let isControlDisabled = true;
+
 /**
  * 初始化交互处理器
  */
@@ -28,6 +31,14 @@ export function initInteractionHandler() {
   
   // 监听卡牌点击
   frontendEventBus.on('card-click', handleCardClick);
+
+  // 监听控制面板禁用事件
+  frontendEventBus.on('disable-controls', () => {
+    isControlDisabled = true;
+  });
+  frontendEventBus.on('enable-controls', () => {
+    isControlDisabled = false;
+  });
 }
 
 /**
@@ -198,6 +209,9 @@ function handleCardLeave({ id }) {
 function handleCardClick({ id, x, y }) {
   // 战斗阶段才允许点击打出
   if (displayGameState.gameStage !== 'battle') return;
+
+  // 检查控制是否被冻结
+  if(isControlDisabled) return;
   
   // 检查是否是玩家回合
   if (displayGameState.isEnemyTurn) return;
