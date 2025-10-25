@@ -198,7 +198,7 @@ export function drawSkillCard(player, number = 1) {
     // 2. 开启锚点跟踪，让卡牌自然从出现位置逐渐变大并飞入手牌
     enqueueAnimatableElementEnterTracking(id, {
       waitTags: [appearTag],
-      durationMs: 100
+      durationMs: 200
     });
   });
   return returnSkill;

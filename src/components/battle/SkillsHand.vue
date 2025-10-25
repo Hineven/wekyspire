@@ -23,10 +23,12 @@ export default {
   data() {
     return {
       containerWidth: 0,
+      containerHeight: 0,
       cardWidth: 198,
       cardHeight: 266,
       hoveredIndex: -1,
       _ro: null,
+      _pendingAnchorUpdate: false
     };
   },
   computed: {
@@ -128,6 +130,7 @@ export default {
       for (const entry of entries) {
         const cr = entry.contentRect;
         if (cr && cr.width !== this.containerWidth) this.containerWidth = cr.width;
+        if (cr && cr.height !== this.containerHeight) this.containerHeight = cr.height;
       }
     });
     if (this.$refs.handRoot) this._ro.observe(this.$refs.handRoot);
@@ -135,6 +138,7 @@ export default {
     this.$nextTick(() => {
       const hr = this.$refs.handRoot;
       if (hr && hr.clientWidth) this.containerWidth = hr.clientWidth;
+      if (hr && hr.clientHeight) this.containerHeight = hr.clientHeight;
     });
   },
   beforeUnmount() {
@@ -151,19 +155,16 @@ export default {
     anchorsMap: {
       deep: true,
       immediate: true,
-      handler(newMap) {
-        if (newMap && newMap.size > 0) {
-          animator.updateAnchors('skills-hand', newMap);
-        }
+      handler() {
+        this.scheduleAnchorsPush();
       }
     },
     // 监听 containerWidth 和 visibleSkills 的变化，在布局发生变化时更新锚点
     containerWidth() {
-      this.$nextTick(() => {
-        if (this.anchorsMap && this.anchorsMap.size > 0) {
-          animator.updateAnchors('skills-hand', this.anchorsMap);
-        }
-      });
+      this.scheduleAnchorsPush();
+    },
+    containerHeight() {
+      this.scheduleAnchorsPush();
     }
   },
   methods: {
@@ -178,6 +179,27 @@ export default {
       if (index >= 0 && this.hoveredIndex === index) {
         this.hoveredIndex = -1;
       }
+    },
+    scheduleAnchorsPush() {
+      if (this._pendingAnchorUpdate) return;
+      this._pendingAnchorUpdate = true;
+      this.$nextTick(() => {
+        try {
+          const hr = this.$refs.handRoot;
+          const rect = hr?.getBoundingClientRect?.();
+          // 跳过无效尺寸，避免把所有锚点推到屏幕左侧
+          if (!rect || rect.height <= 0 || rect.width <= 0 || this.containerWidth <= 0 || this.containerHeight <= 0) {
+            this._pendingAnchorUpdate = false;
+            return;
+          }
+          const map = this.anchorsMap;
+          if (map && map.size > 0) {
+            animator.updateAnchors('skills-hand', map);
+          }
+        } finally {
+          this._pendingAnchorUpdate = false;
+        }
+      });
     }
   }
 };

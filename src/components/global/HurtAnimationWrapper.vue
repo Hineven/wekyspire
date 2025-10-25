@@ -87,7 +87,6 @@ export default {
   },
   methods: {
     onUnitHurt(payload = {}) {
-      console.log(payload);
       const id = payload?.unitId;
       if (!id || id !== this.unit?.uniqueID) return;
       const hpDamage = payload?.hpDamage ?? 0;
