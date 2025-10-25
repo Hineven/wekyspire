@@ -200,8 +200,7 @@ function useSkill(skill) {
     anchor: 'center',
     to: { scale: 1.2 },
     duration: 350
-  }, { tags: ['card-use'], waitTags: [] });
-  enqueueDelay(0);
+  }, { waitTags: [] }); // 马上执行，不进行阻塞，给予玩家响应
 
   // 资源结算
   skill.consumeResources(gameState.player);

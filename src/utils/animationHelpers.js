@@ -251,7 +251,7 @@ export function enqueuePanelHurt(panelId, damage = 0, options = {}) {
     waitTags: options.waitTags || ['all'],
     durationMs: duration,
     start: ({ emit, id }) => {
-      emit('animate-element', {
+      emit('apply-element-effect', {
         id: panelId,
         instructionId: id,
         effect: 'shake',
@@ -309,25 +309,24 @@ export function enqueuePanelKnockback(panelId, direction = 'right', distance = 5
 }
 
 /**
- * 恢复元素锚点跟踪（从任意状态切换到 tracking 状态）
+ * 恢复元素锚点跟踪（动画元素从任意状态切换到 tracking 状态）
  * @param {number|string} id - 元素 ID
  * @param {Object} options - 选项
- * @param {number} options.duration - 跟踪动画时长（毫秒，默认使用 animator 配置）
  * @param {string} options.ease - 缓动函数
+ * @param {number} options.durationMs - 动画时长（毫秒）
  * @param {Array<string>} options.waitTags - 等待的 tags
  * @returns {string} 生成的 tag
  */
-export function enqueueAnimatableElementResumeTracking(id, options = {}) {
-  const autoTag = genAutoTag(`resume-tracking-${id}`);
+export function enqueueAnimatableElementEnterTracking(id, options = {}) {
+  const autoTag = genAutoTag(`enter-tracking-${id}`);
   
   animationSequencer.enqueueInstruction({
-    tags: ['resume-tracking', autoTag, ...(options.tags || [])],
+    tags: ['enter-tracking', autoTag, ...(options.tags || [])],
     waitTags: options.waitTags || ['all'],
-    durationMs: options.duration || 300, // 默认 300ms，但会被 animator 的配置覆盖
+    durationMs: options.durationMs || 0, // 仅动画元素的状态变更不阻塞动画队列
     start: ({ emit, id: instructionId }) => {
-      emit('resume-element-tracking', {
+      emit('enter-element-tracking', {
         id,
-        duration: options.duration,
         ease: options.ease,
         instructionId
       });
@@ -347,5 +346,5 @@ export default {
   enqueueDelay,
   enqueuePanelHurt,
   enqueuePanelKnockback,
-  enqueueAnimatableElementResumeTracking
+  enqueueAnimatableElementResumeTracking: enqueueAnimatableElementEnterTracking
 };

@@ -10,6 +10,18 @@ import gsap from 'gsap';
 
 const defaultEase = 'power2.out';
 
+// ========== 状态与配置常量 ==========
+const STATES = Object.freeze({
+  IDLE: 'idle',
+  TRACKING: 'tracking',
+  ANIMATING: 'animating',
+  DRAGGING: 'dragging'
+});
+
+// 跟踪动画的默认平滑时间（毫秒）与缓动
+const DEFAULT_TRACKING_DURATION_MS = 300;
+const DEFAULT_TRACKING_EASE = 'power1.out';
+
 // ========== 适配器接口 ==========
 
 /**
@@ -69,10 +81,18 @@ const adapters = {
 };
 
 // ========== Animator 核心类 ==========
+// Animator用于维护与播放可动画元素的动画和它们的状态
+// 可动画元素的状态列表：'idle' | 'tracking' | 'animating' | 'dragging'
+// 每个可动画元素在任意时刻能且仅能属于一个状态
+// idle: 待命，无动画，保持元素现有动画参量不变。
+// tracking: 元素正维持锚点跟踪，在锚点状态移动时，元素会平滑跟踪到锚点的目标状态。比如手牌。使用一个动态更新目标参数的长时动画实现
+// animating: 元素正在执行指令动画（animate），比如刚刚打出、抽取、发动的卡牌
+// dragging: 元素正被鼠标拖拽。这是一个特殊状态，一般用于被玩家使用鼠标拖拽中的卡牌上，一般用于在休整时切换排序和卡牌上下场
+// 在没有外部干预情况下，状态仅会在自动切换至idle。若要切换到tracking、animating、dragging，则需要外部方法调用完成
 
 class Animator {
   constructor() {
-    // DOM 注册表: id -> { element, adapterType, adapter, anchor, quickSetters, isDragging }
+    // DOM 注册表: id -> { element, adapterType, adapter, anchor, state, currentTween, isDragging }
     this._registry = new Map();
     
     // 容器锚点表: containerKey -> Map<id, { x, y, scale?, rotation? }>
@@ -80,17 +100,27 @@ class Animator {
     
     // 全局锚点: name -> { x, y }
     this._globalAnchors = new Map();
-    
-    // 配置
+
+    // 全局锚点监听器：name -> handler（用于去重与清理）
+    this._globalAnchorListeners = new Map();
+
+    // 配置（暂未使用，保留兼容位）
     this._overlayEl = null;
     
-    // 锚点跟踪配置
-    this._anchorTrackingEnabled = true;
-    this._anchorTrackingDuration = 0.3; // 平滑跟踪持续时间（秒）
-    this._anchorTrackingEase = 'power1.out';
-    
+    // 全局锚点跟踪配置（统一使用毫秒）
+    this._anchorTrackingDurationMs = DEFAULT_TRACKING_DURATION_MS; // 默认锚点跟踪平滑动画持续时间（毫秒）
+    this._anchorTrackingEase = DEFAULT_TRACKING_EASE;
+
     // 绑定事件监听
     this._bindEvents();
+  }
+
+  // 内部工具：安全杀死当前 tween 并清空引用
+  _killCurrentTween(entry) {
+    if (entry?.currentTween) {
+      try { entry.currentTween.kill(); } catch (_) {}
+      entry.currentTween = null;
+    }
   }
 
   /**
@@ -130,13 +160,20 @@ class Animator {
       this.animateToAnchor(payload.id, payload.anchor || 'rest', payload);
     });
     
-    // 监听恢复跟踪指令
-    frontendEventBus.on('resume-element-tracking', (payload) => {
-      this.resumeTracking(payload.id, payload);
+    // 进入跟踪状态指令
+    frontendEventBus.on('enter-element-tracking', (payload) => {
+      this.enterTracking(payload.id, payload);
     });
+
+    // 标准化事件：进入某个状态
+    frontendEventBus.on('enter-element-dragging', ({ id }) => this.enterDragging(id));
+    frontendEventBus.on('enter-element-idle', ({ id }) => this.enterIdle(id));
+
+    // 效果事件
+    frontendEventBus.on('apply-element-effect', (payload) => this.applyEffect(payload));
   }
 
-  // ========== 注册表管理 ==========
+  // ========== 可动画元素注册表管理 ==========
 
   /**
    * 注册可动画元素
@@ -161,25 +198,21 @@ class Animator {
       this.unregister(id);
     }
 
-    // 状态机：'idle' | 'tracking' | 'animating' | 'dragging'
-    // 每个可动画元素能且仅能属于一个状态
-    // idle: 待命，无动画
-    // tracking: 平滑地跟踪到锚点，比如手牌，使用一个动态更新目标参数的长时动画实现
-    // animating: 执行指令动画，比如刚刚打出、抽取、发动的卡牌
-    // dragging: 特殊，一般用于被玩家使用鼠标拖拽中的卡牌上，一般用于在休整时切换排序和卡牌上下场
     this._registry.set(id, {
       element,
       adapterType,
       adapter,
       anchor: null,
-      state: 'idle', // 当前状态
+      state: STATES.IDLE, // 当前状态
       currentTween: null, // 当前的 GSAP tween（无论是跟踪还是指令）
       isDragging: false
     });
+    // 新注册的元素默认隐藏，避免在动画前一帧出现在 (0,0)
+    try { element.style.visibility = element.style.visibility || 'hidden'; } catch (_) {}
   }
 
   /**
-   * 解除注册
+   * 解除可动画元素的注册
    */
   unregister(id) {
     if (id == null) return;
@@ -187,14 +220,9 @@ class Animator {
     const entry = this._registry.get(id);
     if (!entry) return;
 
-    // 停止跟踪（清理 trackingTimeout）
+    // 停止跟踪/动画
     this._stopTracking(entry);
-
-    // 杀死当前正在执行的动画
-    if (entry.currentTween) {
-      entry.currentTween.kill();
-      entry.currentTween = null;
-    }
+    this._killCurrentTween(entry);
 
     this._registry.delete(id);
   }
@@ -211,7 +239,7 @@ class Animator {
   /**
    * 更新容器的锚点信息
    * @param {string} containerKey - 容器标识
-   * @param {Map<string|number, {x, y, scale?, rotation?}>} anchorsMap - 锚点映射
+   * @param {Map<string|number, {x, y, scale?, rotation?}>} anchorsMap - 锚点目标动画参量映射
    */
   updateAnchors(containerKey, anchorsMap) {
     if (!containerKey || !anchorsMap) {
@@ -228,39 +256,14 @@ class Animator {
         entry.anchor = anchor;
         
         // 根据当前状态处理锚点更新
-        if (this._anchorTrackingEnabled) {
-          if (entry.state === 'idle') {
-            // idle 状态：启动新的跟踪动画
-            this._startTrackingAnchor(entry, anchor);
-          } else if (entry.state === 'tracking') {
-            // tracking 状态：更新跟踪目标（重启跟踪动画）
-            this._updateTrackingTarget(entry, anchor);
-          }
-          // animating 或 dragging 状态：不干预，等待完成后自动跟踪
+        if (entry.state === STATES.TRACKING) {
+          // tracking 状态：更新跟踪目标（重启跟踪动画）
+          this._updateTrackingTarget(entry, anchor);
         }
+        // idle / animating 或 dragging 状态：和anchor无关，不干预
+
       }
     }
-  }
-
-  /**
-   * 应用锚点位置到元素（立即设置，无动画）
-   */
-  _applyAnchorPosition(entry, anchor) {
-    if (!entry || !anchor || !entry.element) return;
-    
-    const { element } = entry;
-    const rect = element.getBoundingClientRect();
-    
-    // 计算位置（锚点是中心点）
-    const x = anchor.x - rect.width / 2;
-    const y = anchor.y - rect.height / 2;
-    
-    gsap.set(element, {
-      x,
-      y,
-      scale: anchor.scale || 1,
-      rotation: anchor.rotation || 0
-    });
   }
 
   /**
@@ -280,15 +283,15 @@ class Animator {
   }
 
   /**
-   * 创建跟踪动画（核心逻辑，被多个方法复用）
+   * 创建锚点跟踪动画（锚点跟踪状态的核心逻辑，被多个方法复用）
    * @private
    * @param {Object} entry - 注册表项
    * @param {Object} anchor - 锚点对象
    * @param {Object} options - 选项
-   * @param {number} options.duration - 时长（秒）
-   * @param {string} options.ease - 缓动函数
-   * @param {Function} options.onComplete - 完成回调（可选）
-   * @param {Function} options.onInterrupt - 中断回调（可选）
+   * @param {number} [options.durationMs] - 跟踪持续时长（毫秒）
+   * @param {string} [options.ease] - 缓动函数
+   * @param {Function} [options.onComplete] - 完成回调（可选）
+   * @param {Function} [options.onInterrupt] - 中断回调（可选）
    * @returns {Object} GSAP tween 对象
    */
   _createTrackingTween(entry, anchor, options = {}) {
@@ -298,21 +301,19 @@ class Animator {
     const targetProps = this._computeAnchorTargetProps(element, anchor);
     if (!targetProps) return null;
     
-    // 使用默认配置或自定义参数
-    const duration = options.duration != null ? options.duration : this._anchorTrackingDuration;
+    // 使用默认配置或自定义参数（统一使用毫秒，to 时转换为秒）
+    const durationMs = typeof options.durationMs === 'number' ? options.durationMs : this._anchorTrackingDurationMs;
+    const durationSec = Math.max(0.001, (durationMs || DEFAULT_TRACKING_DURATION_MS) / 1000);
     const ease = options.ease || this._anchorTrackingEase;
     
     // 创建跟踪动画
     const tween = gsap.to(element, {
       ...targetProps,
-      duration,
+      duration: durationSec,
       ease,
       overwrite: true,
       onComplete: () => {
-        // 默认行为：完成后回到 idle
-        if (entry.state === 'tracking') {
-          entry.state = 'idle';
-        }
+        // 默认行为：完成后，清理tween，但仍保持 tracking 状态，如此，在锚点移动时可继续启动动画并继续跟踪
         if (entry.currentTween === tween) {
           entry.currentTween = null;
         }
@@ -334,31 +335,18 @@ class Animator {
     
     return tween;
   }
-
-  /**
-   * 开始跟踪锚点（仅在 idle 状态下调用）
-   */
-  _startTrackingAnchor(entry, anchor) {
-    if (!entry || !anchor || !entry.element) return;
-    if (entry.state !== 'idle') return; // 只有 idle 状态才能进入跟踪
-    
-    // 转换到 tracking 状态
-    entry.state = 'tracking';
-    
-    // 使用公共方法创建跟踪动画
-    const tween = this._createTrackingTween(entry, anchor);
-    if (tween) {
-      entry.currentTween = tween;
-    }
-  }
   
   /**
-   * 更新正在进行的跟踪动画的目标（tracking 状态下调用）
+   * 内部函数：更新正在进行的跟踪动画的目标（仅tracking 状态下调用）
    */
   _updateTrackingTarget(entry, anchor) {
     if (!entry || !anchor || !entry.element) return;
-    if (entry.state !== 'tracking') return; // 只在 tracking 状态下更新
-    
+    if (entry.state !== STATES.TRACKING) {
+      // 只在 tracking 状态下更新
+      console.warn('[animator] updateTrackingTarget: must be called with tracking state, current entry: ', entry);
+      return;
+    }
+
     // 杀死当前的 tracking tween
     if (entry.currentTween) {
       entry.currentTween.kill();
@@ -372,6 +360,20 @@ class Animator {
     }
   }
   
+  // 工具：移除并替换指定全局锚点的 resize 监听（防止重复监听）
+  _replaceGlobalAnchorResizeListener(name, handler) {
+    const prev = this._globalAnchorListeners.get(name);
+    if (prev && typeof window !== 'undefined') {
+      try { window.removeEventListener('resize', prev); } catch (_) {}
+    }
+    if (handler) {
+      this._globalAnchorListeners.set(name, handler);
+      try { window.addEventListener('resize', handler, { passive: true }); } catch (_) {}
+    } else {
+      this._globalAnchorListeners.delete(name);
+    }
+  }
+
   /**
    * 应用锚点位置到元素（立即设置，无动画）
    */
@@ -380,9 +382,9 @@ class Animator {
     
     const updatePosition = () => {
       if(!element) {
-        // 移除全局锚点
+        // 移除全局锚点与监听
         this._globalAnchors.delete(name);
-        console.log(`[animator] Removed global anchor '${name}'`);
+        this._replaceGlobalAnchorResizeListener(name, null);
         return;
       }
       const rect = element.getBoundingClientRect();
@@ -392,16 +394,12 @@ class Animator {
           y: rect.top + rect.height / 2
         };
         this._globalAnchors.set(name, anchor);
-        console.log(`[animator] Global anchor '${name}' updated:`, anchor, 'from element:', element);
       }
     };
 
     updatePosition();
-    
-    // 监听窗口大小变化
-    try {
-      window.addEventListener('resize', updatePosition, { passive: true });
-    } catch (_) {}
+    // 使用替换逻辑避免重复监听
+    this._replaceGlobalAnchorResizeListener(name, updatePosition);
   }
 
   /**
@@ -425,7 +423,7 @@ class Animator {
     if (typeof anchorName === 'string') {
       const global = this._globalAnchors.get(anchorName);
       if (global) {
-        console.log(`[animator] Using global anchor '${anchorName}':`, global);
+        // console.log(`[animator] Using global anchor '${anchorName}':`, global);
         return global;
       }
       console.warn(`[animator] Global anchor '${anchorName}' not found, using screen center`);
@@ -441,10 +439,61 @@ class Animator {
   // ========== 动画执行 ==========
 
   /**
-   * 执行动画指令
+   * 应用特效（独立于普通位移动画），保持与历史行为一致：
+   * - 停止 tracking 与当前 tween
+   * - 进入 animating 状态
+   * - 播放特效，duration 后回到 idle，并通知完成
+   */
+  applyEffect(payload) {
+    const { id, effect, duration = 300, instructionId } = payload || {};
+    const entry = this._registry.get(id);
+    if (!entry) {
+      console.warn('[animator] applyEffect: element not registered', id);
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+      return;
+    }
+
+    const { element } = entry;
+
+    // 统一前置：停止 tracking/动画，进入 animating
+    this._stopTracking(entry);
+    this._killCurrentTween(entry);
+    entry.state = STATES.ANIMATING;
+
+    // 分发具体效果
+    switch (effect) {
+      case 'shake':
+        this._applyShakeEffect(element, payload);
+        break;
+      default:
+        console.warn('[animator] applyEffect: unknown effect', effect);
+        break;
+    }
+
+    // 结束回调：保持与历史逻辑一致
+    setTimeout(() => {
+      if (entry.state === STATES.ANIMATING) {
+        entry.state = STATES.IDLE;
+      }
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+    }, duration);
+  }
+
+  /**
+   * 切换到animating状态并执行动画指令，在duration后停止动画并回归idle状态。
    */
   animate(payload) {
     const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId, effect } = payload;
+
+    // 如果是特效请求，改由 applyEffect 处理
+    if (effect) {
+      this.applyEffect(payload);
+      return;
+    }
 
     const entry = this._registry.get(id);
     if (!entry) {
@@ -457,42 +506,21 @@ class Animator {
 
     const { element, adapter } = entry;
 
-    // ===== 关键改进：单一通道管理 =====
-    // 1. 停止 quickTo 跟踪动画（如果正在进行）
+    // 1. 停止tracking状态的跟踪动画（如果正在进行）
     this._stopTracking(entry);
-    
-    // 2. 杀死当前正在执行的动画（如果有）
-    if (entry.currentTween) {
-      entry.currentTween.kill();
-      entry.currentTween = null;
-    }
-    
-    // 3. 转换到 animating 状态
-    entry.state = 'animating';
 
-    // 处理特殊效果
-    if (effect === 'shake') {
-      this._applyShakeEffect(element, payload);
-      // shake 执行后回到 idle（不自动恢复跟踪）
-      setTimeout(() => {
-        if (entry.state === 'animating') {
-          entry.state = 'idle';
-        }
-        if (instructionId) {
-          frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
-        }
-      }, duration);
-      return;
-    }
+    // 2. 杀死当前正在执行的动画（如果有）
+    this._killCurrentTween(entry);
+
+    // 3. 转换到 animating 状态
+    entry.state = STATES.ANIMATING;
 
     // 前处理
-    try {
-      adapter.beforeAnimate(element, payload);
-    } catch (_) {}
+    try { adapter.beforeAnimate(element, payload); } catch (_) {}
 
     // 构建起始属性 (from)
     const fromProps = {};
-    
+
     // 处理 from.anchor
     if (from.anchor) {
       const anchorPoint = this.getAnchorPoint(from.anchor);
@@ -500,17 +528,27 @@ class Animator {
       fromProps.x = anchorPoint.x - rect.width / 2;
       fromProps.y = anchorPoint.y - rect.height / 2;
     }
-    
-    // 合并 from 属性
+
+    // 合并 from 属性（统一 rotation 命名）
     if (from.x != null) fromProps.x = from.x;
     if (from.y != null) fromProps.y = from.y;
     if (from.scale != null) fromProps.scale = from.scale;
-    if (from.rotate != null) fromProps.rotate = from.rotate;
+    if (from.rotation != null) fromProps.rotation = from.rotation;
+    if (from.rotate != null) fromProps.rotation = from.rotate; // 兼容别名
     if (from.opacity != null) fromProps.autoAlpha = from.opacity;
-    
+
     // 如果有 from 属性，先立即设置到起始位置
     if (Object.keys(fromProps).length > 0) {
       gsap.set(element, fromProps);
+      // 若元素仍处于隐藏状态且未指定 from.opacity，则在定位后再显现，避免 (0,0) 闪烁
+      if (element.style.visibility === 'hidden' && from.opacity == null) {
+        gsap.set(element, { autoAlpha: 1 });
+      }
+    } else {
+      // 无 from 属性：若元素仍为隐藏，则直接显现
+      if (element.style.visibility === 'hidden') {
+        gsap.set(element, { autoAlpha: 1 });
+      }
     }
 
     // 构建目标属性 (to)
@@ -524,11 +562,12 @@ class Animator {
       toProps.y = anchorPoint.y - rect.height / 2;
     }
 
-    // 合并 to 属性
+    // 合并 to 属性（统一 rotation 命名）
     if (to.x != null) toProps.x = to.x;
     if (to.y != null) toProps.y = to.y;
     if (to.scale != null) toProps.scale = to.scale;
-    if (to.rotate != null) toProps.rotate = to.rotate;
+    if (to.rotation != null) toProps.rotation = to.rotation;
+    if (to.rotate != null) toProps.rotation = to.rotate; // 兼容别名
     if (to.opacity != null) toProps.autoAlpha = to.opacity;
 
     // 4. 创建新的动画 tween
@@ -540,16 +579,14 @@ class Animator {
       lazy: false,
       overwrite: true, // 强制覆盖，确保单一通道
       onComplete: () => {
-        try {
-          adapter.afterAnimate(element, payload);
-        } catch (_) {}
-        
+        try { adapter.afterAnimate(element, payload); } catch (_) {}
+
         // 动画完成，回到 idle 状态（不自动恢复跟踪）
-        if (entry.state === 'animating') {
-          entry.state = 'idle';
+        if (entry.state === STATES.ANIMATING) {
+          entry.state = STATES.IDLE;
         }
         entry.currentTween = null;
-        
+
         // 通知完成
         if (instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
@@ -558,8 +595,8 @@ class Animator {
       onInterrupt: () => {
         // 被中断也要清理状态
         entry.currentTween = null;
-        if (entry.state === 'animating') {
-          entry.state = 'idle';
+        if (entry.state === STATES.ANIMATING) {
+          entry.state = STATES.IDLE;
         }
         if (instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
@@ -586,40 +623,21 @@ class Animator {
   }
 
   /**
-   * 归位到静息位置
-   */
-  returnToRest(id, duration = 300) {
-    const entry = this._registry.get(id);
-    if (!entry || !entry.anchor) return;
-
-    this.animate({
-      id,
-      to: {
-        x: entry.anchor.x,
-        y: entry.anchor.y,
-        scale: entry.anchor.scale || 1,
-        rotate: entry.anchor.rotation || 0
-      },
-      duration,
-      ease: 'power1.out'
-    });
-  }
-
-  /**
    * 应用震动效果
    */
   _applyShakeEffect(element, payload) {
     const { intensity = 2, duration = 300 } = payload;
-    
+    // 每次抖动的单程时长 50ms，往返一次 100ms
+    const cycleMs = 100;
+    const repeats = Math.max(0, Math.floor(duration / cycleMs) * 2); // 偶数次半程，保证回到原位
+
     gsap.to(element, {
       x: `+=${intensity}`,
       duration: 0.05,
-      repeat: Math.floor(duration / 100),
+      repeat: repeats,
       yoyo: true,
-      ease: 'power1.inOut',
-      onComplete: () => {
-        gsap.set(element, { x: 0 });
-      }
+      ease: 'power1.inOut'
+      // 去掉 onComplete 的强制 x=0，避免覆盖原始位置
     });
   }
 
@@ -628,63 +646,46 @@ class Animator {
    */
   _stopTracking(entry) {
     if (!entry) return;
-    
-    // 清除超时计时器（如果有）
-    if (entry.trackingTimeout) {
-      clearTimeout(entry.trackingTimeout);
-      entry.trackingTimeout = null;
+    if (entry.state === STATES.TRACKING && entry.currentTween) {
+      entry.currentTween.kill();
+      entry.currentTween = null;
     }
-    
-    // 注意：不需要额外杀死动画，因为 currentTween 会在 animate() 中被 kill
-    // 这里只需要清理超时即可
   }
 
   // ========== 拖拽状态管理 ==========
 
   /**
-   * 开始拖拽（转换到 dragging 状态）
+   * 统一入口：进入拖拽状态（推荐使用）
    */
-  startDragging(id) {
+  enterDragging(id) {
     const entry = this._registry.get(id);
     if (!entry) return;
-    
-    // 停止跟踪动画
+
+    // 停止跟踪动画（tracking状态）
     this._stopTracking(entry);
-    
-    // 杀死当前正在执行的动画
-    if (entry.currentTween) {
-      entry.currentTween.kill();
-      entry.currentTween = null;
-    }
-    
+
+    // 杀死当前正在执行的动画（animating状态）
+    this._killCurrentTween(entry);
+
     // 转换到 dragging 状态
-    entry.state = 'dragging';
+    entry.state = STATES.DRAGGING;
     entry.isDragging = true;
   }
 
+  // ========== 锚点跟踪 ==========
   /**
-   * 结束拖拽（回到 idle 状态，不自动恢复跟踪）
-   */
-  stopDragging(id) {
-    const entry = this._registry.get(id);
-    if (!entry) return;
-    
-    entry.isDragging = false;
-    entry.state = 'idle';
-  }
-
-  /**
-   * 恢复锚点跟踪（从任意状态切换到 tracking 状态）
+   * 进入锚点跟踪（从任意状态切换到 tracking 状态）
+   * 每种状态仅保留一个入口方法：enterTracking
    * @param {string|number} id - 元素 ID
    * @param {Object} options - 选项
-   * @param {number} options.duration - 跟踪动画时长（毫秒）
-   * @param {string} options.ease - 缓动函数
-   * @param {string} options.instructionId - 指令 ID（用于通知完成）
+   * @param {number} [options.duration] - 跟踪平滑持续时长（毫秒），默认使用全局配置
+   * @param {string} [options.ease] - 缓动函数
+   * @param {string} [options.instructionId] - 指令 ID（用于通知完成）
    */
-  resumeTracking(id, options = {}) {
+  enterTracking(id, options = {}) {
     const entry = this._registry.get(id);
     if (!entry) {
-      console.warn('[animator] resumeTracking: element not registered', id);
+      console.warn('[animator] enterTracking: element not registered', id);
       if (options.instructionId) {
         frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
       }
@@ -693,16 +694,7 @@ class Animator {
 
     // 检查是否有锚点
     if (!entry.anchor) {
-      console.warn('[animator] resumeTracking: element has no anchor', id);
-      if (options.instructionId) {
-        frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
-      }
-      return;
-    }
-
-    // 检查是否启用了锚点跟踪
-    if (!this._anchorTrackingEnabled) {
-      console.warn('[animator] resumeTracking: anchor tracking is disabled');
+      console.warn('[animator] enterTracking: element has no anchor', id);
       if (options.instructionId) {
         frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
       }
@@ -711,60 +703,77 @@ class Animator {
 
     // 停止当前动画（如果有）
     this._stopTracking(entry);
-    if (entry.currentTween) {
-      entry.currentTween.kill();
-      entry.currentTween = null;
-    }
+    this._killCurrentTween(entry);
 
     // 转换到 tracking 状态
-    entry.state = 'tracking';
-    
-    // 使用公共方法创建跟踪动画（支持自定义参数）
-    const trackingDuration = options.duration != null ? options.duration / 1000 : undefined;
+    entry.state = STATES.TRACKING;
+
+    // 若元素还未显现，则显现后开始跟踪
+    const el = entry.element;
+    if (el && el.style.visibility === 'hidden') {
+      try { gsap.set(el, { autoAlpha: 1 }); } catch (_) {}
+    }
+
+    // 使用公共方法创建跟踪动画（使用毫秒配置）
     const tween = this._createTrackingTween(entry, entry.anchor, {
-      duration: trackingDuration,
+      durationMs: typeof options.duration === 'number' ? options.duration : this._anchorTrackingDurationMs,
       ease: options.ease,
       onComplete: () => {
-        // 通知完成
         if (options.instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
         }
       },
       onInterrupt: () => {
-        // 被中断也通知完成
         if (options.instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: options.instructionId });
         }
       }
     });
-    
+
     if (tween) {
       entry.currentTween = tween;
     }
   }
 
   /**
-   * 设置锚点跟踪配置
+   * 设置全局锚点跟踪配置（毫秒）
    */
-  setAnchorTrackingConfig({ enabled, duration, ease } = {}) {
-    if (enabled != null) this._anchorTrackingEnabled = enabled;
-    if (duration != null) this._anchorTrackingDuration = duration;
+  setAnchorTrackingConfig({ duration, ease } = {}) {
+    if (duration != null) this._anchorTrackingDurationMs = duration;
     if (ease != null) this._anchorTrackingEase = ease;
   }
 
   /**
-   * 重置所有动画
+   * 主动进入 idle（提供统一的状态入口）
+   */
+  enterIdle(id) {
+    const entry = this._registry.get(id);
+    if (!entry) return;
+    // 终止一切动画与拖拽
+    this._killCurrentTween(entry);
+    entry.isDragging = false;
+    entry.state = STATES.IDLE;
+  }
+
+  /**
+   * 重置所有动画，清空registry
    */
   reset() {
-    for (const [id, entry] of this._registry.entries()) {
-      if (entry.currentTween) {
-        entry.currentTween.kill();
-      }
+    for (const [, entry] of this._registry.entries()) {
+      this._killCurrentTween(entry);
     }
     this._registry.clear();
     this._containerAnchors.clear();
+
+    // 清理全局锚点监听
+    if (typeof window !== 'undefined') {
+      for (const [name, handler] of this._globalAnchorListeners.entries()) {
+        try { window.removeEventListener('resize', handler); } catch (_) {}
+      }
+    }
+    this._globalAnchorListeners.clear();
   }
-  
+
   /**
    * 调试工具：获取当前状态
    */
@@ -784,11 +793,10 @@ class Animator {
       registered: this._registry.size,
       containers: this._containerAnchors.size,
       globalAnchors: Array.from(this._globalAnchors.keys()),
-      anchorTrackingEnabled: this._anchorTrackingEnabled,
       entries
     };
   }
-  
+
   /**
    * 调试工具：打印状态
    */
@@ -796,6 +804,34 @@ class Animator {
     const status = this.getStatus();
     console.log('[animator] Status:', status);
     console.table(status.entries);
+  }
+
+  /**
+   * 注册一个新的适配器类型（可扩展）
+   * @param {string} type - 适配器类型名
+   * @param {Object} adapter - 适配器实例，需实现 beforeAnimate/afterAnimate 等可选接口
+   */
+  registerAdapter(type, adapter) {
+    if (!type || !adapter) return;
+    adapters[type] = adapter;
+  }
+
+  /**
+   * 直接设置某个元素的锚点（绕过容器批量更新），便于个别元素临时锚点调整
+   * 若元素当前处于 tracking，则立即更新其跟踪目标
+   * @param {string|number} id
+   * @param {{x:number,y:number,scale?:number,rotation?:number}} anchor
+   */
+  setElementAnchor(id, anchor) {
+    const entry = this._registry.get(id);
+    if (!entry) {
+      console.warn('[animator] setElementAnchor: element not registered', id);
+      return;
+    }
+    entry.anchor = anchor || null;
+    if (entry.anchor && entry.state === STATES.TRACKING) {
+      this._updateTrackingTarget(entry, entry.anchor);
+    }
   }
 }
 
@@ -809,3 +845,4 @@ if (typeof window !== 'undefined') {
 }
 
 export default animator;
+

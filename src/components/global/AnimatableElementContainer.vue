@@ -21,6 +21,10 @@
 </template>
 
 <script>
+// AnimatableElementContainer
+// 负责持有所有可动画元素的Vue元件与DOM实例，管理其生命周期，并注册到animator中
+// 和animator配合实现复杂动画
+
 import { computed, watch, nextTick, ref } from 'vue';
 import SkillCard from './SkillCard.vue';
 import { displayGameState } from '../../data/gameState.js';

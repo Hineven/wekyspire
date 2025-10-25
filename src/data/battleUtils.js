@@ -11,7 +11,7 @@ import {
   enqueueCardAnimation, 
   enqueueCardAppearInPlace, 
   enqueueCardBurn,
-  enqueueAnimatableElementResumeTracking 
+  enqueueAnimatableElementEnterTracking
 } from '../utils/animationHelpers.js';
 import backendEventBus, {EventNames} from "../backendEventBus";
 
@@ -170,10 +170,8 @@ export function drawSkillCard(player, number = 1) {
       // addBattleLog('你的后备技能已空，无法抽取更多卡牌！');
       break;
     }
-    // 对于入手而言，动画由后端统一触发
+    // 先进行状态更新，令SkillHand能响应式为新手牌创建锚点
     const firstSkill = player.backupSkills.shift();
-
-    // 手动触发入手动画，与其他卡牌动画保持一致（等待前序动画完成）
     if (firstSkill && firstSkill.uniqueID) {
       player.frontierSkills.push(firstSkill);
       ids.push(firstSkill.uniqueID);
@@ -181,27 +179,26 @@ export function drawSkillCard(player, number = 1) {
     if(i === 0) {
       returnSkill = firstSkill;
     }
-    // TODO: 此时，事件在动画入队前触发，如果需要在事件内继续加入动画，则可能出现问题。
-    // 但这在目前结构下难以避免，如果要让抽卡动画批量丝滑播放，则只能在所有DOM对齐（后端状态更新完毕）后才能入队动画。
-    // 以后可能会更新前端动画引擎，让卡牌动画动态跟踪最新DOM位置。
     backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: firstSkill.uniqueID });
   }
+  // 排队前端状态同步动画指令
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
+  // 显示卡牌，并将卡牌切换到锚点跟踪模式。让其自然入手。
   ids.forEach((id) => {
-    // 1. 卡牌在牌库位置出现（小牌）
+    // 1.卡牌在牌库位置出现（小牌）
     const appearTag = enqueueCardAnimation(id, {
-      from: { 
-        anchor: 'deck', 
-        scale: 0.6, 
-        opacity: 1 
+      from: {
+        anchor: 'deck',
+        scale: 0.6,
+        opacity: 1
       },
       ease: 'power2.out'
-    }, { waitTags: ['state', 'ui'] });
+    });
     
     // 2. 开启锚点跟踪，让卡牌自然从出现位置逐渐变大并飞入手牌
-    enqueueAnimatableElementResumeTracking(id, {
-      duration: 300,
-      waitTags: [appearTag]
+    enqueueAnimatableElementEnterTracking(id, {
+      waitTags: [appearTag],
+      durationMs: 100
     });
   });
   return returnSkill;
@@ -226,7 +223,7 @@ export function drawSelectedSkillCard (player, skillID) {
     // 执行逻辑
     const [drawnSkill] = player.backupSkills.splice(index, 1);
     player.frontierSkills.push(drawnSkill);
-    
+
     // 1. 卡牌在牌库位置出现（小牌）
     const appearTag = enqueueCardAnimation(skillID, {
       from: { 
@@ -238,8 +235,7 @@ export function drawSelectedSkillCard (player, skillID) {
     }, { waitTags: ['all'] });
     
     // 2. 开启锚点跟踪，让卡牌自然从出现位置逐渐变大并飞入手牌
-    enqueueAnimatableElementResumeTracking(skillID, {
-      duration: 300,
+    enqueueAnimatableElementEnterTracking(skillID, {
       waitTags: [appearTag]
     });
     
@@ -260,8 +256,7 @@ export function drawSelectedSkillCard (player, skillID) {
       player.frontierSkills.push(drawnSkill);
       
       // 然后回到原位（开启锚点跟踪，自动前往手牌）
-      enqueueAnimatableElementResumeTracking(skillID, {
-        duration: 300,
+      enqueueAnimatableElementEnterTracking(skillID, {
         waitTags: [centerTag]
       });
       
