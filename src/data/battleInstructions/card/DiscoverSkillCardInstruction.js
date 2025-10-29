@@ -8,6 +8,7 @@ import { BattleInstruction } from '../BattleInstruction.js';
 import { DrawSkillCardInstruction } from './DrawSkillCardInstruction.js';
 import { DropSkillCardInstruction } from './DropSkillCardInstruction.js';
 import { BurnSkillCardInstruction } from './BurnSkillCardInstruction.js';
+import { SkillLeaveBattleInstruction } from './SkillLeaveBattleInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
 import { enqueueDelay } from '../../animationInstructionHelpers.js';
 import { enqueueCardAppearInPlace } from '../../../utils/animationHelpers.js';
@@ -47,13 +48,9 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
       // 根据destination处理
       if (this.destination === 'skills-hand') {
         if (this.player.frontierSkills.length >= this.player.maxHandSize) {
-          // 手牌已满，焚毁
-          const burnInst = new BurnSkillCardInstruction({
-            player: this.player,
-            skillID: this.skill.uniqueID,
-            parentInstruction: this
-          });
-          submitInstruction(burnInst);
+          // 手牌已满，离场→焚毁
+          submitInstruction(new SkillLeaveBattleInstruction({ player: this.player, skillID: this.skill.uniqueID, parentInstruction: this }));
+          submitInstruction(new BurnSkillCardInstruction({ player: this.player, skillID: this.skill.uniqueID, parentInstruction: this }));
         } else {
           // 抽到手牌
           const drawInst = new DrawSkillCardInstruction({

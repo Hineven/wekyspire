@@ -6,6 +6,8 @@ import { drawSkillCard } from '../../battleUtils.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 import { backendGameState } from '../../gameState.js';
 import { SkillTier } from '../../../utils/tierUtils.js';
+import { createAndSubmitDrawSkillCard } from '../../battleInstructionHelpers.js';
+import { runGlobalExecutor } from '../../battleInstructions/globalExecutor.js';
 
 // 解力（C+）（太极）
 // 机制：进入咏唱后，玩家每打出6张牌，立刻抽1张牌
@@ -48,8 +50,9 @@ class BasicTaiji extends Skill {
         this.playCounter += 1;
         if (this.playCounter >= Math.max(1, this.playsPerDraw)) {
           this.playCounter = 0;
-          // 直接抽牌（由后端负责动画/状态）
-          drawSkillCard(gs.player, Math.max(1, this.drawCount));
+          // 通过原语抽牌：提交指令后手动推进执行器
+          createAndSubmitDrawSkillCard(gs.player, Math.max(1, this.drawCount));
+          runGlobalExecutor();
         }
       } catch (_) { /* 忽略动画与时序问题 */ }
     };

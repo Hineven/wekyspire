@@ -5,6 +5,7 @@ import effectDescriptions from '../data/effectDescription.js';
 import { dealDamage } from './battleUtils.js';
 import { addEffectLog, addBattleLog } from './battleLogUtils.js';
 import {enqueueDelay} from "./animationInstructionHelpers.js";
+import { createAndSubmitDealDamage, createAndSubmitAddEffect, createAndSubmitSkillCoolDown } from './battleInstructionHelpers.js';
 
 /**
  * 处理回合开始时触发的效果
@@ -54,7 +55,7 @@ export function processStartOfTurnEffects(target) {
   if (target.effects['肌肉记忆'] > 0) {
     if (target.frontierSkills) {
       target.frontierSkills.forEach(skill => {
-        if(skill.canColdDown()) skill.coldDown();
+        if(skill.canColdDown()) createAndSubmitSkillCoolDown(skill, 1);
       });
     }
     target.addEffect('肌肉记忆', -1);

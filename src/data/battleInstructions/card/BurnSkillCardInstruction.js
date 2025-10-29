@@ -1,78 +1,76 @@
 /**
- * BurnSkillCardInstruction - 焚毁卡牌元语
- * 
- * 永久移除卡牌（移入焚毁区）
+ * BurnSkillCardInstruction - 焚毁卡牌元语（第二阶段）
+ *
+ * 假设生命周期离场已在 SkillLeaveBattleInstruction 中完成。
+ * 本元语仅负责：动画 + 容器迁移 + 事件。
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
 import { enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
 import { enqueueCardBurn } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
+import {SkillLeaveBattleInstruction} from "./SkillLeaveBattleInstruction";
+import {submitInstruction} from "../globalExecutor";
 
 export class BurnSkillCardInstruction extends BattleInstruction {
   constructor({ player, skillID, parentInstruction = null }) {
     super({ parentInstruction });
-    
     if (!player) throw new Error('BurnSkillCardInstruction: player is required');
     if (!skillID) throw new Error('BurnSkillCardInstruction: skillID is required');
-    
     this.player = player;
     this.skillID = skillID;
+    this.executeStage = 0;
   }
 
   async execute() {
-    const frontierIndex = this.player.frontierSkills.findIndex(skill => skill.uniqueID === this.skillID);
-    const backupIndex = this.player.backupSkills.findIndex(skill => skill.uniqueID === this.skillID);
-    const activatedIndex = Array.isArray(this.player.activatedSkills) 
-      ? this.player.activatedSkills.findIndex(skill => skill.uniqueID === this.skillID) 
-      : -1;
-    
-    if (frontierIndex === -1 && backupIndex === -1 && activatedIndex === -1) {
-      console.warn(`技能ID为 ${this.skillID} 的技能不在前台/后备/咏唱位列表中，无法焚烧。`);
+    if(this.executeStage === 0) {
+      const player = this.player;
+      const find = () => {
+        const sources = [
+          { name: 'activated', arr: player.activatedSkills },
+          { name: 'frontier', arr: player.frontierSkills },
+          { name: 'backup', arr: player.backupSkills },
+        ];
+        for (const src of sources) {
+          const idx = Array.isArray(src.arr) ? src.arr.findIndex(sk => sk.uniqueID === this.skillID) : -1;
+          if (idx !== -1) return { src: src.name, idx };
+        }
+        return { src: null, idx: -1 };
+      };
+
+      const { src, idx } = find();
+      if (idx === -1) {
+        console.warn(`[Burn] Skill ${this.skillID} not found in containers`);
+        return true;
+      }
+      // 卡牌离场
+      const leave = new SkillLeaveBattleInstruction({ player, skillID, parentInstruction: this });
+      submitInstruction(leave);
+      this.executeStage = 1;
+      return false;
+    } else {
+      // 取出卡对象
+      let skill = null;
+      if (src === 'activated') skill = player.activatedSkills.splice(idx, 1)[0];
+      if (src === 'frontier') skill = player.frontierSkills.splice(idx, 1)[0];
+      if (src === 'backup') skill = player.backupSkills.splice(idx, 1)[0];
+
+      if (!skill) return true;
+      this.skill = skill;
+
+      // 动画
+      enqueueCardBurn(this.skillID);
+
+      // 放入焚毁区并从总技能数组中删除引用
+      player.burntSkills.push(skill);
+      const allIdx = player.skills.findIndex(sk => sk === skill);
+      if (allIdx !== -1) player.skills.splice(allIdx, 1);
+
+      // 事件 + 快照
+      backendEventBus.emit(EventNames.Player.SKILL_BURNT, {skill});
+      enqueueState({snapshot: captureSnapshot(), durationMs: 0});
       return true;
     }
-
-    let exhaustedSkill = null;
-    let fromContainer = 'unknown';
-    
-    if (activatedIndex !== -1) {
-      exhaustedSkill = this.player.activatedSkills[activatedIndex];
-      fromContainer = 'activated-bar';
-    } else if (frontierIndex !== -1) {
-      exhaustedSkill = this.player.frontierSkills[frontierIndex];
-      fromContainer = 'skills-hand';
-    } else {
-      exhaustedSkill = this.player.backupSkills[backupIndex];
-      fromContainer = 'deck';
-    }
-    
-    // 卡牌离场
-    exhaustedSkill.onLeaveBattle(this.player);
-
-    // 使用新的焚毁动画系统
-    enqueueCardBurn(this.skillID, { waitTags: ['all'] });
-
-    // 修改状态
-    if (activatedIndex !== -1) {
-      this.player.activatedSkills.splice(activatedIndex, 1);
-      this.player.burntSkills.push(exhaustedSkill);
-    } else if (frontierIndex !== -1) {
-      this.player.frontierSkills.splice(frontierIndex, 1);
-      this.player.burntSkills.push(exhaustedSkill);
-    } else if (backupIndex !== -1) {
-      this.player.backupSkills.splice(backupIndex, 1);
-      this.player.burntSkills.push(exhaustedSkill);
-    }
-    
-    // 从总技能数组移除
-    const skillListIndex = this.player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) this.player.skills.splice(skillListIndex, 1);
-    
-    // 触发技能焚毁事件
-    backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
-    enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
-    
-    return true;
   }
 
   getDebugInfo() {

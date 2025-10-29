@@ -1,7 +1,7 @@
 // 回转
 // 从牌库末抽卡
 import Skill from "../../skill";
-import {drawSelectedSkillCard, launchAttack} from "../../battleUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSelectedSkillCard } from "../../battleInstructionHelpers.js";
 import { backendGameState as gameState } from '../../gameState.js';
 import {countString} from "../../../utils/nameUtils";
 import {SkillTier} from "../../../utils/tierUtils";
@@ -20,12 +20,13 @@ export class RoundSlash extends Skill {
     return Math.max(6, this.baseDamage + this.powerMultiplier * this.power);
   }
 
-  use (player, enemy, stage) {
-    const result = launchAttack(player, enemy, this.damage);
+  use (player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
+    // 从牌库末抽 drawCardCount 张（逐张生成指令，以保持动画顺序）
     for (let i = 0; i < this.drawCardCount; i++) {
-      const lastCardID = gameState.player.backupSkills.length > 0 ? gameState.player.backupSkills[gameState.player.backupSkills.length - 1].uniqueID : null;
-      if(lastCardID) {
-        drawSelectedSkillCard(player, lastCardID);
+      const last = player.backupSkills[player.backupSkills.length - i - 1];
+      if (last && last.uniqueID) {
+        createAndSubmitDrawSelectedSkillCard(player, last.uniqueID, ctx?.parentInstruction ?? null);
       }
     }
     return true;

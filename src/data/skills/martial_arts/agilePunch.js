@@ -1,6 +1,5 @@
-
 import Skill from "../../skill";
-import {drawSkillCard, launchAttack} from "../../battleUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from "../../battleInstructionHelpers.js";
 
 // 敏捷打击（D）（敏捷打击）
 // 连续攻击，造成伤害则抽牌
@@ -12,7 +11,6 @@ export class AgilePunch extends Skill {
     this.baseDamage = damage;
     this.times = times;
     this.drawCardCount = drawCardCount;
-    this.shouldDrawCard_ = false;
   }
 
   get coldDownTurns() {
@@ -23,20 +21,29 @@ export class AgilePunch extends Skill {
     return Math.max(this.baseDamage + this.powerMultiplier * this.power, 4);
   }
 
-  // 使用技能
-  use(player, enemy, stage) {
-    if (stage % 2 === 0) {
-      if(stage / 2 >= this.times) return true;
-      const result = launchAttack(player, enemy, this.damage);
-      this.shouldDrawCard_ = result.passThoughDamage > 0;
+  // 多阶段：每两阶段完成一次“打击+按需抽牌”
+  use(player, enemy, stage, ctx) {
+    if (!ctx.hits) ctx.hits = 0;
+    if (ctx.hits >= this.times) return true;
+
+    if (!ctx.phase || ctx.phase === 'attack') {
+      // 阶段A：攻击
+      const inst = createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
+      ctx.lastAttackInst = inst;
+      ctx.phase = 'draw';
       return false;
     } else {
-      if(this.shouldDrawCard_) drawSkillCard(player, this.drawCardCount);
-      return false;
+      // 阶段B：根据命中决定抽牌
+      const result = ctx.lastAttackInst?.attackResult;
+      if (result && result.passThoughDamage > 0 && this.drawCardCount > 0) {
+        createAndSubmitDrawSkillCard(player, this.drawCardCount, ctx?.parentInstruction ?? null);
+      }
+      ctx.hits += 1;
+      ctx.phase = 'attack';
+      return ctx.hits >= this.times;
     }
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
     const desc =  `造成${this.damage + (player?.attack ?? 0)}点伤害，造成伤害则抽牌`;
     if(this.times > 1) return `${desc}，重复${this.times - 1}次`;

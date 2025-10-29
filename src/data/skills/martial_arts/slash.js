@@ -1,6 +1,7 @@
 // 斩类攻击技能
 import Skill from "../../skill";
-import {launchAttack} from "../../battleUtils";
+// 替换：使用指令式 helpers
+import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from "../../battleInstructionHelpers.js";
 import backendEventBus, {EventNames} from "../../../backendEventBus";
 import { backendGameState as gameState } from '../../gameState.js';
 import {SkillTier} from "../../../utils/tierUtils";
@@ -24,7 +25,7 @@ export class BasicSlash extends Skill {
         skill => skill.uniqueID === this.uniqueID
       );
       if(isInFrontier) {
-        this.coldDown(-this.cardForegroundColdDownDecay);
+        createAndSubmitSkillCoolDown(this, -this.cardForegroundColdDownDecay);
       }
     };
     backendEventBus.on(EventNames.Battle.POST_PLAYER_TURN_END, this.listener_);
@@ -34,8 +35,8 @@ export class BasicSlash extends Skill {
     return Math.max(8, this.baseDamage + this.powerMultiplier * this.power);
   }
 
-  use (player, enemy, stage) {
-    launchAttack(player, enemy, this.damage);
+  use (player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
     return true;
   }
 

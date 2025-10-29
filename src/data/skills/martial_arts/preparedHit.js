@@ -2,7 +2,8 @@
 // 伤害由构造函数传入，不可自然生成
 import {countString, signedNumberStringW0} from "../../../utils/nameUtils";
 import Skill from "../../skill";
-import {dealDamage, discoverSkillCard, launchAttack} from "../../battleUtils";
+// 替换：使用指令式 helpers
+import { createAndSubmitDiscoverSkillCard, createAndSubmitLaunchAttack } from "../../battleInstructionHelpers.js";
 import {enqueueDelay} from "../../animationInstructionHelpers";
 
 export class HeavyChargedHit extends Skill {
@@ -13,8 +14,8 @@ export class HeavyChargedHit extends Skill {
   get damage() {
     return Math.max(14 + 4 * this.power, 7);
   }
-  use(player, enemy, stage) {
-    launchAttack(player, enemy, this.damage);
+  use(player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
     return true;
   }
   regenerateDescription(player) {
@@ -29,12 +30,20 @@ export class ChargedHit extends Skill {
     super(name, 'normal', tier, 0, 1, 1, '蓄力');
     this.times = times;
     this.baseColdDownTurns = consumable ? 0 : 2;
+    this.spawnedCardCost = spawnedCardCost;
   }
-  use(player, enemy, stage) {
-    const skill = new HeavyChargedHit(this.damage);
+  use(player, enemy, stage, ctx) {
+    // 使用 ctx 保存局部阶段状态（避免写到 skill 实例上）
+    if (!ctx.spawned) ctx.spawned = 0;
+
+    // 生成一张大力一击并放入牌库
+    const skill = new HeavyChargedHit(this.damage, this.spawnedCardCost);
     skill.power = this.power;
-    discoverSkillCard(player, skill, 'deck');
-    return stage >= (this.times - 1);
+    createAndSubmitDiscoverSkillCard(player, skill, 'deck', ctx?.parentInstruction ?? null);
+    ctx.spawned += 1;
+
+    // 连续 times 次，返回 false 直到最后一次才返回 true
+    return ctx.spawned >= this.times;
   }
   regenerateDescription(player) {
     return `发现${countString(this.times)}/skill{大力一击${signedNumberStringW0(this.power)}}进入牌库`;

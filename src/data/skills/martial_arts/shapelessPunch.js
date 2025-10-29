@@ -1,6 +1,6 @@
 // 虚形拳
 import Skill from "../../skill";
-import {drawSkillCard, launchAttack} from "../../battleUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from "../../battleInstructionHelpers.js";
 import backendEventBus, {EventNames} from "../../../backendEventBus";
 import { backendGameState as gameState } from '../../gameState.js';
 import {SkillTier} from "../../../utils/tierUtils";
@@ -35,10 +35,10 @@ export class BasicShapelessPunch extends Skill {
     return this.damage;
   }
 
-  use (player, enemy, stage) {
-    launchAttack(player, enemy, this.getDamage(player));
+  use (player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.getDamage(player), ctx?.parentInstruction ?? null);
     if(this.isLastCardInHand(player) && this.drawCardCount > 0) {
-      drawSkillCard(player, this.drawCardCount);
+      createAndSubmitDrawSkillCard(player, this.drawCardCount, ctx?.parentInstruction ?? null);
     }
     return true;
   }

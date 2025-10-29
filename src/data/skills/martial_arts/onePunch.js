@@ -1,6 +1,6 @@
 // 狠狠一击（D）（一击）
 import Skill from "../../skill";
-import {launchAttack} from "../../battleUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from "../../battleInstructionHelpers.js";
 import backendEventBus, {EventNames} from "../../../backendEventBus";
 import { backendGameState as gameState } from '../../gameState.js';
 
@@ -29,7 +29,7 @@ export class FinalStrike extends Skill {
         }
         for (let i = 0; i < this.cardActivationColdDown; i++) {
           if (shouldColdDown && this.canColdDown()) {
-            this.coldDown();
+            createAndSubmitSkillCoolDown(this, 1);
           }
         }
 
@@ -48,8 +48,8 @@ export class FinalStrike extends Skill {
     return Math.max(8, this.baseDamage + this.powerMultiplier * this.power);
   }
 
-  use (player, enemy, stage) {
-    launchAttack(player, enemy, this.damage);
+  use (player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
     return true;
   }
 

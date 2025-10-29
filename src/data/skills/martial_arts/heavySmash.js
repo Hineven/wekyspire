@@ -1,6 +1,6 @@
 import Skill from "../../skill";
 import {SkillTier} from "../../../utils/tierUtils";
-import { launchAttack } from "../../battleUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitAddEffect } from "../../battleInstructionHelpers.js";
 import {countString} from "../../../utils/nameUtils";
 
 // 重击（D）（重击）
@@ -20,13 +20,17 @@ export class BasicHeavySmash extends Skill {
     return this.baseDamage + this.powerMultiplier * this.power;
   }
 
-  // 使用技能
-  use(player, enemy, stage) {
-    if(stage === 0) {
-      const atkPassThroughDamage = launchAttack(player, enemy, this.damage).passThoughDamage;
-      return atkPassThroughDamage <= 0;
+  // 使用技能（两阶段：攻击→命中后加易伤）
+  use(player, enemy, stage, ctx) {
+    if (stage === 0) {
+      const inst = createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
+      ctx.attackInst = inst;
+      return false;
     } else {
-      enemy.addEffect('易伤', this.stack);
+      const result = ctx.attackInst?.attackResult;
+      if (result && result.passThoughDamage > 0) {
+        createAndSubmitAddEffect(enemy, '易伤', this.stack, ctx?.parentInstruction ?? null);
+      }
       return true;
     }
   }

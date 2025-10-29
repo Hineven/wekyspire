@@ -4,7 +4,8 @@
 // 一些单卡
 
 import Skill from '../../skill.js';
-import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard, discoverSkillCard} from '../../battleUtils.js';
+// 替换：使用指令式helpers而非直接battleUtils
+import { createAndSubmitLaunchAttack } from '../../battleInstructionHelpers.js';
 import {signedNumberString, signedNumberStringW0} from "../../../utils/nameUtils";
 import {SkillTier} from "../../../utils/tierUtils";
 
@@ -20,9 +21,10 @@ export class Punch extends Skill {
     return Math.max(this.baseDamage + this.powerMultiplier * this.power, 3);
   }
 
-  // 使用技能
-  use(player, enemy) {
-    launchAttack(player, enemy, this.damage);
+  // 使用技能（指令式）
+  use(player, enemy, stage, ctx) {
+    // 仅一个阶段：创建攻击指令并返回完成
+    createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
     return true;
   }
 
@@ -61,9 +63,9 @@ export class ExplosivePunch extends Skill {
     return this.damage + (enemy.effects['燃烧'] || 0);
   }
 
-  // 使用技能
-  use(player, enemy) {
-    launchAttack(player, enemy, this.getDamage(enemy));
+  // 使用技能（指令式）
+  use(player, enemy, stage, ctx) {
+    createAndSubmitLaunchAttack(player, enemy, this.getDamage(enemy), ctx?.parentInstruction ?? null);
     return true;
   }
 

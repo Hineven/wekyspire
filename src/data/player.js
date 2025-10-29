@@ -126,6 +126,9 @@ export class Player extends Unit {
       this.leinoFactors[type] = value;
     }
   }
+  get maxHandSize () {
+    return this.maxFrontierSkills;
+  }
   getLeinoWeight(type) {
     return Math.max(this.leinoFactors[type] || 0, 0);
   }

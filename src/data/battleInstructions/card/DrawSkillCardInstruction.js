@@ -11,9 +11,8 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
-import { enqueueCardAnimation } from '../../../utils/animationHelpers.js';
-import backendEventBus, { EventNames } from '../../../backendEventBus.js';
+import { submitInstruction } from '../globalExecutor.js';
+import { DrawOneSkillCardInstruction } from './DrawOneSkillCardInstruction.js';
 
 export class DrawSkillCardInstruction extends BattleInstruction {
   /**
@@ -49,61 +48,22 @@ export class DrawSkillCardInstruction extends BattleInstruction {
    * @returns {Promise<boolean>} 始终返回true（一次性完成）
    */
   async execute() {
-    // 获取修正后的玩家对象
     const modPlayer = this.player.getModifiedPlayer ? this.player.getModifiedPlayer() : this.player;
-    
-    // 计算实际抽卡数量
-    const actualCount = Math.min(
+    // 计算一次最多可尝试的抽卡次数（软上限），具体每张在单卡指令内再做边界判断
+    const maxTry = Math.min(
       this.count,
       modPlayer.maxDrawSkillCardCount,
-      modPlayer.maxHandSize - modPlayer.frontierSkills.length, // 手牌剩余空间
-      modPlayer.backupSkills.length // 牌库剩余卡牌
+      modPlayer.maxHandSize - modPlayer.frontierSkills.length,
+      modPlayer.backupSkills.length
     );
-    
-    if (actualCount <= 0) {
-      // 无法抽卡
+    if (maxTry <= 0) {
       return true;
     }
-    
-    // 收集抽到的卡牌ID
-    const ids = [];
-    
-    // 抽卡
-    for (let i = 0; i < actualCount; i++) {
-      const skill = this.player.backupSkills.shift();
-      if (!skill) break; // 牌库空了
-      
-      this.player.frontierSkills.push(skill);
-      this.drawnSkills.push(skill);
-      ids.push(skill.uniqueID);
-      
-      // 触发抽卡事件
-      backendEventBus.emit(EventNames.Player.SKILL_DRAWN, {
-        skillID: skill.uniqueID
-      });
+
+    for (let i = 0; i < maxTry; i++) {
+      const inst = new DrawOneSkillCardInstruction({ player: this.player, parentInstruction: this });
+      submitInstruction(inst);
     }
-    
-    // 同步状态
-    enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
-    
-    // 批量入队卡牌出现动画
-    ids.forEach((id) => {
-      enqueueCardAnimation(id, {
-        from: { 
-          anchor: 'deck', 
-          scale: 0.6, 
-          opacity: 0 
-        },
-        to: { 
-          scale: 1, 
-          opacity: 1 
-        },
-        duration: 500,
-        ease: 'power2.out'
-      }, { waitTags: ['state', 'ui'] });
-    });
-    
-    // 抽卡完成
     return true;
   }
 

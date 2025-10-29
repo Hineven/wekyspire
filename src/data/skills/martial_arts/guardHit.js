@@ -1,11 +1,12 @@
 // 破势
 import Skill from "../../skill"
 import {SkillTier} from "../../../utils/tierUtils";
-import { launchAttack } from "../../battleUtils";
+// 替换：使用指令式 helpers
+import { createAndSubmitLaunchAttack, createAndSubmitRemoveEffect } from "../../battleInstructionHelpers.js";
 
 // 破势（C+）（破势）
 // 造成12伤害，失去至多4层格挡提升四倍失去层数伤害
-export class BreakMomentum extends Skill {
+export class BreakingMove extends Skill {
   constructor(name = '破势', tier = SkillTier.C_PLUS, damage = 9,
               powerMultiplier = 5, maxGuardLost = 4, guardDamageMultiplier = 4) {
     super(name, 'normal', tier, 0, 1, 1, '破势');
@@ -24,10 +25,13 @@ export class BreakMomentum extends Skill {
   getDamage(player) {
     return this.damage + this.getGuardLost(player) * this.guardDamageMultiplier;
   }
-  use(player, enemy, stage) {
+  use(player, enemy, stage, ctx) {
     if(stage === 0) {
-      launchAttack(player, enemy, this.getDamage(player));
-      player.removeEffect('格挡', player.effects['格挡'] || 0);
+      createAndSubmitLaunchAttack(player, enemy, this.getDamage(player), ctx?.parentInstruction ?? null);
+      const toRemove = player.effects['格挡'] || 0;
+      if (toRemove > 0) {
+        createAndSubmitRemoveEffect(player, '格挡', toRemove, ctx?.parentInstruction ?? null);
+      }
       return true;
     }
     return true;
@@ -42,7 +46,7 @@ export class BreakMomentum extends Skill {
 
 // 解体（B）（破势）
 // 造成15伤害，失去至多7层格挡提升6倍失去层数伤害
-export class Disassemble extends BreakMomentum {
+export class Disassemble extends BreakingMove {
   constructor() {
     super('解体', SkillTier.B, 15, 6, 7, 6);
     this.precessor = '破势';
@@ -51,7 +55,7 @@ export class Disassemble extends BreakMomentum {
 
 // 贯心（A-）（破势）
 // 造成22伤害，失去所有格挡，提升12倍失去层数伤害
-export class HeartPiercingStrike extends BreakMomentum {
+export class HeartPiercingStrike extends BreakingMove {
   constructor() {
     super('贯心', SkillTier.A_MINUS, 22, 7, Infinity, 12);
     this.precessor = '解体';

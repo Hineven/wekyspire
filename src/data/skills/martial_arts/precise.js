@@ -2,7 +2,7 @@
 // 高要求、高伤害
 
 import Skill from "../../skill";
-import {dealDamage, launchAttack} from "../../battleUtils";
+import { createAndSubmitDealDamage, createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard, createAndSubmitAddEffect } from "../../battleInstructionHelpers.js";
 import {enqueueDelay} from "../../animationInstructionHelpers";
 import {SkillTier} from "../../../utils/tierUtils";
 import enemy from "../../enemy";
@@ -33,15 +33,40 @@ export class PreciseAttack extends Skill {
     return super.canUse(player) && forwardSkills.every(skill => skill.canUse(player));
   }
 
-  use(player, enemy) {
-    for (let i = 0; i < this.times; i++) {
-      let res = null;
-      if(!this.directDamage) res = launchAttack(player, enemy, this.getDamage(enemy));
-      else res = dealDamage(player, enemy, this.getDamage(enemy));
-      if(this.postEffect) this.postEffect(player, enemy, res);
-      enqueueDelay(300);
+  use(player, enemy, stage, ctx) {
+    if (!ctx.i) ctx.i = 0;
+    if (ctx.i >= this.times) return true;
+
+    // 逐次结算；命中结果用于 postEffect
+    let inst = null;
+    if (!this.directDamage) inst = createAndSubmitLaunchAttack(player, enemy, this.getDamage(enemy), ctx?.parentInstruction ?? null);
+    else inst = createAndSubmitDealDamage(player, enemy, this.getDamage(enemy), false, ctx?.parentInstruction ?? null);
+
+    // 如果有后置效果需求，保存本次指令结果句柄
+    ctx.lastInst = inst;
+    ctx.i += 1;
+    enqueueDelay(300);
+
+    // 如果定义了 postEffect，在下一个阶段执行（或也可以即时执行；此处统一延一拍）
+    if (this.postEffect) {
+      if (!ctx.pendingPost) ctx.pendingPost = [];
+      ctx.pendingPost.push(inst);
     }
-    return true;
+
+    // 在每两阶段里处理：奇数阶段为后置效果
+    if (!ctx.phase || ctx.phase === 'effect') {
+      ctx.phase = 'attack';
+      return false;
+    } else {
+      // 处理累计的后置
+      if (this.postEffect && ctx.pendingPost?.length) {
+        const last = ctx.pendingPost.shift();
+        const res = last?.attackResult ?? last?.result;
+        try { this.postEffect(player, enemy, res); } catch (_) {}
+      }
+      ctx.phase = 'effect';
+      return ctx.i >= this.times && (!ctx.pendingPost || ctx.pendingPost.length === 0);
+    }
   }
 
   // 重新生成技能描述
@@ -79,14 +104,15 @@ export class PalmStrike extends PreciseAttack {
     this.precessor = '精准一击';
   }
 
-  // 使用技能
-  use(player, enemy) {
-    super.use(player, enemy);
-    player.drawCards(1);
-    return true;
+  use(player, enemy, stage, ctx) {
+    // 一次性：伤害后抽1张
+    const done = super.use(player, enemy, stage, ctx);
+    if (done) {
+      createAndSubmitDrawSkillCard(player, 1, ctx?.parentInstruction ?? null);
+    }
+    return done;
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
       return `${this.damage + (player?.attack ?? 0)}伤害，抽1张牌，/named{前方}牌可用时可用`;
@@ -119,7 +145,6 @@ export class WeakPointAttack extends PreciseAttack {
     return this.damage + extraDamage;
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
       return `${this.damage + (player?.attack ?? 0)}伤害，敌人/effect{虚弱}则伤害增${this.extraDamage}，/named{前方}牌可用时可用`;
@@ -139,7 +164,7 @@ export class SwiftHandAttack extends PreciseAttack {
   onEnterBattle(player) {
     super.onEnterBattle(player);
     this.postEffect = (player, enemy, attackResult) => {
-      if(attackResult.passThoughDamage > 0) {
+      if(attackResult && (attackResult.passThoughDamage > 0 || attackResult.hpDamage > 0)) {
         player.addEffect('格挡', 1);
       }
     };
@@ -150,11 +175,10 @@ export class SwiftHandAttack extends PreciseAttack {
     this.postEffect = null;
   }
 
-  use(player, enemy) {
-    return super.use(player, enemy);
+  use(player, enemy, stage, ctx) {
+    return super.use(player, enemy, stage, ctx);
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
       return `${this.damage + (player?.attack ?? 0)}伤害，命中则获得/effect{格挡}，/named{前方}牌可用时可用`;

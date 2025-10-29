@@ -16,7 +16,7 @@
  * 5. execute返回true时弹出栈，返回false时保留在栈顶
  */
 
-import { backendEventBus } from '../../backendEventBus.js';
+import backendEventBus from '../../backendEventBus.js';
 
 export class BattleInstructionExecutor {
   constructor() {
@@ -106,6 +106,8 @@ export class BattleInstructionExecutor {
     // 并发保护
     if (this.isRunning) {
       console.warn('[BattleInstructionExecutor] Executor is already running!');
+      // Log stack trace
+      console.trace();
       return this.statistics;
     }
     
@@ -123,15 +125,13 @@ export class BattleInstructionExecutor {
       // 主执行循环
       while (this.instructionStack.length > 0) {
         const currentInstruction = this.getCurrentInstruction();
+        console.log(`[Executor] Executing: ${currentInstruction.getDebugInfo()}, Stack depth: ${this.instructionStack.length}`);
         
         // 检查是否可执行（取消传播机制）
         if (!currentInstruction.canExecute()) {
-          // 元语被取消，直接丢弃
+          // 元语被取消，直接丢弃（丢弃当前栈顶即可）
           this.instructionStack.pop();
           this.statistics.totalSkipped++;
-          
-          // 调试日志
-          // console.log(`[Executor] Skipped (cancelled): ${currentInstruction.getDebugInfo()}`);
           continue;
         }
         
@@ -152,18 +152,19 @@ export class BattleInstructionExecutor {
           console.error(`[Executor] Error executing instruction: ${currentInstruction.getDebugInfo()}`, error);
           
           // 错误处理策略：弹出出错的元语，继续执行
-          // 可根据需求调整（如终止整个结算流程）
-          this.instructionStack.pop();
+          // 注意：需按身份删除，避免误删新压入的子元语
+          const idx = this.instructionStack.lastIndexOf(currentInstruction);
+          if (idx !== -1) this.instructionStack.splice(idx, 1);
           continue;
         }
         
         // 根据完成状态决定是否弹出栈
         if (completed) {
-          this.instructionStack.pop();
-          // console.log(`[Executor] Completed: ${currentInstruction.getDebugInfo()}`);
+          // 按身份删除当前元语，避免误删在执行过程中压入的子元语
+          const idx = this.instructionStack.lastIndexOf(currentInstruction);
+          if (idx !== -1) this.instructionStack.splice(idx, 1);
         } else {
-          // 未完成，保留在栈顶，下次迭代继续执行
-          // console.log(`[Executor] Pending: ${currentInstruction.getDebugInfo()}`);
+          // 未完成，保留在栈中（其位置可能在子元语之下）
         }
         
         // 栈深度安全检查（防止无限递归）
@@ -180,6 +181,9 @@ export class BattleInstructionExecutor {
       
       console.log('[Executor] Settlement complete:', this.statistics);
       
+    } catch (e) {
+      console.log('[Executor] Error settlement complete:', this.statistics);
+      throw e;
     } finally {
       // 确保isRunning标志被重置
       this.isRunning = false;

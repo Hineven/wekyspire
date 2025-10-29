@@ -1,5 +1,6 @@
 import Skill from '../../skill'
 import {SkillTier} from '../../../utils/tierUtils'
+import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js'
 // 抱头（D）（格挡系列）
 // 获得1格挡
 export class BasicBlocking extends Skill {
@@ -18,8 +19,8 @@ export class BasicBlocking extends Skill {
   }
 
   // 使用技能
-  use(player, enemy) {
-    player.addEffect('格挡', this.block);
+  use(player, enemy, stage, ctx) {
+    createAndSubmitAddEffect(player, '格挡', this.block, ctx?.parentInstruction ?? null);
     return true;
   }
 

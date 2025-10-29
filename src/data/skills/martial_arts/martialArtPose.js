@@ -13,7 +13,7 @@ export class BasicDefensePose extends Skill {
   constructor(
     name = '防御准备', tier = SkillTier.C_PLUS,
     coldDown = 0, apCost = 3, maxStack = 1, stackRecovery = 1
-) {
+  ) {
     super(name, 'normal', tier, 0, apCost, 1, '姿态');
     this.baseColdDownTurns = coldDown;
     this.maxStack = maxStack;

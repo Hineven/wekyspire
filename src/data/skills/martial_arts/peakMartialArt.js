@@ -1,7 +1,7 @@
 // 盖世武学系列（体修·咏唱）：过牌造成伤害
 
 import Skill from '../../skill.js';
-import { launchAttack } from '../../battleUtils.js';
+import { createAndSubmitLaunchAttack } from '../../battleInstructionHelpers.js';
 import { backendGameState } from '../../gameState.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 import { SkillTier } from '../../../utils/tierUtils.js';
@@ -39,7 +39,8 @@ class BasicPeakMartialArt extends Skill {
         const enemy = gs?.enemy;
         if (!enemy || !gs || gs.gameStage !== 'battle') return;
         const modPlayer = gs.player.getModifiedPlayer ? gs.player.getModifiedPlayer() : gs.player;
-        launchAttack(modPlayer, enemy, this.damagePerDraw);
+        // 使用指令式攻击，保证动画/结算一致
+        createAndSubmitLaunchAttack(modPlayer, enemy, this.damagePerDraw);
       } catch (_) { /* 忽略事件期间的动画/时序问题 */ }
     };
     backendEventBus.on(EventNames.Player.SKILL_DRAWN, this.listener_);

@@ -163,7 +163,7 @@ export function drawSkillCard(player, number = 1) {
   let ids = [];
   for (let i = 0; i < number; i++) {
     if (player.frontierSkills.length >= player.maxHandSize) {
-      // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
+      addBattleLog('你的手牌已满，无法抽取更多卡牌！');
       break;
     }
     if (player.backupSkills.length === 0) {
