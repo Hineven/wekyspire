@@ -2,10 +2,10 @@
 // 将GameApp中所有触发类别的effect的生效和判定逻辑迁移至此文件
 
 import effectDescriptions from '../data/effectDescription.js';
-import { dealDamage } from './battleUtils.js';
+// 伤害/治疗改为指令式
+import { createAndSubmitDealDamage, createAndSubmitAddEffect, createAndSubmitSkillCoolDown, createAndSubmitApplyHeal } from './battleInstructionHelpers.js';
 import { addEffectLog, addBattleLog } from './battleLogUtils.js';
 import {enqueueDelay} from "./animationInstructionHelpers.js";
-import { createAndSubmitDealDamage, createAndSubmitAddEffect, createAndSubmitSkillCoolDown } from './battleInstructionHelpers.js';
 
 /**
  * 处理回合开始时触发的效果
@@ -36,7 +36,7 @@ export function processStartOfTurnEffects(target) {
     target.addEffect('燃烧', -1);
     if(damage > 0) {
       addEffectLog(`${target.name}被烧伤了，受到${damage}伤害！`);
-      dealDamage(null, target, damage);
+      createAndSubmitDealDamage(null, target, damage, false);
       enqueueDelay(400);
     }
   }
@@ -105,7 +105,7 @@ export function processEndOfTurnEffects(target) {
   // 处理中毒效果
   if (target.effects['中毒'] > 0) {
     const damage = target.effects['中毒'];
-    dealDamage(null, target, damage, true);
+    createAndSubmitDealDamage(null, target, damage, true);
     target.addEffect('中毒', -1);
     addEffectLog(`${target.name}受到/effect{中毒}影响，受到${damage}真实伤害！`);
     enqueueDelay(400);
@@ -114,7 +114,7 @@ export function processEndOfTurnEffects(target) {
   // 处理再生效果
   if (target.effects['再生'] > 0) {
     const heal = target.effects['再生'];
-    target.applyHeal(heal);
+    createAndSubmitApplyHeal(target, heal);
     target.addEffect('再生', -1);
     addEffectLog(`${target.name}通过/effect{再生}恢复了${heal}点/named{生命}！`);
     enqueueDelay(400);

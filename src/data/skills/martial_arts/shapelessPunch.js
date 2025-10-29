@@ -19,7 +19,7 @@ export class BasicShapelessPunch extends Skill {
   }
 
   get damage () {
-    return Math.max(8, this.baseDamage + this.powerMultiplier * this.power);
+    return Math.max(0, this.baseDamage + this.powerMultiplier * this.power);
   }
 
   isLastCardInHand (player) {
@@ -36,20 +36,24 @@ export class BasicShapelessPunch extends Skill {
   }
 
   use (player, enemy, stage, ctx) {
-    createAndSubmitLaunchAttack(player, enemy, this.getDamage(player), ctx?.parentInstruction ?? null);
+    const damage = this.getDamage(player);
+    if(damage > 0) createAndSubmitLaunchAttack(player, enemy, damage, ctx?.parentInstruction ?? null);
     if(this.isLastCardInHand(player) && this.drawCardCount > 0) {
       createAndSubmitDrawSkillCard(player, this.drawCardCount, ctx?.parentInstruction ?? null);
     }
     return true;
   }
   regenerateDescription (player) {
-    let desc = `${this.damage + (player?.attack ?? 0)}伤害`;
+    let desc = `${this.damage + (player?.attack ?? 0)}伤害。`;
+    if(this.damage === 0) {
+      desc = '';
+    }
     if(this.drawCardCount > 0) {
-      desc += `。若为唯一手牌，抽${this.drawCardCount}牌`;
+      desc += `若为唯一手牌，抽${this.drawCardCount}牌`;
     }
     if(this.extraDamage > 0) {
       if(this.drawCardCount <= 0) {
-        desc += '。若为唯一手牌';
+        desc += '若为唯一手牌';
       }
       desc += `，额外造成${this.extraDamage}伤害`;
     }
@@ -93,11 +97,29 @@ export class DragonShapelessPunch extends BasicShapelessPunch {
   }
 }
 
-// 空形拳（A-）（虚形拳）
+// 虚形拳（A-）（虚形拳）
 // 额外伤害提升，抽卡数提升
+export class ShapelessPunch extends BasicShapelessPunch {
+  constructor() {
+    super('虚形拳', SkillTier.A_MINUS, 12, 7, 4, 1, 33, 4);
+    this.precessor = ['龙形拳', '苍龙拳'];
+  }
+}
+
+// 空形拳（A）（虚形拳）
+// 仅在最后一张手牌时生效，造成高额伤害并抽卡
 export class TrueShapelessPunch extends BasicShapelessPunch {
   constructor() {
-    super('空形拳', SkillTier.A_MINUS, 12, 7, 4, 1, 33, 4);
-    this.precessor = '龙形拳';
+    super('空形拳', SkillTier.A, 0, 7, 4, 1, 100, 4);
+    this.precessor = '虚形拳';
+  }
+}
+
+// 苍龙拳（A-）（虚形拳）
+// 额外伤害再次提升
+export class AzureDragonPunch extends BasicShapelessPunch {
+  constructor() {
+    super('苍龙拳', SkillTier.A_MINUS, 12, 7, 4, 1, 50, 4);
+    this.precessor = ['龙形拳', '虚形拳'];
   }
 }

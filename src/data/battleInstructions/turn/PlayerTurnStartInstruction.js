@@ -5,6 +5,7 @@ import { enqueueUnlockControl } from '../../animationInstructionHelpers.js';
 import { createAndSubmitDrawSkillCard, createAndSubmitSkillListCoolDown } from '../../battleInstructionHelpers.js';
 import { ProcessStartOfTurnEffectsInstruction } from '../turnEffects/ProcessStartOfTurnEffectsInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
+import { backendGameState as gameState } from '../../gameState.js';
 
 export class PlayerTurnStartInstruction extends BattleInstruction {
   constructor({ player, enemy, parentInstruction = null }) {
@@ -19,8 +20,8 @@ export class PlayerTurnStartInstruction extends BattleInstruction {
     const player = this.player;
     // 阶段0：基础重置与预事件
     if (this.stage === 0) {
-      // 标记为玩家回合
-      player.gameState && (player.gameState.isEnemyTurn = false);
+      // 标记为玩家回合（修正：直接写全局 gameState）
+      gameState.isEnemyTurn = false;
       // 事件：回合开始前
       backendEventBus.emit(EventNames.Battle.PRE_PLAYER_TURN_START, {});
       // 重置AP

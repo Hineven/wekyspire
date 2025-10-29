@@ -2,7 +2,6 @@
 // 太极系列（体修·咏唱）：每打3张牌，抽1张牌
 
 import Skill from '../../skill.js';
-import { drawSkillCard } from '../../battleUtils.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 import { backendGameState } from '../../gameState.js';
 import { SkillTier } from '../../../utils/tierUtils.js';

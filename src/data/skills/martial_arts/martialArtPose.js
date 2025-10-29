@@ -1,7 +1,6 @@
 // 武术姿态
 // 格挡和格挡转换
 import Skill from "../../skill";
-import {drawSkillCard, launchAttack} from "../../battleUtils";
 import {backendGameState} from "../../gameState";
 import backendEventBus, {EventNames} from "../../../backendEventBus";
 import {SkillTier} from "../../../utils/tierUtils";
@@ -200,8 +199,8 @@ export class TianYi extends BasicFightPose {
 // 龟守姿态（B+）（姿态）
 // 回合开始获得格挡，一次获得2层，最多5层，回合开始少抽1牌
 export class TurtlePose extends BasicDefensePose {
-  constructor(deltaDrawCardCount = 1) {
-    super('龟守姿态', SkillTier.B_PLUS, 3, 3, 5, 2);
+  constructor(maxStacks = 5, deltaDrawCardCount = 1) {
+    super('龟守姿态', SkillTier.B_PLUS, 3, 3, maxStacks, 2);
     this.precessor = '守护姿态';
     this.modifier_ = null;
     this.deltaDrawCardCount = deltaDrawCardCount;
@@ -233,13 +232,25 @@ export class TurtlePose extends BasicDefensePose {
   }
 }
 
+// 玄龟姿态（A-）（姿态）
+// 相比龟守姿态，层数上限提升至8层
+export class MysticTurtlePose extends TurtlePose {
+  constructor() {
+    super(8);
+    this.name = '玄龟姿态';
+    this.tier = SkillTier.A_MINUS;
+    this.precessor = '龟守姿态';
+    this.maxStack = 8;
+  }
+}
+
 // 神龟姿态（A）（姿态）
 // 相比龟缩姿态，少抽1牌变成多抽1牌
 export class DivineTurtlePose extends TurtlePose {
   constructor() {
-    super(-1);
+    super(5, -1);
     this.name = '神龟姿态';
     this.tier = SkillTier.A;
-    this.precessor = '龟缩姿态';
+    this.precessor = ['玄龟姿态', '龟守姿态'];
   }
 }

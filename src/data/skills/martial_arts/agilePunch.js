@@ -1,12 +1,13 @@
 import Skill from "../../skill";
 import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from "../../battleInstructionHelpers.js";
+import {SkillTier} from "../../../utils/tierUtils";
 
-// 敏捷打击（D）（敏捷打击）
+// 敏捷打击（C+）（敏捷打击）
 // 连续攻击，造成伤害则抽牌
 export class AgilePunch extends Skill {
-  constructor(name = '敏捷打击', tier = 1, damage = 4, powerMultiplier = 3, times = 1, drawCardCount = 1) {
+  constructor(name = '敏捷打击', tier = SkillTier.C_MINUS, damage = 9, powerMultiplier = 3, times = 1, drawCardCount = 1) {
     super(name, 'normal', tier, 0, 1, 1, '敏捷打击');
-    this.baseColdDownTurns = 2;
+    this.baseColdDownTurns = 4;
     this.powerMultiplier = powerMultiplier;
     this.baseDamage = damage;
     this.times = times;
@@ -55,7 +56,7 @@ export class AgilePunch extends Skill {
 // 攻击两次
 export class AgileDoublePunch extends AgilePunch {
   constructor() {
-    super('敏捷连击', 2, 5, 4, 2);
+    super('敏捷连击', SkillTier.C_PLUS, 8, 3, 2);
     this.precessor = '敏捷打击';
   }
 }
@@ -64,17 +65,8 @@ export class AgileDoublePunch extends AgilePunch {
 // 攻击三次
 export class AgileTriplePunch extends AgilePunch {
   constructor() {
-    super('疾风连击', 4, 6, 5, 3);
+    super('疾风连击', SkillTier.B, 8, 3, 3);
     this.precessor = '敏捷连击';
-  }
-}
-
-// 全神击（A-）（敏捷打击）
-// 攻击一次，抽3张牌
-export class AgileAllPunch extends AgilePunch {
-  constructor() {
-    super('全神击', 6, 44, 6, 1, 3);
-    this.precessor = '疾风连击';
   }
 }
 
@@ -82,16 +74,34 @@ export class AgileAllPunch extends AgilePunch {
 // 攻击三次，每次抽2张牌
 export class AgileLightningPunch extends AgilePunch {
   constructor() {
-    super('闪电连击', 5, 6, 6, 3, 2);
+    super('闪电连击', SkillTier.B_PLUS, 5, 3, 3, 2);
     this.precessor = '疾风连击';
   }
 }
 
-// 光速连击（A）（敏捷打击）
+// 暴风连击（B+）（敏捷打击）
 // 攻击六次
 export class ThunderFist extends AgilePunch {
   constructor() {
-    super('光速连击', 7, 10, 7, 6);
+    super('奔雷连击', SkillTier.B_PLUS, 8, 3, 6);
     this.precessor = '疾风连击';
+  }
+}
+
+// 全神击（A-）（敏捷打击）
+// 攻击一次，抽3张牌
+export class AgileAllPunch extends AgilePunch {
+  constructor() {
+    super('全神击', SkillTier.A_MINUS, 44, 6, 1, 3);
+    this.precessor = ['闪电连击', '暴风连击'];
+  }
+}
+
+// 闪光连击（A-）（敏捷打击）
+// 攻击九次
+export class AgileFlashPunch extends AgilePunch {
+  constructor() {
+    super('闪光连击', SkillTier.A_MINUS, 8, 3, 9);
+    this.precessor = ['闪电连击', '暴风连击'];
   }
 }
