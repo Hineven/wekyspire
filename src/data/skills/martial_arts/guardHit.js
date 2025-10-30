@@ -27,11 +27,11 @@ export class BreakingMove extends Skill {
   }
   use(player, enemy, stage, ctx) {
     if(stage === 0) {
-      createAndSubmitLaunchAttack(player, enemy, this.getDamage(player), ctx?.parentInstruction ?? null);
       const toRemove = player.effects['格挡'] || 0;
       if (toRemove > 0) {
         createAndSubmitRemoveEffect(player, '格挡', toRemove, ctx?.parentInstruction ?? null);
       }
+      createAndSubmitLaunchAttack(player, enemy, this.getDamage(player), ctx?.parentInstruction ?? null);
       return true;
     }
     return true;

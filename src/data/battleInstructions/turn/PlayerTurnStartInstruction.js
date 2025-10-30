@@ -2,7 +2,11 @@
 import { BattleInstruction } from '../BattleInstruction.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 import { enqueueUnlockControl } from '../../animationInstructionHelpers.js';
-import { createAndSubmitDrawSkillCard, createAndSubmitSkillListCoolDown } from '../../battleInstructionHelpers.js';
+import {
+  createAndSubmitDrawSkillCard,
+  createAndSubmitLambda,
+  createAndSubmitSkillListCoolDown
+} from '../../battleInstructionHelpers.js';
 import { ProcessStartOfTurnEffectsInstruction } from '../turnEffects/ProcessStartOfTurnEffectsInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
 import { backendGameState as gameState } from '../../gameState.js';
@@ -17,6 +21,7 @@ export class PlayerTurnStartInstruction extends BattleInstruction {
   }
 
   async execute() {
+    console.log("qwqweqwewqea121111111111111111111111111111111qweqwewqewqewqeqw");
     const player = this.player;
     // 阶段0：基础重置与预事件
     if (this.stage === 0) {
@@ -42,14 +47,14 @@ export class PlayerTurnStartInstruction extends BattleInstruction {
       const isStunned = !!this.effectsInst?.isStunned;
       if (isStunned) {
         backendEventBus.emit(EventNames.Battle.PLAYER_TURN_START, {});
-        enqueueUnlockControl();
+        createAndSubmitLambda(() => {enqueueUnlockControl();}, this);
         // 眩晕：直接结束回合（交给外部发起的 PLAYER_END_TURN 指令或事件）
         return true;
       }
       // 事件：回合开始
       backendEventBus.emit(EventNames.Battle.PLAYER_TURN_START, {});
       // 解锁操作
-      enqueueUnlockControl();
+      createAndSubmitLambda(() => {enqueueUnlockControl();}, this);
       // 抽牌（按上限补到 drawFrontierSkills）
       const mod = player.getModifiedPlayer ? player.getModifiedPlayer() : player;
       const toDraw = Math.min(mod.maxFrontierSkills - mod.frontierSkills.length, mod.drawFrontierSkills);

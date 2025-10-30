@@ -16,8 +16,8 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { processSkillActivationEffects } from '../../effectProcessor.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
+import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js';
 
 export class ActivateSkillInstruction extends BattleInstruction {
   /**
@@ -67,15 +67,15 @@ export class ActivateSkillInstruction extends BattleInstruction {
    * @returns {Promise<boolean>}
    */
   async execute() {
-    // 处理技能发动时效果（仅在stage=0时处理）
     if (this.stage === 0) {
-      // 使用修正后的玩家对象
       const modPlayer = this.player.getModifiedPlayer ? this.player.getModifiedPlayer() : this.player;
-      processSkillActivationEffects(modPlayer);
-      
-      // 检查战斗是否结束
+      // 指令化的技能发动时效果（目前仅“连发”）
+      if ((modPlayer.effects?.['连发'] || 0) > 0) {
+        try { if (typeof modPlayer.gainActionPoint === 'function') modPlayer.gainActionPoint(1); } catch (_) {}
+        createAndSubmitAddEffect(modPlayer, '连发', -1, this);
+      }
       if (this._checkBattleEnded()) {
-        this.cancel(); // 取消自身
+        this.cancel();
         return true;
       }
     }

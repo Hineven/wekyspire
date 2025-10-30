@@ -24,6 +24,10 @@ import { AwaitPlayerInputInstruction } from './battleInstructions/async/AwaitPla
 import { DrawSelectedSkillCardInstruction } from './battleInstructions/card/DrawSelectedSkillCardInstruction.js';
 import { SkillLeaveBattleInstruction } from './battleInstructions/card/SkillLeaveBattleInstruction.js';
 import { SkillCoolDownInstruction } from './battleInstructions/skill/SkillCoolDownInstruction.js';
+import { GainManaInstruction } from './battleInstructions/state/GainManaInstruction.js';
+import { ConsumeManaInstruction } from './battleInstructions/state/ConsumeManaInstruction.js';
+import { LambdaInstruction } from './battleInstructions/misc/LambdaInstruction.js';
+import { addEffectLog } from './battleLogUtils.js';
 
 // ==================== 战斗相关元语辅助函数 ====================
 
@@ -351,4 +355,56 @@ export function createAndSubmitSkillListCoolDown(skills, deltaStacks = 1, parent
     const inst = new SkillCoolDownInstruction({ skill: sk, deltaStacks, parentInstruction: parent });
     submitInstruction(inst);
   }
+}
+
+/**
+ * 创建并提交获得魔法元语
+ * @param {Unit} target - 目标单位
+ * @param {number} amount - 魔法值
+ * @param {BattleInstruction|null} parentInstruction - 父元语引用（默认null）
+ * @returns {GainManaInstruction} 获得魔法元语实例
+ */
+export function createAndSubmitGainMana(target, amount, parentInstruction = null) {
+  const parent = parentInstruction ?? getCurrentInstruction();
+  const instruction = new GainManaInstruction({ target, amount, parentInstruction: parent });
+  submitInstruction(instruction);
+  return instruction;
+}
+
+/**
+ * 创建并提交消耗魔法元语
+ * @param {Unit} target - 目标单位
+ * @param {number} amount - 魔法值
+ * @param {BattleInstruction|null} parentInstruction - 父元语引用（默认null）
+ * @returns {ConsumeManaInstruction} 消耗魔法元语实例
+ */
+export function createAndSubmitConsumeMana(target, amount, parentInstruction = null) {
+  const parent = parentInstruction ?? getCurrentInstruction();
+  const instruction = new ConsumeManaInstruction({ target, amount, parentInstruction: parent });
+  submitInstruction(instruction);
+  return instruction;
+}
+
+/**
+ * 创建并提交Lambda元语
+ * @param {Function} fn - 要执行的函数
+ * @param {string} description - 描述信息（默认'lambda'）
+ * @param {BattleInstruction|null} parentInstruction - 父元语引用（默认null）
+ * @returns {LambdaInstruction} Lambda元语实例
+ */
+export function createAndSubmitLambda(fn, description = 'lambda', parentInstruction = null) {
+  const parent = parentInstruction ?? getCurrentInstruction();
+  const inst = new LambdaInstruction({ fn, description, parentInstruction: parent });
+  submitInstruction(inst);
+  return inst;
+}
+
+/**
+ * 创建并提交添加效果日志的Lambda元语
+ * @param {string} text - 日志文本
+ * @param {BattleInstruction|null} parentInstruction - 父元语引用（默认null）
+ * @returns {LambdaInstruction} 添加效果日志的Lambda元语实例
+ */
+export function createAndSubmitAddEffectLog(text, parentInstruction = null) {
+  return createAndSubmitLambda(() => addEffectLog(text), `addEffectLog:${text}`, parentInstruction);
 }
