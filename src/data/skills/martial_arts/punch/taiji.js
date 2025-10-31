@@ -1,12 +1,12 @@
 // filepath: d:\cb_6\hineven_wekyspire\wekyspire\src\data\skills\martial_arts\taiji.js
 // 太极系列（体修·咏唱）：每打3张牌，抽1张牌
 
-import Skill from '../../skill.js';
-import backendEventBus, { EventNames } from '../../../backendEventBus.js';
-import { backendGameState } from '../../gameState.js';
-import { SkillTier } from '../../../utils/tierUtils.js';
-import { createAndSubmitDrawSkillCard } from '../../battleInstructionHelpers.js';
-import { runGlobalExecutor } from '../../battleInstructions/globalExecutor.js';
+import Skill from '@data/skill.js';
+import backendEventBus, { EventNames } from '@/backendEventBus.js';
+import { backendGameState } from '@data/gameState.js';
+import { SkillTier } from '@/utils/tierUtils.js';
+import { createAndSubmitDrawSkillCard } from '@data/battleInstructionHelpers.js';
+import { runGlobalExecutor } from '@data/battleInstructions/globalExecutor.js';
 
 // 解力（C+）（太极）
 // 机制：进入咏唱后，玩家每打出6张牌，立刻抽1张牌

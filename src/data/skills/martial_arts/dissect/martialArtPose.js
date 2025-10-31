@@ -1,10 +1,10 @@
 // 武术姿态
 // 格挡和格挡转换
-import Skill from "../../skill";
-import {backendGameState} from "../../gameState";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import {SkillTier} from "../../../utils/tierUtils";
-import {modifiedNumberString} from "../../../utils/nameUtils";
+import Skill from "@data/skill";
+import {backendGameState} from '@data/gameState';
+import backendEventBus, {EventNames} from '@/backendEventBus';
+import {SkillTier} from '@/utils/tierUtils';
+import {modifiedNumberString} from '@/utils/nameUtils';
 
 // 防御准备（C-）（姿态）
 // 回合开始获得格挡，最多1层

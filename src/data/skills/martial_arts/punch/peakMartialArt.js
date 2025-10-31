@@ -1,10 +1,10 @@
 // 盖世武学系列（体修·咏唱）：过牌造成伤害
 
-import Skill from '../../skill.js';
-import { createAndSubmitLaunchAttack } from '../../battleInstructionHelpers.js';
-import { backendGameState } from '../../gameState.js';
-import backendEventBus, { EventNames } from '../../../backendEventBus.js';
-import { SkillTier } from '../../../utils/tierUtils.js';
+import Skill from '@data/skill.js';
+import { createAndSubmitLaunchAttack } from '@data/battleInstructionHelpers.js';
+import { backendGameState } from '@data/gameState.js';
+import backendEventBus, { EventNames } from '@/backendEventBus.js';
+import { SkillTier } from '@/utils/tierUtils.js';
 
 // 入门（C+）（武学）
 // 抽牌则敌人造成固定伤害

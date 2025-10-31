@@ -1,10 +1,10 @@
 // 回转
 // 从牌库末抽卡
-import Skill from "../../skill";
-import { createAndSubmitLaunchAttack, createAndSubmitDrawSelectedSkillCard } from "../../battleInstructionHelpers.js";
-import { backendGameState as gameState } from '../../gameState.js';
-import {countString} from "../../../utils/nameUtils";
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from "@data/skill";
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSelectedSkillCard } from '@data/battleInstructionHelpers.js';
+import { backendGameState as gameState } from '@data/gameState.js';
+import {countString} from "@/utils/nameUtils";
+import {SkillTier} from "@/utils/tierUtils";
 
 // 回旋斩（C-）（回转）
 // 从牌库末抽卡

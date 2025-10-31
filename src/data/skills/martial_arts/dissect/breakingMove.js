@@ -1,8 +1,8 @@
 // 破势
-import Skill from "../../skill"
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from "@data/skill"
+import {SkillTier} from '@/utils/tierUtils';
 // 替换：使用指令式 helpers
-import { createAndSubmitLaunchAttack, createAndSubmitRemoveEffect } from "../../battleInstructionHelpers.js";
+import { createAndSubmitLaunchAttack, createAndSubmitRemoveEffect } from '@data/battleInstructionHelpers.js';
 
 // 破势（C+）（破势）
 // 造成12伤害，失去至多4层格挡提升四倍失去层数伤害

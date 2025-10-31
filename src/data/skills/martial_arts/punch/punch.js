@@ -3,11 +3,11 @@
 
 // 一些单卡
 
-import Skill from '../../skill.js';
+import Skill from '@data/skill.js';
 // 替换：使用指令式helpers而非直接battleUtils
-import { createAndSubmitLaunchAttack } from '../../battleInstructionHelpers.js';
-import {signedNumberString, signedNumberStringW0} from "../../../utils/nameUtils";
-import {SkillTier} from "../../../utils/tierUtils";
+import { createAndSubmitLaunchAttack } from '@data/battleInstructionHelpers.js';
+import {signedNumberString, signedNumberStringW0} from "@/utils/nameUtils";
+import {SkillTier} from "@/utils/tierUtils";
 
 // 拳（D）（拳系列）
 export class Punch extends Skill {

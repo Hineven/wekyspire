@@ -1,6 +1,6 @@
-import Skill from "../../skill";
-import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from "../../battleInstructionHelpers.js";
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from '@data/skill';
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from '@data/battleInstructionHelpers.js';
+import {SkillTier} from '@/utils/tierUtils';
 
 // 敏捷打击（C+）（敏捷打击）
 // 连续攻击，造成伤害则抽牌

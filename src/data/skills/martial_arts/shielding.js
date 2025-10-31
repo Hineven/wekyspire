@@ -1,10 +1,10 @@
 // 护盾系列技能
 // 还有一些小单卡
-import Skill from '../../skill.js';
-import { createAndSubmitGainShield, createAndSubmitAddEffect, createAndSubmitLaunchAttack } from '../../battleInstructionHelpers.js';
-import {SkillTier} from "../../../utils/tierUtils";
-import {backendGameState} from "../../gameState";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
+import Skill from '@data/skill.js';
+import { createAndSubmitGainShield, createAndSubmitAddEffect, createAndSubmitLaunchAttack } from '@data/battleInstructionHelpers.js';
+import {SkillTier} from "@/utils/tierUtils";
+import {backendGameState} from '@data/gameState';
+import backendEventBus, {EventNames} from "@/backendEventBus";
 
 // 盾（D）（护盾系列）
 export class BasicShielding extends Skill {

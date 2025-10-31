@@ -1,11 +1,11 @@
 // 精准系列
 // 高要求、高伤害
 
-import Skill from "../../skill";
-import { createAndSubmitDealDamage, createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard, createAndSubmitAddEffect } from "../../battleInstructionHelpers.js";
-import {enqueueDelay} from "../../animationInstructionHelpers";
-import {SkillTier} from "../../../utils/tierUtils";
-import enemy from "../../enemy";
+import Skill from "@data/skill";
+import { createAndSubmitDealDamage, createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard, createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js';
+import {enqueueDelay} from '@data/animationInstructionHelpers';
+import {SkillTier} from '@/utils/tierUtils';
+import enemy from '@data/enemy';
 
 // 精准一击（D）（精准）
 // 此技能只有当此技能前方所有技能都可用时才可用，造成13伤害

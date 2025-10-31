@@ -1,6 +1,6 @@
-import Skill from '../../skill'
-import {SkillTier} from '../../../utils/tierUtils'
-import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js'
+import Skill from "@data/skill"
+import {SkillTier} from '@/utils/tierUtils'
+import { createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js'
 // 抱头（D）（格挡系列）
 // 获得1格挡
 export class BasicBlocking extends Skill {

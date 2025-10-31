@@ -1,9 +1,9 @@
 // 虚形拳
-import Skill from "../../skill";
-import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from "../../battleInstructionHelpers.js";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from '@data/skill';
+import { createAndSubmitLaunchAttack, createAndSubmitDrawSkillCard } from '@data/battleInstructionHelpers.js';
+import backendEventBus, {EventNames} from '@/backendEventBus';
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from '@/utils/tierUtils';
 
 // 仿形拳（C-）（虚形拳）
 // 造成伤害，若为最后一张手牌，抽2张牌

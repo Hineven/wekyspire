@@ -1,10 +1,10 @@
 // 斩类攻击技能
-import Skill from "../../skill";
+import Skill from "@data/skill";
 // 替换：使用指令式 helpers
-import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from "../../battleInstructionHelpers.js";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
-import {SkillTier} from "../../../utils/tierUtils";
+import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from '@data/battleInstructionHelpers.js';
+import backendEventBus, {EventNames} from "@/backendEventBus";
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from "@/utils/tierUtils";
 
 // 斩（C-）
 export class BasicSlash extends Skill {

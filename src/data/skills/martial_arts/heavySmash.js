@@ -1,7 +1,7 @@
-import Skill from "../../skill";
-import {SkillTier} from "../../../utils/tierUtils";
-import { createAndSubmitLaunchAttack, createAndSubmitAddEffect } from "../../battleInstructionHelpers.js";
-import {countString} from "../../../utils/nameUtils";
+import Skill from "@data/skill";
+import {SkillTier} from '@/utils/tierUtils';
+import { createAndSubmitLaunchAttack, createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js';
+import {countString} from "@/utils/nameUtils";
 
 // 重击（D）（重击）
 // 消耗2行动点，赋予易伤2，但仅产生4伤害

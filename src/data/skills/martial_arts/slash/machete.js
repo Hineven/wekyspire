@@ -1,11 +1,11 @@
 // 刀系列技能
 // 丢卡
-import Skill from "../../skill";
-import { createAndSubmitDropSkillCard, createAndSubmitLaunchAttack, createAndSubmitAwaitPlayerInput, createAndSubmitSelectCardsFromFrontier } from "../../battleInstructionHelpers.js";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
-import {SkillTier} from "../../../utils/tierUtils";
-import {countString, quantifierString} from "../../../utils/nameUtils";
+import Skill from '@data/skill';
+import { createAndSubmitDropSkillCard, createAndSubmitLaunchAttack, createAndSubmitAwaitPlayerInput, createAndSubmitSelectCardsFromFrontier } from '@data/battleInstructionHelpers.js';
+import backendEventBus, {EventNames} from "@/backendEventBus";
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from "@/utils/tierUtils";
+import {countString, quantifierString} from "@/utils/nameUtils";
 
 // 花刀（C-）（刀系列）
 export class Machete extends Skill {

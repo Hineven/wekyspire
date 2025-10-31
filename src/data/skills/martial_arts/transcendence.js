@@ -1,10 +1,10 @@
 // 超越
 // 获得行动点，但无法再抽牌
-import Skill from "../../skill";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
-import {SkillTier} from "../../../utils/tierUtils";
-import { createAndSubmitAddEffect } from "../../battleInstructionHelpers.js";
+import Skill from "@data/skill";
+import backendEventBus, {EventNames} from "@/backendEventBus";
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from "@/utils/tierUtils";
+import { createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js';
 
 // 肾上腺素激增（C-）（超越）
 // 获得行动点，但无法再抽牌1回合

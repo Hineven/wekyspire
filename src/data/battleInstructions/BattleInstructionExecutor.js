@@ -16,8 +16,9 @@
  * 5. execute返回true时弹出栈，返回false时保留在栈顶
  */
 
-import backendEventBus from '../../backendEventBus.js';
+import backendEventBus, {EventNames} from '../../backendEventBus.js';
 import {backendGameState} from "../gameState";
+import BackendEventBus from "../../backendEventBus.js";
 
 export class BattleInstructionExecutor {
   constructor() {
@@ -145,9 +146,10 @@ export class BattleInstructionExecutor {
           console.log(`[Executor] Current stack depth: ${this.instructionStack.length}. Executing: ${node.getDebugInfo()}`);
           let completed = false;
           try {
+            backendEventBus.emit(EventNames.Executor.PRE_INSTRUCTION_EXECUTION, {instruction: node});
             completed = await node.execute();
             this.statistics.totalExecuted++;
-            backendEventBus.emit('INSTRUCTION_EXECUTED', {instruction: node, completed});
+            backendEventBus.emit(EventNames.Executor.POST_INSTRUCTION_EXECUTION, {instruction: node, completed});
           } catch (error) {
             console.error(`[Executor] Error executing instruction: ${node.getDebugInfo()}`, error);
             // 出错直接标记完成并弹出，继续回退

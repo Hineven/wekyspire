@@ -1,11 +1,12 @@
 // 狠狠一击（D）（一击）
-import Skill from "../../skill";
-import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from "../../battleInstructionHelpers.js";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
+import Skill from '@data/skill';
+import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from '@data/battleInstructionHelpers.js';
+import backendEventBus, {EventNames} from '@/backendEventBus';
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from '@/utils/tierUtils';
 
 export class FinalStrike extends Skill {
-  constructor(name = '狠狠一击', tier = 0, damage = 18, powerMultiplier = 7, cardActivationColdDown = 0, canColdDownInBackground = true) {
+  constructor(name = '狠狠一击', tier = SkillTier.C_MINUS, damage = 18, powerMultiplier = 7, cardActivationColdDown = 0, canColdDownInBackground = true) {
     super(name, 'normal', tier, 0, 2, 1, '一击');
     this.baseColdDownTurns = 10; // 基础冷却时间
     this.baseSlowStart = true; // 慢启动
@@ -61,11 +62,11 @@ export class FinalStrike extends Skill {
   }
 }
 
-// 强击（C-）
+// 强击（C+）
 // 造成27伤害
 export class RendingFist extends FinalStrike {
   constructor() {
-    super('强击', 1, 25, 11, 1);
+    super('强击', SkillTier.C_PLUS, 25, 11, 1);
     this.precessor = '狠狠一击';
   }
 }

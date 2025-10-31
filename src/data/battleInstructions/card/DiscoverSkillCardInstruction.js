@@ -10,8 +10,8 @@ import { DropSkillCardInstruction } from './DropSkillCardInstruction.js';
 import { BurnSkillCardInstruction } from './BurnSkillCardInstruction.js';
 import { SkillLeaveBattleInstruction } from './SkillLeaveBattleInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
-import { enqueueDelay } from '../../animationInstructionHelpers.js';
-import {enqueueCardAppear} from '../../../utils/animationHelpers.js';
+import { enqueueDelay, enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import { enqueueCardAppear } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DiscoverSkillCardInstruction extends BattleInstruction {
@@ -32,10 +32,11 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
       // 先放入skills & overlaySkills以注册card牌DOM元素
       this.player.skills.push(this.skill);
       this.player.overlaySkills.push(this.skill);
-      enqueueDelay(0);
-      // 动画
-      enqueueCardAppear(this.skill.uniqueID);
-      
+      // 立即同步一次显示层状态，确保AnimatableElementContainer注册DOM
+      const stateTag = enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+      // 卡牌出现动画（等待状态同步完成）
+      enqueueCardAppear(this.skill.uniqueID, 'center');
+
       // 触发发现事件
       backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, {
         skill: this.skill,
