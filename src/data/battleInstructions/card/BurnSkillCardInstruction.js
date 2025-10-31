@@ -6,11 +6,12 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import {enqueueState, captureSnapshot, enqueueDelay} from '../../animationInstructionHelpers.js';
 import { enqueueCardBurn } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 import {SkillLeaveBattleInstruction} from "./SkillLeaveBattleInstruction";
 import {submitInstruction} from "../globalExecutor";
+import {createAndSubmitLambda} from "../../battleInstructionHelpers";
 
 export class BurnSkillCardInstruction extends BattleInstruction {
   constructor({ player, skillID, parentInstruction = null }) {
@@ -23,8 +24,8 @@ export class BurnSkillCardInstruction extends BattleInstruction {
   }
 
   async execute() {
-    if(this.executeStage === 0) {
-      const player = this.player;
+    const player = this.player;
+    if(this.executeStage === 0) { // 卡牌离场
       const find = () => {
         const sources = [
           { name: 'activated', arr: player.activatedSkills },
@@ -43,13 +44,7 @@ export class BurnSkillCardInstruction extends BattleInstruction {
         console.warn(`[Burn] Skill ${this.skillID} not found in containers`);
         return true;
       }
-      // 卡牌离场
-      const leave = new SkillLeaveBattleInstruction({ player, skillID, parentInstruction: this });
-      submitInstruction(leave);
-      this.executeStage = 1;
-      return false;
-    } else {
-      // 取出卡对象
+      // 焚烧卡牌
       let skill = null;
       if (src === 'activated') skill = player.activatedSkills.splice(idx, 1)[0];
       if (src === 'frontier') skill = player.frontierSkills.splice(idx, 1)[0];
@@ -59,16 +54,42 @@ export class BurnSkillCardInstruction extends BattleInstruction {
       this.skill = skill;
 
       // 动画
-      enqueueCardBurn(this.skillID);
+      createAndSubmitLambda(()=>{enqueueCardBurn(this.skillID)});
+      createAndSubmitLambda(()=>{enqueueDelay()}); // 屏障，保证动画完毕后卡牌才从skills内解注册
+      // 卡牌离场
+      const leave = new SkillLeaveBattleInstruction({ player, skillID: this.skillID, parentInstruction: this });
+      submitInstruction(leave);
+      // 离场后加入burntSkills
+      createAndSubmitLambda(()=> {
+        // 放入焚毁区
+        player.burntSkills.push(skill);
+      });
+      backendEventBus.emit(EventNames.Player.SKILL_BURNT, {skill});
+      return true;
+    } else {
+      // 取出卡对象
+      let skill = null;
+      if (this.src === 'activated') skill = player.activatedSkills.splice(this.idx, 1)[0];
+      if (this.src === 'frontier') skill = player.frontierSkills.splice(this.idx, 1)[0];
+      if (this.src === 'backup') skill = player.backupSkills.splice(this.idx, 1)[0];
 
-      // 放入焚毁区并从总技能数组中删除引用
-      player.burntSkills.push(skill);
-      const allIdx = player.skills.findIndex(sk => sk === skill);
-      if (allIdx !== -1) player.skills.splice(allIdx, 1);
+      if (!skill) return true;
+      this.skill = skill;
+
+      // 动画
+      createAndSubmitLambda(()=>{enqueueCardBurn(this.skillID)});
+
+      createAndSubmitLambda(()=> {
+        enqueueDelay();
+        // 放入焚毁区并从总技能数组中删除引用
+        player.burntSkills.push(skill);
+        const allIdx = player.skills.findIndex(sk => sk === skill);
+        if (allIdx !== -1) player.skills.splice(allIdx, 1);
+      });
 
       // 事件 + 快照
       backendEventBus.emit(EventNames.Player.SKILL_BURNT, {skill});
-      enqueueState({snapshot: captureSnapshot(), durationMs: 0});
+      createAndSubmitLambda(()=>{enqueueState({snapshot: captureSnapshot(), durationMs: 0});});
       return true;
     }
   }

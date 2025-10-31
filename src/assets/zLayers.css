@@ -7,7 +7,7 @@
   /* Regular content baseline */
   --z-base: 0;
 
-  /* Animatable elements: cards, panels */
+  /* Animatable elements: cards, panels, etc */
   --z-animatable-elements: 1100;
 
   /* Regular overlays (selection panels, dim overlays) */

@@ -71,6 +71,7 @@ export default {
         let cards = [];
         if (scope === 'frontier') cards = gameState.player.frontierSkills.slice();
         if (scope === 'deck') cards = gameState.player.backupSkills.slice();
+        if (scope === 'activated') cards = gameState.player.activatedSkills.slice();
         if (scope === 'overlay') cards = gameState.player.overlaySkills.slice();
         const exclude = new Set(opts.exclude || []);
         cards = cards.filter(sk => !exclude.has(sk.uniqueID));

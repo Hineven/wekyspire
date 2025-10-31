@@ -11,7 +11,7 @@ import { BurnSkillCardInstruction } from './BurnSkillCardInstruction.js';
 import { SkillLeaveBattleInstruction } from './SkillLeaveBattleInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
 import { enqueueDelay } from '../../animationInstructionHelpers.js';
-import { enqueueCardAppearInPlace } from '../../../utils/animationHelpers.js';
+import {enqueueCardAppear} from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DiscoverSkillCardInstruction extends BattleInstruction {
@@ -29,10 +29,12 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
 
   async execute() {
     if (this.executionStage === 0) {
-      // 先放入overlaySkills以注册card牌DOM元素
+      // 先放入skills & overlaySkills以注册card牌DOM元素
+      this.player.skills.push(this.skill);
       this.player.overlaySkills.push(this.skill);
       enqueueDelay(0);
-      enqueueCardAppearInPlace(this.skill.uniqueID, { duration: 300 });
+      // 动画
+      enqueueCardAppear(this.skill.uniqueID);
       
       // 触发发现事件
       backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, {

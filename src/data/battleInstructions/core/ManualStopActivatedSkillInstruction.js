@@ -24,31 +24,18 @@ export class ManualStopActivatedSkillInstruction extends BattleInstruction {
   }
 
   async execute() {
-    if (this.stage === 0) {
-      // 阶段0：使用该技能一次（标记 manualStop=true）
-      const useInst = new UseSkillInstruction({ player: this.player, skill: this.skill, enemy: this.enemy, parentInstruction: this, manualStop: true });
-      submitInstruction(useInst);
-      this.stage = 1;
-      return false;
+    // 停用咏唱 + 丢/焚
+    const player = this.player;
+    const skill = this.skill;
+    const shouldBurn = willSkillBurn(skill);
+    try { skill.onDisable(player, 'manual'); } catch (_) {}
+    backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
+    if (shouldBurn) {
+      createAndSubmitBurnSkillCard(player, skill.uniqueID, this);
+    } else {
+      createAndSubmitDropSkillCard(player, skill.uniqueID, -1, this);
     }
-
-    if (this.stage === 1) {
-      // 阶段1：停用咏唱 + 丢/焚
-      const player = this.player;
-      const skill = this.skill;
-      const shouldBurn = willSkillBurn(skill);
-      try { skill.onDisable(player, 'manual'); } catch (_) {}
-      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
-      if (shouldBurn) {
-        createAndSubmitBurnSkillCard(player, skill.uniqueID, this);
-      } else {
-        createAndSubmitDropSkillCard(player, skill.uniqueID, -1, this);
-      }
-      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
-      this.stage = 2;
-      return true;
-    }
-
+    backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
     return true;
   }
 
