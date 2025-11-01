@@ -20,9 +20,10 @@ export class DrawSkillCardInstruction extends BattleInstruction {
    * @param {Object} config - 配置对象
    * @param {Player} config.player - 玩家对象
    * @param {number} config.count - 抽卡数量
+   * @param {number|Array<number>|null} config.insertAt - 插入到手牌位置（单一索引或索引数组；为数组时与每次抽取一一对应）
    * @param {BattleInstruction|null} config.parentInstruction - 父元语引用
    */
-  constructor({ player, count = 1, parentInstruction = null }) {
+  constructor({ player, count = 1, insertAt = null, parentInstruction = null, insertRelative = null }) {
     super({ parentInstruction });
     
     if (!player) {
@@ -34,7 +35,9 @@ export class DrawSkillCardInstruction extends BattleInstruction {
     
     this.player = player;
     this.count = count;
-    
+    this.insertAt = insertAt; // 允许 null / number / number[]
+    this.insertRelative = insertRelative; // 允许 null / object {anchorId,mode} / 数组
+
     /**
      * 已抽取的卡牌列表
      * @type {Array<Skill>}
@@ -49,7 +52,7 @@ export class DrawSkillCardInstruction extends BattleInstruction {
    */
   async execute() {
     const modPlayer = this.player.getModifiedPlayer ? this.player.getModifiedPlayer() : this.player;
-    // 计算一次最多可尝试的抽卡次数（软上限），具体每张在单卡指令内再做边界判断
+    // 计算一次最多可尝试的抽卡次数（软上限）
     const maxTry = Math.min(
       this.count,
       modPlayer.maxDrawSkillCardCount,
@@ -61,7 +64,20 @@ export class DrawSkillCardInstruction extends BattleInstruction {
     }
 
     for (let i = 0; i < maxTry; i++) {
-      const inst = new DrawOneSkillCardInstruction({ player: this.player, parentInstruction: this });
+      // 计算本次插入参数
+      let insertIndex = null;
+      if (Array.isArray(this.insertAt)) {
+        insertIndex = (typeof this.insertAt[i] === 'number') ? this.insertAt[i] : null;
+      } else if (typeof this.insertAt === 'number') {
+        insertIndex = this.insertAt;
+      }
+      let insertRelative = null;
+      if (Array.isArray(this.insertRelative)) {
+        insertRelative = this.insertRelative[i] || null;
+      } else if (this.insertRelative && typeof this.insertRelative === 'object') {
+        insertRelative = this.insertRelative;
+      }
+      const inst = new DrawOneSkillCardInstruction({ player: this.player, parentInstruction: this, insertIndex, insertRelative });
       submitInstruction(inst);
     }
     return true;

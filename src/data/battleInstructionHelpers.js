@@ -155,15 +155,32 @@ export function createAndSubmitRemoveEffect(target, effectName, stacks = 1, pare
  * @param {BattleInstruction|null} parentInstruction - 父元语引用（默认null）
  * @returns {DrawSkillCardInstruction} 抽卡元语实例
  */
-export function createAndSubmitDrawSkillCard(player, count = 1, parentInstruction = null) {
+export function createAndSubmitDrawSkillCard(player, count = 1, parentInstruction = null, insertAt = null, insertRelative = null) {
   const parent = parentInstruction ?? getCurrentInstruction();
   const instruction = new DrawSkillCardInstruction({
     player,
     count,
-    parentInstruction: parent
+    insertAt,
+    parentInstruction: parent,
+    insertRelative
   });
   submitInstruction(instruction);
   return instruction;
+}
+
+/**
+ * 按目标手牌索引插入抽到的牌
+ */
+export function createAndSubmitDrawAt(player, insertAt, count = 1, parentInstruction = null) {
+  return createAndSubmitDrawSkillCard(player, count, parentInstruction, insertAt, null);
+}
+
+/**
+ * 按锚点卡牌（uniqueID）相对位置插入抽到的牌
+ * insertRelative: {anchorId, mode: 'before'|'after'} 或数组
+ */
+export function createAndSubmitDrawRelative(player, insertRelative, count = 1, parentInstruction = null) {
+  return createAndSubmitDrawSkillCard(player, count, parentInstruction, null, insertRelative);
 }
 
 /**

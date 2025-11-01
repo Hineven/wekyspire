@@ -10,11 +10,14 @@ import {enqueueAnimatableElementEnterTracking, enqueueCardAnimation} from '../..
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DrawOneSkillCardInstruction extends BattleInstruction {
-  constructor({ player, parentInstruction = null }) {
+  constructor({ player, parentInstruction = null, insertIndex = null, insertRelative = null }) {
     super({ parentInstruction });
     if (!player) throw new Error('DrawOneSkillCardInstruction: player is required');
     this.player = player;
     this.drawnSkill = null;
+    this.insertIndex = (typeof insertIndex === 'number') ? insertIndex : null;
+    // insertRelative: { anchorId: string, mode: 'before'|'after' }
+    this.insertRelative = (insertRelative && typeof insertRelative === 'object') ? insertRelative : null;
   }
 
   async execute() {
@@ -28,7 +31,23 @@ export class DrawOneSkillCardInstruction extends BattleInstruction {
     const skill = this.player.backupSkills.shift();
     if (!skill) return true;
 
-    this.player.frontierSkills.push(skill);
+    // 解析最终插入位置
+    let insertAt = null;
+    const lenNow = this.player.frontierSkills.length;
+    if (this.insertRelative && this.insertRelative.anchorId) {
+      const anchorIdx = this.player.frontierSkills.findIndex(sk => sk.uniqueID === this.insertRelative.anchorId);
+      if (anchorIdx >= 0) {
+        insertAt = this.insertRelative.mode === 'before' ? anchorIdx : (anchorIdx + 1);
+      } else {
+        insertAt = lenNow; // fallback: 插入末尾
+      }
+    } else if (typeof this.insertIndex === 'number') {
+      insertAt = Math.max(0, Math.min(this.insertIndex, lenNow));
+    } else {
+      insertAt = lenNow;
+    }
+
+    this.player.frontierSkills.splice(insertAt, 0, skill);
     this.drawnSkill = skill;
 
     // 事件 + 状态快照 + 动画
@@ -53,7 +72,7 @@ export class DrawOneSkillCardInstruction extends BattleInstruction {
   }
 
   getDebugInfo() {
-    return `${super.getDebugInfo()} Player:${this.player?.name} Drawn:${this.drawnSkill?.name || 'none'}`;
+    const rel = this.insertRelative ? `${this.insertRelative.mode}@${this.insertRelative.anchorId}` : 'none';
+    return `${super.getDebugInfo()} Player:${this.player?.name} Drawn:${this.drawnSkill?.name || 'none'} InsertIdx:${this.insertIndex ?? 'null'} Rel:${rel}`;
   }
 }
-
