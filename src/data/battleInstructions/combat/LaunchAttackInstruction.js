@@ -133,8 +133,9 @@ export class LaunchAttackInstruction extends BattleInstruction {
       this.attackResult = this.damageInstruction.result;
       
       // 如果目标未死亡，处理攻击完成效果
-      if (!this.attackResult.dead) {
+      if (this.attackResult && !this.attackResult.dead) {
         // 攻击完成效果（如高燃弹药等在 DealDamageInstruction 或其他路径处理）
+        // TODO 增加专有指令来处理后攻击效果结算
         if ((this.attacker.effects['高燃弹药'] || 0) > 0 && this.attackResult.passThoughDamage > 0) {
           const burnLevel = (this.attacker.effects['高燃弹药'] * 2 || 0);
           createAndSubmitAddEffect(this.target, '燃烧', Math.floor(burnLevel), this);

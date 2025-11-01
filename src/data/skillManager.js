@@ -255,6 +255,132 @@ class SkillManager {
     
     return selectedSkills;
   }
+
+  // 新增：仅获取“新技能”奖励（不含升级候选）
+  getRandomNewSkills(count, playerLeino = {}, playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+    const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
+      const tempSkill = new SkillClass();
+      return {
+        name,
+        type: tempSkill.type,
+        series: tempSkill.skillSeriesName,
+        tier: tempSkill.tier,
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
+        spawnWeight: tempSkill.spawnWeight,
+        precessor: tempSkill.precessor,
+        leinoModifiers: tempSkill.leinoModifiers
+      };
+    });
+    const playerNonEmptySkillSlots = playerSkillSlots.filter(skill => skill !== null);
+    const playerSkills = playerNonEmptySkillSlots.map(slot => slot);
+
+    // 只保留“新技能”
+    const baseAvailable = allSkills.filter(meta =>
+      meta.tier <= playerTier && meta.canSpawnAsReward_ && meta.precessor === null && meta.tier >= 0
+    );
+
+    // 权重
+    const weighted = baseAvailable.map(skill => {
+      const tierDifference = playerTier - skill.tier;
+      let modifyFactor = 1;
+      if (skill.tier >= 8) modifyFactor *= 0.7;
+      if (skill.tier >= 5) modifyFactor *= 0.8;
+      if (tierDifference > 7) modifyFactor = 0.15;
+      else if (tierDifference > 6) modifyFactor = 0.40;
+      else if (tierDifference > 5) modifyFactor = 0.70;
+      if (bestQuality && tierDifference < 1) modifyFactor *= 5;
+      if (bestQuality && tierDifference < 2) modifyFactor *= 3;
+      // leino 主属性
+      let leinoFactor = Math.max(playerLeino[skill.type] || 0.2, 0);
+      if (skill.type === 'normal') leinoFactor = Math.max(leinoFactor, 1);
+      modifyFactor *= leinoFactor;
+      // leino 修饰符
+      if (skill.leinoModifiers) {
+        const list = Array.isArray(skill.leinoModifiers) ? skill.leinoModifiers : [skill.leinoModifiers];
+        const factors = list.map(key => {
+          const v = playerLeino[key];
+          return (typeof v === 'number' && v > 0) ? v : 1;
+        });
+        if (factors.length > 0) {
+          const avg = factors.reduce((a,b)=>a+b,0) / factors.length;
+          modifyFactor *= avg;
+        }
+      }
+      return { ...skill, weight: skill.spawnWeight * modifyFactor };
+    });
+
+    const selected = [];
+    const actualCount = Math.min(count, weighted.length);
+    const pool = [...weighted];
+    for (let i = 0; i < actualCount; i++) {
+      const totalWeight = pool.reduce((sum, s) => sum + s.weight, 0);
+      if (totalWeight <= 0) break;
+      const r = Math.random() * totalWeight;
+      let acc = 0, idx = 0;
+      for (let j = 0; j < pool.length; j++) { acc += pool[j].weight; if (r <= acc) { idx = j; break; } }
+      const skillInfo = pool[idx];
+      const inst = this.createSkill(skillInfo.name);
+      selected.push(inst);
+      pool.splice(idx, 1);
+    }
+    return selected;
+  }
+
+  // 新增：仅获取“升级候选”奖励（基于玩家已有技能，返回升级后的新卡）
+  getRandomUpgradeSkills(count, playerSkills = [], playerTier = 0) {
+    const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
+      const tempSkill = new SkillClass();
+      return {
+        name,
+        type: tempSkill.type,
+        series: tempSkill.skillSeriesName,
+        tier: tempSkill.tier,
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
+        spawnWeight: tempSkill.spawnWeight,
+        precessor: tempSkill.precessor,
+        leinoModifiers: tempSkill.leinoModifiers
+      };
+    });
+    const playerNames = (playerSkills || []).map(s => s && s.name).filter(Boolean);
+
+    // 收集升级候选
+    const upgrades = [];
+    for (const meta of allSkills) {
+      if (playerNames.includes(meta.name)) continue;
+      if (meta.tier > playerTier) continue;
+      if (!meta.precessor) continue;
+      let matched = null;
+      if (Array.isArray(meta.precessor)) {
+        matched = meta.precessor.find(p => playerNames.includes(p)) || null;
+      } else if (typeof meta.precessor === 'string') {
+        matched = playerNames.includes(meta.precessor) ? meta.precessor : null;
+      }
+      if (!matched) continue;
+      upgrades.push({ ...meta, isUpgradeCandidate: true, upgradedFrom: matched });
+    }
+    if (upgrades.length === 0) return [];
+
+    // 简单按 spawnWeight 抽取（可追加更多加权规则）
+    const weighted = upgrades.map(s => ({ ...s, weight: (s.spawnWeight || 1) * 2 }));
+    const selected = [];
+    const pool = [...weighted];
+    const actual = Math.min(count, pool.length);
+    for (let i = 0; i < actual; i++) {
+      const total = pool.reduce((sum, s) => sum + s.weight, 0);
+      if (total <= 0) break;
+      const r = Math.random() * total;
+      let idx = 0, acc = 0;
+      for (let j = 0; j < pool.length; j++) { acc += pool[j].weight; if (r <= acc) { idx = j; break; } }
+      const info = pool[idx];
+      const inst = this.createSkill(info.name);
+      // 标记升级元信息（供后续自动替换槽位）
+      inst.isUpgradeCandidate = true;
+      inst.upgradedFrom = info.upgradedFrom;
+      selected.push(inst);
+      pool.splice(idx, 1);
+    }
+    return selected;
+  }
 }
 
 export default SkillManager;

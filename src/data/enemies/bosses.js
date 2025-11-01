@@ -43,7 +43,7 @@ export class MEFM3 extends Enemy {
       () => {
         addEnemyActionLog(`${this.name} 使用射流机枪扫射！`);
         const times = 2 + (this.effects['机枪升温'] || 0);
-        const damage = 1 + this.attack;
+        const damage = 1;
         for (let i = 0; i < times; i++) {
           createAndSubmitLaunchAttack(this, player, damage);
         }
@@ -52,7 +52,7 @@ export class MEFM3 extends Enemy {
         if (Math.random() < 0.5) {
           addEnemyActionLog(`${this.name} 使用射流机枪连续射击！`);
           const times = 2 + (this.effects['机枪升温'] || 0);
-          const damage = 1 + this.attack;
+          const damage = 1;
           for (let i = 0; i < times; i++) {
             createAndSubmitLaunchAttack(this, player, damage);
           }
@@ -114,16 +114,14 @@ export class Karmura extends Enemy {
       },
       () => {
         addEnemyActionLog(`${this.name} 扑击！`);
-        const resultDamage = this.attack;
-        createAndSubmitLaunchAttack(this, player, resultDamage);
+        createAndSubmitLaunchAttack(this, player, 0);
         // 额外奖励
         this.applyHeal(1 + (this.effects['暴怒'] || 0));
         this.addEffect('力量', 1);
       },
       () => {
         addEnemyActionLog(`${this.name} 狂热撕咬！`);
-        const resultDamage = this.attack;
-        createAndSubmitLaunchAttack(this, player, resultDamage);
+        createAndSubmitLaunchAttack(this, player, 0);
         this.applyHeal(1 + (this.effects['暴怒'] || 0));
         this.addEffect('力量', 1);
       }

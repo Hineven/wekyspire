@@ -116,6 +116,7 @@ export class DealDamageInstruction extends BattleInstruction {
     }
     
     // 处理受到伤害时的效果（指令化）
+    // TODO 增加专有指令来处理受伤后结算的效果
     if ((this.target.effects?.['飞行'] || 0) > 0 && hpDamage > 0) {
       createAndSubmitAddEffect(this.target, '飞行', -1, this);
     }

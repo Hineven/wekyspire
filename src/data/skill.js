@@ -131,7 +131,7 @@ class Skill {
   }
 
   getInBattleIndex (player) {
-    return player.frontierSkills.indexOf(this);
+    return player.frontierSkills.findIndex(s=> s.uniqueID === this.uniqueID);
   }
 
   // 战斗开始时调用，用于初始化技能

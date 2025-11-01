@@ -40,6 +40,7 @@ export const EventNames = {
     // 休整阶段操作
     CLAIM_MONEY: 'rest-claim-money',
     CLAIM_SKILL: 'rest-claim-skill',
+    CLAIM_UPGRADE: 'rest-claim-upgrade',
     CLAIM_ABILITY: 'rest-claim-ability',
     CLAIM_BREAKTHROUGH: 'rest-claim-breakthrough',
     REORDER_SKILLS: 'rest-reorder-skills',

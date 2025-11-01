@@ -20,10 +20,10 @@ export class Slime extends Enemy {
     const next = this.actionIndex % 3;
     if (next === 0) {
       // 轻撞：1x 攻击
-      const damage = this.calculateDamage(this.attack, null);
+      const damage = this.calculateDamage(0, null);
       return [{ type: 'attack', times: 1, damage }];
     } else if (next === 1) {
-      const damage = this.calculateDamage(2 * this.attack, null);
+      const damage = this.calculateDamage(this.attack, null);
       return [{ type: 'attack', times: 1, damage }];
     } else {
       const amount = 2 + this.magic;
@@ -32,8 +32,8 @@ export class Slime extends Enemy {
   }
 
   // 计算伤害
-  calculateDamage(attack, target) {
-    return Math.max(1, attack);
+  calculateDamage(base, target) {
+    return base + this.attack;
   }
 
   // 执行行动（在 EnemyActInstruction 执行器环境中运行）
@@ -45,13 +45,11 @@ export class Slime extends Enemy {
     const actions = [
       () => {
         addEnemyActionLog(`${this.name} 冲撞！`);
-        const damage = this.calculateDamage(this.attack, player);
-        createAndSubmitLaunchAttack(this, player, damage);
+        createAndSubmitLaunchAttack(this, player, 0);
       },
       () => {
         addEnemyActionLog(`${this.name} 强力冲撞！`);
-        const damage = this.calculateDamage(2 * this.attack, player);
-        createAndSubmitLaunchAttack(this, player, damage);
+        createAndSubmitLaunchAttack(this, player, this.attack);
       },
       () => {
         const shieldAmount = 2 + this.magic;
