@@ -21,7 +21,6 @@ export class PlayerTurnStartInstruction extends BattleInstruction {
   }
 
   async execute() {
-    console.log("qwqweqwewqea121111111111111111111111111111111qweqwewqewqewqeqw");
     const player = this.player;
     // 阶段0：基础重置与预事件
     if (this.stage === 0) {
@@ -32,6 +31,8 @@ export class PlayerTurnStartInstruction extends BattleInstruction {
       // 重置AP
       const mod = player.getModifiedPlayer ? player.getModifiedPlayer() : player;
       player.remainingActionPoints = mod.maxActionPoints;
+      // 重置护盾
+      player.shield = 0;
       // 技能冷却推进（纳入执行器）
       createAndSubmitSkillListCoolDown(player.frontierSkills || [], 1, this);
       createAndSubmitSkillListCoolDown(player.backupSkills || [], 1, this);

@@ -15,6 +15,7 @@ export class FlyingDagger extends Skill {
     super(name, 'normal', tier, 0, 1, 1);
     this.baseColdDownTurns = consumable ? 0 : 1;
     this.powerMultiplier = powerMultiplier;
+    this.baseDamage = baseDamage;
   }
 
   get damage () {

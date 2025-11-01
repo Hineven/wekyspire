@@ -15,6 +15,22 @@ export class Slime extends Enemy {
     this.description = '一只史莱姆，很可爱捏。';
   }
 
+  // 预告下回合意图
+  getIntention() {
+    const next = this.actionIndex % 3;
+    if (next === 0) {
+      // 轻撞：1x 攻击
+      const damage = this.calculateDamage(this.attack, null);
+      return [{ type: 'attack', times: 1, damage }];
+    } else if (next === 1) {
+      const damage = this.calculateDamage(2 * this.attack, null);
+      return [{ type: 'attack', times: 1, damage }];
+    } else {
+      const amount = 2 + this.magic;
+      return [{ type: 'defend', amount }];
+    }
+  }
+
   // 计算伤害
   calculateDamage(attack, target) {
     return Math.max(1, attack);

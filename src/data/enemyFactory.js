@@ -1,4 +1,6 @@
 import { Slime } from './enemies/basic.js';
+import { Remi, BuzzlingBugs, SlimySlime, StinkyBugs } from './enemies/extended.js';
+import { MEFM3, Karmura } from './enemies/bosses.js';
 
 // 敌人工厂类
 class EnemyFactory {
@@ -10,7 +12,12 @@ class EnemyFactory {
     
     // 初始化时注册预定义敌人
     this.registerEnemy(Slime);
-    // this.registerEnemy(Remi);
+    this.registerEnemy(Remi);
+    this.registerEnemy(BuzzlingBugs);
+    this.registerEnemy(SlimySlime);
+    this.registerEnemy(StinkyBugs);
+    this.registerEnemy(MEFM3);
+    this.registerEnemy(Karmura);
     // this.registerEnemy(FireSlime);
     // this.registerEnemy(StinkyBugs);
     // this.registerEnemy(BuzzlingBugs);

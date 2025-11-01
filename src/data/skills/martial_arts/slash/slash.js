@@ -52,10 +52,10 @@ export class BasicSlash extends Skill {
   }
 
   regenerateDescription(player) {
-    const decayDesc = this.reverseMode
-      ? `回合结束在牌库中则失去${this.cardForegroundColdDownDecay}冷却`
-      : `回合结束在手中则失去${this.cardForegroundColdDownDecay}冷却`;
-    return `${this.damage + (player?.attack ?? 0)}伤害，${decayDesc}`;
+    const decayDesc = this.cardForegroundColdDownDecay > 0 ? (this.reverseMode
+      ? `，回合结束在牌库中则失去${this.cardForegroundColdDownDecay}冷却`
+      : `，回合结束在手中则失去${this.cardForegroundColdDownDecay}冷却`) : '';
+    return `${this.damage + (player?.attack ?? 0)}伤害${decayDesc}`;
   }
 }
 
@@ -113,6 +113,7 @@ export class GodSlayerSlash extends BasicSlash {
 export class ChargedSlash extends BasicSlash {
   constructor() {
     super('蓄力斩', SkillTier.C_PLUS, 35, 19, 5, 0);
+    this.precessor = '斩';
   }
 }
 // 奋力斩（B）
