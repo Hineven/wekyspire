@@ -24,11 +24,7 @@
 </template>
 
 <script>
-// AnimatableElementContainer
-// 负责持有所有可动画元素的Vue元件与DOM实例，管理其生命周期，并注册到animator中
-// 和animator配合实现复杂动画
-
-import { computed, watch, nextTick, ref, onBeforeUnmount } from 'vue';
+import { computed, watch, nextTick, ref, onBeforeUnmount, onMounted } from 'vue';
 import SkillCard from './SkillCard.vue';
 import { displayGameState } from '../../data/gameState.js';
 import frontendEventBus from '../../frontendEventBus.js';
@@ -43,41 +39,20 @@ export default {
     const mutationObservers = new Map();
     const resizeObservers = new Map();
 
-    // 计算所有卡牌
-    const allSkills = computed(() => {
-      return displayGameState.player?.skills || [];
-    });
+    const allSkills = computed(() => displayGameState.player?.skills || []);
+    const player = computed(() => displayGameState.player || null);
 
-    // 计算玩家对象
-    const player = computed(() => {
-      return displayGameState.player || null;
-    });
-
-    // 计算在场卡牌 ID（frontierSkills + activatedSkills）
     const visibleCardIds = computed(() => {
       const ids = new Set();
-      
-      // 手牌
       const frontier = displayGameState.player?.frontierSkills || [];
-      frontier.forEach(s => {
-        if (s?.uniqueID != null) ids.add(s.uniqueID);
-      });
-      
-      // 激活技能
+      frontier.forEach(s => { if (s?.uniqueID != null) ids.add(s.uniqueID); });
       const activated = displayGameState.player?.activatedSkills || [];
-      activated.forEach(s => {
-        if (s?.uniqueID != null) ids.add(s.uniqueID);
-      });
-      
+      activated.forEach(s => { if (s?.uniqueID != null) ids.add(s.uniqueID); });
       return ids;
     });
 
-    // 判断卡牌是否可见
-    const isCardVisible = (skill) => {
-      return skill?.uniqueID != null && visibleCardIds.value.has(skill.uniqueID);
-    };
+    const isCardVisible = (skill) => skill?.uniqueID != null && visibleCardIds.value.has(skill.uniqueID);
 
-    // 断开观察者
     const disconnectObservers = (id) => {
       try { mutationObservers.get(id)?.disconnect(); } catch(_) {}
       try { resizeObservers.get(id)?.disconnect(); } catch(_) {}
@@ -85,21 +60,14 @@ export default {
       resizeObservers.delete(id);
     };
 
-    // 注册卡牌到 animator
     const registerCard = (wrapperEl, uniqueID) => {
       if (!wrapperEl || uniqueID == null) return;
-
-      // 检查是否已经注册过
       if (registeredIds.value.has(uniqueID)) {
-        // 只更新 ref 引用，不重复注册
         cardRefs.value[uniqueID] = wrapperEl;
         return;
       }
-      
-      // 保存 ref 引用
       cardRefs.value[uniqueID] = wrapperEl;
 
-      // 等待 DOM 更新后注册到 animator
       nextTick(() => {
         const domEl = wrapperEl; // wrapper 作为可动画元素
         if (domEl) {
@@ -109,7 +77,6 @@ export default {
           const contentEl = domEl.firstElementChild || domEl;
           try {
             const mo = new MutationObserver(() => {
-              // 内容变化：通知 pixi overlay 进行重烘焙
               frontendEventBus.emit('card-content-updated', { id: uniqueID });
             });
             mo.observe(contentEl, { childList: true, characterData: true, subtree: true, attributes: true });
@@ -126,67 +93,57 @@ export default {
       });
     };
 
-    // 监听卡牌列表变化，处理注册/解除注册
+    // Pixi overlay integration: hide/show DOM visuals when sprite is committed/released
+    const onSpriteCommitted = ({ id }) => {
+      const el = cardRefs.value[id];
+      if (!el) return;
+      // 添加一个仅影响视觉的隐藏类，避免影响 computed opacity
+      el.classList.add('pixi-hidden');
+    };
+    const onSpriteReleased = ({ id }) => {
+      const el = cardRefs.value[id];
+      if (!el) return;
+      el.classList.remove('pixi-hidden');
+    };
+
+    onMounted(() => {
+      frontendEventBus.on('pixi-sprite-committed', onSpriteCommitted);
+      frontendEventBus.on('pixi-sprite-released', onSpriteReleased);
+    });
+
     let prevSkillIds = [];
     watch(allSkills, (newSkills, oldSkills) => {
       const newIds = newSkills.map(s => s?.uniqueID).filter(id => id != null);
-      
-      // 找出移除的卡牌
       const removed = prevSkillIds.filter(id => !newIds.includes(id));
       removed.forEach(id => {
         animator.unregister(id);
         disconnectObservers(id);
+        // 移除隐藏类，避免遗留
+        const el = cardRefs.value[id];
+        if (el) el.classList.remove('pixi-hidden');
         delete cardRefs.value[id];
-        registeredIds.value.delete(id); // 从已注册集合中移除
-        // console.log('[AnimatableElementContainer] Unregistered card:', id);
+        registeredIds.value.delete(id);
       });
-      
       prevSkillIds = newIds;
-      // console.log('[AnimatableElementContainer] All skills:', newIds.length, ', Registered:', registeredIds.value.size);
     }, { deep: true });
 
-    // 交互事件处理
     const onCardMouseDown = (id, event) => {
-      frontendEventBus.emit('card-drag-start', { 
-        id, 
-        x: event.clientX, 
-        y: event.clientY 
-      });
+      frontendEventBus.emit('card-drag-start', { id, x: event.clientX, y: event.clientY });
     };
-
-    const onCardHover = (id, event) => {
-      frontendEventBus.emit('card-hover', { id });
-    };
-
-    const onCardLeave = (id, event) => {
-      frontendEventBus.emit('card-leave', { id });
-    };
-
-    const onCardClick = (id, event) => {
-      frontendEventBus.emit('card-click', { 
-        id, 
-        x: event.clientX, 
-        y: event.clientY 
-      });
-    };
+    const onCardHover = (id, event) => { frontendEventBus.emit('card-hover', { id }); };
+    const onCardLeave = (id, event) => { frontendEventBus.emit('card-leave', { id }); };
+    const onCardClick = (id, event) => { frontendEventBus.emit('card-click', { id, x: event.clientX, y: event.clientY }); };
 
     onBeforeUnmount(() => {
       for (const id of registeredIds.value) {
         animator.unregister(id);
         disconnectObservers(id);
       }
+      frontendEventBus.off('pixi-sprite-committed', onSpriteCommitted);
+      frontendEventBus.off('pixi-sprite-released', onSpriteReleased);
     });
 
-    return {
-      allSkills,
-      player,
-      isCardVisible,
-      registerCard,
-      onCardMouseDown,
-      onCardHover,
-      onCardLeave,
-      onCardClick
-    };
+    return { allSkills, player, isCardVisible, registerCard, onCardMouseDown, onCardHover, onCardLeave, onCardClick };
   }
 };
 </script>
@@ -199,10 +156,7 @@ export default {
   z-index: var(--z-animatable-elements, 100);
 }
 
-.cards-layer {
-  position: absolute;
-  inset: 0;
-}
+.cards-layer { position: absolute; inset: 0; }
 
 .cards-layer > .card-wrapper {
   position: absolute;
@@ -211,5 +165,9 @@ export default {
   will-change: transform, opacity;
 }
 
+/* 可见性控制（游戏逻辑隐藏）：不参与 Pixi 绘制 */
 .cards-layer > .hidden { visibility: hidden; }
+
+/* 视觉隐藏（由 Pixi 覆盖绘制时启用），不影响 computed opacity */
+.cards-layer > .pixi-hidden { filter: opacity(0); }
 </style>

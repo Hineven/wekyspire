@@ -59,16 +59,6 @@ export default {
     };
     if (typeof window !== 'undefined') { window.__pixiOverlayDebug = api; console.info('[PixiOverlay] Debug API available as window.__pixiOverlayDebug'); }
 
-    const applyVisualHide = (el) => {
-      try {
-        const target = (el && el.parentElement) ? el.parentElement : el;
-        if (!target) return;
-        const prev = target.style.filter || '';
-        if (!/opacity\(/.test(prev)) target.style.filter = (prev ? prev + ' ' : '') + 'opacity(0)';
-        else target.style.filter = prev.replace(/opacity\([^)]*\)/, 'opacity(0)');
-      } catch(_) {}
-    };
-
     const computeSizeKey = (wrapperEl) => {
       const el = (wrapperEl && wrapperEl.firstElementChild) ? wrapperEl.firstElementChild : wrapperEl;
       if (!el) return '';
@@ -94,7 +84,6 @@ export default {
         const baked = await bakeElementToTexture(contentEl);
         rec.pendingTexture = baked.texture;
         rec.pendingScale = baked.scaleUsed || 1;
-        // Note: do not destroy baked here; pendingTexture will be adopted, old texture destroyed on swap
       } catch (e) {
         console.warn('[PixiOverlay] bake failed', id, e);
       } finally {
@@ -141,8 +130,7 @@ export default {
 
       // Commit pending textures and create sprites only inside ticker when snapshot exists
       for (const [id, rec] of this.spriteMap.entries()) {
-        const snap = getSnapById(id);
-        // Create sprite if missing and pending texture available and snapshot available
+        const snap = snaps.find(s => s.id === id);
         if (!rec.sprite && rec.pendingTexture && snap) {
           const sprite = new PIXI.Sprite(rec.pendingTexture);
           sprite.__cardId = id;
@@ -158,13 +146,12 @@ export default {
           sprite.visible = !!snap.visible;
           this.layer.addChild(sprite);
           rec.sprite = sprite;
-          rec.baked = rec.pendingTexture; // keep reference for potential destruction later
+          rec.baked = rec.pendingTexture;
           rec.bakeScale = rec.pendingScale || 1;
           rec.pendingTexture = null;
-          // Hide DOM visuals now that sprite is live
-          applyVisualHide(rec.wrapperEl?.firstElementChild || rec.wrapperEl);
+          // Notify container to hide wrapper visuals
+          frontendEventBus.emit('pixi-sprite-committed', { id });
         } else if (rec.sprite && rec.pendingTexture) {
-          // Swap texture safely
           const oldTex = rec.sprite.texture;
           rec.sprite.texture = rec.pendingTexture;
           rec.baked = rec.pendingTexture;
@@ -203,6 +190,7 @@ export default {
           this.spriteMap.delete(id);
           const g = this.boundsMap.get(id);
           if (g) { try { g.destroy(); } catch(_) {}; this.boundsMap.delete(id); }
+          frontendEventBus.emit('pixi-sprite-released', { id });
         }
       }
 
@@ -216,36 +204,40 @@ export default {
         }
       }
 
-      // Debug bounds drawing handled above per this.debugShowBounds
+      // Debug bounds drawing
       if (this.debugShowBounds) {
         for (const snap of snaps) {
           if (!snap.visible) {
             const gHidden = this.boundsMap.get(snap.id);
-            if (gHidden) { try { gHidden.destroy(); } catch(_) {}; this.boundsMap.delete(snap.id); }
+            if (gHidden) {
+              try { gHidden.destroy(); } catch(_) {}
+              this.boundsMap.delete(snap.id);
+            }
             continue;
           }
           let g = this.boundsMap.get(snap.id);
           if (!g) {
             g = new PIXI.Graphics();
-            g.name = `bounds-graphics-${snap.id}`;
-            g.lineStyle(2, 0xff00ff, 1);
-            g.drawRect(-0.5, -0.5, snap.width + 1, snap.height + 1);
-            g.closePath();
-            g.visible = this.debugShowBounds;
+            g.zIndex = 1000;
+            g.interactive = false;
+            g.eventMode = 'none';
             this.layer.addChild(g);
             this.boundsMap.set(snap.id, g);
           }
           g.clear();
-          g.lineStyle(2, 0xff00ff, 1);
-          g.drawRect(-0.5, -0.5, snap.width + 1, snap.height + 1);
-          g.closePath();
-          g.visible = this.debugShowBounds;
+          g.lineStyle(2, 0xff66cc, 0.9);
+          g.beginFill(0xff66cc, 0.12);
+          g.position.set(snap.cx, snap.cy);
+          g.rotation = snap.rot;
+          g.scale.set(snap.sx, snap.sy);
+          g.drawRect(-snap.baseW / 2, -snap.baseH / 2, snap.baseW, snap.baseH);
+          g.endFill();
         }
       } else {
-        for (const g of this.boundsMap.values()) {
+        for (const [bid, g] of this.boundsMap.entries()) {
           try { g.destroy(); } catch(_) {}
+          this.boundsMap.delete(bid);
         }
-        this.boundsMap.clear();
       }
     });
   },
