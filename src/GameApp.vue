@@ -1,5 +1,7 @@
 <template>
   <div id="game-app">
+    <!-- 全屏Pixi背景（z=0，最底层） -->
+    <GameBackgroundScreen />
     <transition name="screen-transition" mode="out-in">
     <!-- 开始游戏界面 -->
     <StartScreen 
@@ -77,6 +79,7 @@ import FloatingTooltip from './components/global/FloatingTooltip.vue'
 import FloatingCardTooltip from './components/global/FloatingCardTooltip.vue'
 import AnimatableElementContainer from './components/global/AnimatableElementContainer.vue'
 import PlayerInputController from './components/global/PlayerInputController.vue'
+import GameBackgroundScreen from './components/global/GameBackgroundScreen.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 import animator from './utils/animator.js';
@@ -99,7 +102,8 @@ export default {
     FloatingTooltip,
     FloatingCardTooltip,
     AnimatableElementContainer,
-    PlayerInputController
+    PlayerInputController,
+    GameBackgroundScreen
   },
   computed: {
     isPlayerTurn() {
