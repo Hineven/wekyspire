@@ -103,9 +103,6 @@ class Animator {
 
     // 全局锚点监听器：name -> handler（用于去重与清理）
     this._globalAnchorListeners = new Map();
-
-    // 配置（暂未使用，保留兼容位）
-    this._overlayEl = null;
     
     // 全局锚点跟踪配置（统一使用毫秒）
     this._anchorTrackingDurationMs = DEFAULT_TRACKING_DURATION_MS; // 默认锚点跟踪平滑动画持续时间（毫秒）
@@ -189,7 +186,6 @@ class Animator {
    * 初始化
    */
   init(options = {}) {
-    this._overlayEl = options.overlayEl || null;
     
     // 设置全局锚点
     if (options.centerAnchorEl) {
@@ -902,6 +898,59 @@ class Animator {
     }
     delete entry._effect;
   }
+
+  /**
+   * 获取指定适配器类型已注册元素的快照列表
+   * @param {string} adapterType 例如 'card' | 'unit-panel'
+   * @returns {Array<{ id: string, element: HTMLElement, adapterType: string }>}
+   */
+  getRegisteredByAdapter(adapterType) {
+    const list = [];
+    for (const [id, entry] of this._registry.entries()) {
+      if (!entry?.element) continue;
+      if (!adapterType || entry.adapterType === adapterType) {
+        list.push({ id, element: entry.element, adapterType: entry.adapterType });
+      }
+    }
+    return list;
+  }
+
+  /**
+   * 获取指定适配器类型的元素几何快照（用于 Pixi overlay 精确对齐）
+   * 返回: [{ id, cx, cy, baseW, baseH, rot, sx, sy, opacity }]
+   */
+  getTransformsSnapshotByAdapter(adapterType) {
+    const list = [];
+    for (const [id, entry] of this._registry.entries()) {
+      if (!entry?.element) continue;
+      if (adapterType && entry.adapterType !== adapterType) continue;
+      const el = entry.element;
+      const rect = el.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+      // 读取 CSS 变换矩阵
+      const cs = getComputedStyle(el);
+      const t = cs.transform;
+      let rot = 0, sx = 1, sy = 1;
+      if (t && t !== 'none') {
+        const m = new DOMMatrix(t);
+        rot = Math.atan2(m.m12, m.m11);
+        sx = Math.hypot(m.m11, m.m12);
+        sy = Math.hypot(m.m21, m.m22);
+      }
+      let baseW = el.offsetWidth || 0;
+      let baseH = el.offsetHeight || 0;
+      if (!baseW || !baseH) {
+        baseW = rect.width / (sx || 1);
+        baseH = rect.height / (sy || 1);
+      }
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const opacity = parseFloat(cs.opacity) || 1;
+      const visible = (cs.visibility !== 'hidden') && (cs.display !== 'none');
+      list.push({ id, cx, cy, baseW, baseH, rot, sx, sy, opacity, visible });
+    }
+    return list;
+  }
 }
 
 // 导出单例
@@ -914,4 +963,3 @@ if (typeof window !== 'undefined') {
 }
 
 export default animator;
-

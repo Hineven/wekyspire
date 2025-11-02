@@ -2,19 +2,23 @@
   <div class="animatable-elements-container">
     <!-- 卡牌层 -->
     <div class="cards-layer">
-      <SkillCard
+      <div
         v-for="skill in allSkills"
         :key="skill.uniqueID"
-        :skill="skill"
-        :player="player"
+        class="card-wrapper"
         :class="{ hidden: !isCardVisible(skill) }"
         :ref="el => registerCard(el, skill.uniqueID)"
-        :preview-mode="false"
         @mousedown="onCardMouseDown(skill.uniqueID, $event)"
         @mouseenter="onCardHover(skill.uniqueID, $event)"
         @mouseleave="onCardLeave(skill.uniqueID, $event)"
         @click="onCardClick(skill.uniqueID, $event)"
-      />
+      >
+        <SkillCard
+          :skill="skill"
+          :player="player"
+          :preview-mode="false"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -24,7 +28,7 @@
 // 负责持有所有可动画元素的Vue元件与DOM实例，管理其生命周期，并注册到animator中
 // 和animator配合实现复杂动画
 
-import { computed, watch, nextTick, ref } from 'vue';
+import { computed, watch, nextTick, ref, onBeforeUnmount } from 'vue';
 import SkillCard from './SkillCard.vue';
 import { displayGameState } from '../../data/gameState.js';
 import frontendEventBus from '../../frontendEventBus.js';
@@ -35,7 +39,9 @@ export default {
   components: { SkillCard },
   setup() {
     const cardRefs = ref({});
-    const registeredIds = ref(new Set()); // 跟踪已注册的 ID
+    const registeredIds = ref(new Set());
+    const mutationObservers = new Map();
+    const resizeObservers = new Map();
 
     // 计算所有卡牌
     const allSkills = computed(() => {
@@ -71,27 +77,51 @@ export default {
       return skill?.uniqueID != null && visibleCardIds.value.has(skill.uniqueID);
     };
 
+    // 断开观察者
+    const disconnectObservers = (id) => {
+      try { mutationObservers.get(id)?.disconnect(); } catch(_) {}
+      try { resizeObservers.get(id)?.disconnect(); } catch(_) {}
+      mutationObservers.delete(id);
+      resizeObservers.delete(id);
+    };
+
     // 注册卡牌到 animator
-    const registerCard = (el, uniqueID) => {
-      if (!el || uniqueID == null) return;
-      
+    const registerCard = (wrapperEl, uniqueID) => {
+      if (!wrapperEl || uniqueID == null) return;
+
       // 检查是否已经注册过
       if (registeredIds.value.has(uniqueID)) {
         // 只更新 ref 引用，不重复注册
-        cardRefs.value[uniqueID] = el;
+        cardRefs.value[uniqueID] = wrapperEl;
         return;
       }
       
       // 保存 ref 引用
-      cardRefs.value[uniqueID] = el;
-      
+      cardRefs.value[uniqueID] = wrapperEl;
+
       // 等待 DOM 更新后注册到 animator
       nextTick(() => {
-        const domEl = el.$el || el;
+        const domEl = wrapperEl; // wrapper 作为可动画元素
         if (domEl) {
           animator.register(uniqueID, domEl, 'card');
           registeredIds.value.add(uniqueID);
-          // console.log('[AnimatableElementContainer] Registered card:', uniqueID);
+          // 观察内部真实内容变化（SkillCard 根节点）
+          const contentEl = domEl.firstElementChild || domEl;
+          try {
+            const mo = new MutationObserver(() => {
+              // 内容变化：通知 pixi overlay 进行重烘焙
+              frontendEventBus.emit('card-content-updated', { id: uniqueID });
+            });
+            mo.observe(contentEl, { childList: true, characterData: true, subtree: true, attributes: true });
+            mutationObservers.set(uniqueID, mo);
+          } catch(_) {}
+          try {
+            const ro = new ResizeObserver(() => {
+              frontendEventBus.emit('card-content-updated', { id: uniqueID });
+            });
+            ro.observe(contentEl);
+            resizeObservers.set(uniqueID, ro);
+          } catch(_) {}
         }
       });
     };
@@ -105,6 +135,7 @@ export default {
       const removed = prevSkillIds.filter(id => !newIds.includes(id));
       removed.forEach(id => {
         animator.unregister(id);
+        disconnectObservers(id);
         delete cardRefs.value[id];
         registeredIds.value.delete(id); // 从已注册集合中移除
         // console.log('[AnimatableElementContainer] Unregistered card:', id);
@@ -139,6 +170,13 @@ export default {
       });
     };
 
+    onBeforeUnmount(() => {
+      for (const id of registeredIds.value) {
+        animator.unregister(id);
+        disconnectObservers(id);
+      }
+    });
+
     return {
       allSkills,
       player,
@@ -166,14 +204,12 @@ export default {
   inset: 0;
 }
 
-.cards-layer > * {
+.cards-layer > .card-wrapper {
   position: absolute;
-  pointer-events: auto;
+  pointer-events: auto; /* 由 wrapper 接收交互 */
   transform-origin: center center;
   will-change: transform, opacity;
 }
 
-.cards-layer > .hidden {
-  visibility: hidden;
-}
+.cards-layer > .hidden { visibility: hidden; }
 </style>
