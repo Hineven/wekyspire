@@ -35,10 +35,33 @@ export default {
       return (w > 0 && h > 0) ? `${w}x${h}` : '';
     };
 
+    // Attach a MutationObserver to watch content changes and enqueue re-bake
+    this._attachObserver = (id, rec) => {
+      try { rec._observer?.disconnect?.(); } catch(_) {}
+      if (!rec?.wrapperEl) { rec._observer = null; return; }
+      // const target = rec.wrapperEl;
+      // Use internal element
+      const target = rec.wrapperEl.firstElementChild || rec.wrapperEl;
+      if (!target) { rec._observer = null; return; }
+      const cb = () => {
+        // debounce per frame
+        if (rec._contentRaf) return;
+        rec._contentRaf = requestAnimationFrame(() => {
+          rec._contentRaf = 0;
+          this._requestBake(id);
+        });
+      };
+      const mo = new MutationObserver((muts) => { cb(); });
+      try {
+        mo.observe(target, { childList: true, subtree: true, characterData: true, attributes: true });
+        rec._observer = mo;
+      } catch(_) { rec._observer = null; }
+    };
+
     this._ensureRecord = (id) => {
       let rec = this.spriteMap.get(id);
       if (!rec) {
-        rec = { sprite: null, bakedTex: null, bakeScale: 1, pendingTex: null, pendingScale: 1, baking: false, wrapperEl: null, sizeKey: '', filtersDirty: true };
+        rec = { sprite: null, bakedTex: null, bakeScale: 1, pendingTex: null, pendingScale: 1, baking: false, wrapperEl: null, sizeKey: '', filtersDirty: true, _observer: null, _contentRaf: 0 };
         this.spriteMap.set(id, rec);
       }
       return rec;
@@ -49,8 +72,11 @@ export default {
       if (!reg) return;
       const rec = this._ensureRecord(id);
       rec.wrapperEl = reg.element;
+      this._attachObserver(id, rec);
       const key = computeSizeKey(reg.element);
-      if (key && rec.sizeKey !== key) { rec.sizeKey = key; rec.baking = false; rec.pendingTex = null; this._requestBake(id); }
+      if (key && rec.sizeKey !== key) { rec.sizeKey = key; rec.baking = false; rec.pendingTex = null; }
+      // Always request bake on content update (even if size unchanged)
+      this._requestBake(id);
     };
     frontendEventBus.on('card-content-updated', onContentUpdated);
     this._offContentUpdated = () => frontendEventBus.off('card-content-updated', onContentUpdated);
@@ -105,6 +131,9 @@ export default {
           const key = computeSizeKey(element);
           if (key) { rec.sizeKey = key; this._requestBake(id); }
         }
+        // Ensure content observer is attached when element assigned/changed
+        if (rec.wrapperEl === element && !rec._observer) this._attachObserver(id, rec);
+        if (rec.wrapperEl !== element) { rec.wrapperEl = element; this._attachObserver(id, rec); }
       }
 
       // Phase 2: commit/new sprites and texture swaps
@@ -183,6 +212,7 @@ export default {
           }
           if (rec.bakedTex) this._deferredTextures.push(() => { try { rec.bakedTex.destroy(true); } catch(_) {} });
           if (rec.pendingTex) this._deferredTextures.push(() => { try { rec.pendingTex.destroy(true); } catch(_) {} });
+          try { rec._observer?.disconnect?.(); } catch(_) {}
           this.spriteMap.delete(id);
         }
       }
@@ -260,6 +290,7 @@ export default {
       if (rec.sprite) this._deferredSprites.push(() => { try { rec.sprite.destroy({ children:false, texture:false, baseTexture:false }); } catch(_) {} });
       if (rec.bakedTex) this._deferredTextures.push(() => { try { rec.bakedTex.destroy(true); } catch(_) {} });
       if (rec.pendingTex) this._deferredTextures.push(() => { try { rec.pendingTex.destroy(true); } catch(_) {} });
+      try { rec._observer?.disconnect?.(); } catch(_) {}
     }
     // flush disposals immediately
     for (const d of this._deferredFilters) { try { d(); } catch(_) {} }
