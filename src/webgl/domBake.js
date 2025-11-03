@@ -66,16 +66,14 @@ export async function bakeElementToTexture(el, {
       backgroundColor: transparent ? null : '#000000'
     });
   }
-  console.log(scale);
 
   // 清理克隆
   try { stage.removeChild(clone); } catch(_) {}
 
   const texture = PIXI.Texture.from(canvas);
-  if (texture && texture.baseTexture) {
-    texture.baseTexture.mipmap = PIXI.MIPMAP_MODES.ON;
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
-  }
+  // if (texture && texture.baseTexture) {
+  //   texture.
+  // }
 
   return {
     texture,

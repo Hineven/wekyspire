@@ -5,6 +5,7 @@ import createStateDisabled from './state/disabled.js';
 import createStateHighlight from './state/highlight.js';
 import createPulseCooldown from './pulse/cooldown.js';
 import createPulseFlash from './pulse/flash.js';
+import createPulseBurn from './pulse/burn.js';
 import createAnimHit from './anim/hit.js';
 
 // Local registry: name -> (options) => effect
@@ -20,6 +21,7 @@ registerEffect('state:disabled', createStateDisabled);
 registerEffect('state:highlight', createStateHighlight);
 registerEffect('pulse:cooldown', createPulseCooldown);
 registerEffect('pulse:flash', createPulseFlash);
+registerEffect('pulse:burn', createPulseBurn);
 registerEffect('anim:hit', createAnimHit);
 
 export function makeEffect(name, options = {}) {

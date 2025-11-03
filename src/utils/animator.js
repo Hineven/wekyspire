@@ -213,6 +213,11 @@ class Animator {
       this.animate(payload);
     });
     
+    // 新增：监听纯特效动画指令（用于桥接到 Pixi Overlay）
+    frontendEventBus.on('animate-element-effect', (payload) => {
+      this.animateEffect(payload);
+    });
+
     // 监听动画到锚点指令
     frontendEventBus.on('animate-element-to-anchor', (payload) => {
       this.animateToAnchor(payload.id, payload.anchor || 'rest', payload);
@@ -226,9 +231,6 @@ class Animator {
     // 标准化事件：进入某个状态
     frontendEventBus.on('enter-element-dragging', ({ id }) => this.enterDragging(id));
     frontendEventBus.on('enter-element-idle', ({ id }) => this.enterIdle(id));
-
-    // 效果事件
-    frontendEventBus.on('apply-element-effect', (payload) => this.applyEffect(payload));
   }
 
   // ========== 可动画元素注册表管理 ==========
@@ -494,67 +496,10 @@ class Animator {
   // ========== 动画执行 ==========
 
   /**
-   * 应用特效（独立于普通位移动画），保持与历史行为一致：
-   * - 停止 tracking 与当前 tween
-   * - 进入 animating 状态
-   * - 播放特效，duration 后回到 idle，并通知完成
-   */
-  applyEffect(payload) {
-    const { id, effect, duration = 300, instructionId } = payload || {};
-    const entry = this._registry.get(id);
-    if (!entry) {
-      console.warn('[animator] applyEffect: element not registered', id);
-      if (instructionId) {
-        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
-      }
-      return;
-    }
-
-    const { element } = entry;
-
-    // 统一前置：停止 tracking/动画，进入 animating
-    this._stopTracking(entry);
-    this._killCurrentTween(entry);
-    // 若已有特效，先中断并释放
-    this._interruptEffect(entry);
-    entry.state = STATES.ANIMATING;
-
-    // 分发具体效果
-    let tween = null;
-    switch (effect) {
-      case 'shake':
-        tween = this._applyShakeEffect(element, payload);
-        break;
-      default:
-        console.warn('[animator] applyEffect: unknown effect', effect);
-        break;
-    }
-
-    // 注册可中断的特效状态
-    const timerId = setTimeout(() => {
-      // 正常完成路径
-      if (entry.state === STATES.ANIMATING) {
-        entry.state = STATES.IDLE;
-      }
-      if (instructionId) {
-        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
-      }
-      delete entry._effect;
-    }, duration);
-    entry._effect = { timerId, tween, instructionId };
-  }
-
-  /**
    * 切换到animating状态并执行动画指令，在duration后停止动画并回归idle状态。
    */
   animate(payload) {
-    const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId, effect } = payload;
-
-    // 如果是特效请求，改由 applyEffect 处理
-    if (effect) {
-      this.applyEffect(payload);
-      return;
-    }
+    const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId } = payload;
 
     const entry = this._registry.get(id);
     if (!entry) {
@@ -669,6 +614,39 @@ class Animator {
 
     // 保存当前 tween
     entry.currentTween = tween;
+  }
+
+  /**
+   * 纯特效动画：不操作 DOM，仅向 Pixi Overlay 发出特效启动信号，并在 duration 后通知 sequencer 完成。
+   * 典型：burn 焚毁、命中闪光等。
+   */
+  animateEffect(payload = {}) {
+    const { id, effect = 'burn', duration = 850, instructionId, options = {} } = payload;
+    if (id == null) {
+      console.warn('[animator] animateEffect: missing id');
+      if (instructionId) frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      return;
+    }
+
+    let overlayName = null;
+    switch (effect) {
+      case 'burn':
+        overlayName = 'pulse:burn';
+        break;
+      default:
+        overlayName = `pulse:${effect}`;
+        break;
+    }
+
+    try {
+      frontendEventBus.emit('overlay:effect:add', { id, name: overlayName, options: { duration, ...options } });
+    } catch (e) {
+      console.warn('[animator] animateEffect: emit overlay failed', e);
+    }
+
+    setTimeout(() => {
+      if (instructionId) frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+    }, Math.max(0, duration));
   }
 
   /**

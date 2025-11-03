@@ -13,6 +13,9 @@ export default function createDisabled(options = {}) {
     void main(void){ gl_FragColor = texture2D(uSampler, vTextureCoord); }
   `;
 
+  const copy = new PIXI.Filter(undefined, passThroughFrag);
+  copy.autoFit = true; copy.padding = 0;
+
   const disabledFrag = `
     precision mediump float;
     varying vec2 vTextureCoord;
@@ -29,9 +32,6 @@ export default function createDisabled(options = {}) {
       gl_FragColor = vec4(rgb, c.a);
     }
   `;
-
-  const copy = new PIXI.Filter(undefined, passThroughFrag);
-  copy.autoFit = true; copy.padding = 0;
 
   const uniforms = { uAlpha: alphaMul, uDesaturate: amount };
   const disabled = new PIXI.Filter(undefined, disabledFrag, uniforms);

@@ -26,6 +26,7 @@ export default {
     const host = this.$refs.host;
     const { app, PIXI, getLayer } = PixiAppManager.init(host);
     this.layer = getLayer('cards-overlay', 1150);
+    this.layer.blendMode = PIXI.BLEND_MODES.NORMAL;
 
     const computeSizeKey = (el) => {
       const n = el?.firstElementChild || el;
@@ -115,6 +116,7 @@ export default {
           sprite.__cardId = id;
           sprite.anchor.set(0.5);
           sprite.eventMode = 'none';
+          sprite.blendMode = PIXI.BLEND_MODES.NORMAL;
           this.layer.addChild(sprite);
           rec.sprite = sprite;
           rec.bakedTex = rec.pendingTex;
@@ -124,10 +126,10 @@ export default {
         } else if (rec.sprite && rec.pendingTex) {
           const oldTex = rec.sprite.texture;
           rec.sprite.texture = rec.pendingTex;
+          rec.sprite.blendMode = PIXI.BLEND_MODES.NORMAL;
           rec.bakedTex = rec.pendingTex;
           rec.bakeScale = rec.pendingScale || rec.bakeScale || 1;
           rec.pendingTex = null;
-          // defer texture destroy to next frame
           if (oldTex) this._deferredTextures.push(() => { try { oldTex.destroy(true); } catch(_) {} });
           rec.filtersDirty = true;
           rec.applyAfter = this._frame + 1;
@@ -270,5 +272,9 @@ export default {
 </script>
 
 <style scoped>
-.pixi-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1100; }
+.pixi-overlay {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 1100;
+  background-color: transparent;
+}
 </style>
