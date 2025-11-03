@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import html2canvas from 'html2canvas';
+import {snapdom} from "@zumer/snapdom";
 
 function ensureStagingRoot() {
   let root = document.getElementById('__pixi_bake_stage');
@@ -26,7 +27,7 @@ function ensureStagingRoot() {
  * 返回 { texture, scaleUsed, destroy() }
  */
 export async function bakeElementToTexture(el, {
-  scale = Math.max(2, Math.floor(window.devicePixelRatio || 1)),
+  scale = window.devicePixelRatio,
   transparent = true,
   useCORS = true,
 } = {}) {
@@ -44,17 +45,28 @@ export async function bakeElementToTexture(el, {
   clone.style.position = 'relative';
   stage.appendChild(clone);
 
-  const canvas = await html2canvas(clone, {
-    backgroundColor: transparent ? null : '#000000',
-    scale,
-    useCORS,
-    logging: false,
-    width: w,
-    height: h,
-    windowWidth: document.documentElement.clientWidth,
-    windowHeight: document.documentElement.clientHeight,
-    removeContainer: true,
-  });
+  let canvas = null;
+  if(false) {
+    canvas = await html2canvas(clone, {
+      backgroundColor: transparent ? null : '#000000',
+      scale,
+      useCORS,
+      logging: false,
+      width: w,
+      height: h,
+      windowWidth: document.documentElement.clientWidth,
+      windowHeight: document.documentElement.clientHeight,
+      removeContainer: true,
+    });
+  } else {
+    canvas = await snapdom.toCanvas(clone, {
+      scale: 1,// / scale,
+      width: w,
+      height: h,
+      backgroundColor: transparent ? null : '#000000'
+    });
+  }
+  console.log(scale);
 
   // 清理克隆
   try { stage.removeChild(clone); } catch(_) {}

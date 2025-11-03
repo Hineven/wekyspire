@@ -5,266 +5,270 @@
 <script>
 import PixiAppManager from '@/webgl/PixiAppManager.js'
 import animator from '@/utils/animator.js'
-import { bakeElementToTexture } from '@/webgl/domBake.js'
+import BakeManager from '@/webgl/BakeManager.js'
 import frontendEventBus from '@/frontendEventBus.js'
+import { makeEffect } from '@/renderers/effects/index.js'
 
 export default {
   name: 'GamePixiOverlay',
-  data() { return { layer: null, spriteMap: new Map(), bakingStamp: new Map(), boundsMap: new Map(), debugShowBounds: false }; },
+  data() {
+    return {
+      layer: null,
+      spriteMap: new Map(),
+      effectsById: new Map(),
+      _deferredFilters: [],
+      _deferredTextures: [],
+      _deferredSprites: [],
+      _frame: 0
+    };
+  },
   mounted() {
     const host = this.$refs.host;
     const { app, PIXI, getLayer } = PixiAppManager.init(host);
     this.layer = getLayer('cards-overlay', 1150);
 
-    // Purge any pre-existing children (from previous mounts/HMR) before we manage this layer
-    try {
-      if (this.layer?.children?.length) {
-        for (const child of [...this.layer.children]) {
-          try { this.layer.removeChild(child); } catch(_) {}
-          try { child.destroy({ children: true, texture: true, baseTexture: true }); } catch(_) {}
-        }
-      }
-    } catch(_) {}
-
-    const getSnapById = (id) => animator.getTransformsSnapshotByAdapter('card').find(s => s.id === id) || null;
-
-    const api = {
-      setShowBounds: (v) => { this.debugShowBounds = !!v; if (!this.debugShowBounds) this._clearBounds(); },
-      getShowBounds: () => this.debugShowBounds,
-      dump: (id) => { const snap = getSnapById(id); const rec = this.spriteMap.get(id); console.log('[PixiOverlay dump]', { id, snap, rec }); },
-      dumpAll: () => {
-        const snaps = animator.getTransformsSnapshotByAdapter('card');
-        console.log('[PixiOverlay dumpAll] Snaps:', snaps);
-        for (const [id, rec] of this.spriteMap.entries()) console.log(`[Sprite ${id}]`, rec);
-        console.log('[PixiOverlay dumpAll] Layer children:', this.layer?.children?.map((c,i)=>({i, type: c.constructor?.name, hasId: c.__cardId!=null, cardId:c.__cardId})));
-      },
-      purgeLayer: () => {
-        // Remove any Sprite not owned by spriteMap; keep bounds graphics
-        const ownedSprites = new Set(Array.from(this.spriteMap.values()).map(r => r.sprite).filter(Boolean));
-        for (const child of [...this.layer.children]) {
-          const isSprite = child && child.texture != null; // heuristic for PIXI.Sprite
-          const isOwned = ownedSprites.has(child);
-          if (isSprite && !isOwned) {
-            try { this.layer.removeChild(child); } catch(_) {}
-            try { child.destroy({ children:false, texture:true, baseTexture:true }); } catch(_) {}
-          }
-        }
-        return true;
-      },
-      rebake: (id) => {
-        const rec = this._ensureRecord(id);
-        if (rec) rec.requestBake = true;
-        return true;
-      }
-    };
-    if (typeof window !== 'undefined') { window.__pixiOverlayDebug = api; console.info('[PixiOverlay] Debug API available as window.__pixiOverlayDebug'); }
-
-    const computeSizeKey = (wrapperEl) => {
-      const el = (wrapperEl && wrapperEl.firstElementChild) ? wrapperEl.firstElementChild : wrapperEl;
-      if (!el) return '';
-      let w = el.offsetWidth || el.clientWidth || 0;
-      let h = el.offsetHeight || el.clientHeight || 0;
-      if (!(w > 0 && h > 0)) { const r = el.getBoundingClientRect(); w = Math.round(r.width); h = Math.round(r.height); }
-      if (!(w > 0 && h > 0)) return '';
-      return `${w}x${h}`;
+    const computeSizeKey = (el) => {
+      const n = el?.firstElementChild || el;
+      const w = n?.offsetWidth || n?.clientWidth || 0;
+      const h = n?.offsetHeight || n?.clientHeight || 0;
+      return (w > 0 && h > 0) ? `${w}x${h}` : '';
     };
 
-    // Records: id -> { sprite?, baked?, bakeScale?, pendingTexture?, pendingScale?, baking:boolean, requestBake:boolean, wrapperEl?, sizeKey? }
     this._ensureRecord = (id) => {
       let rec = this.spriteMap.get(id);
-      if (!rec) { rec = { sprite: null, baked: null, bakeScale: 1, pendingTexture: null, pendingScale: 1, baking: false, requestBake: false, wrapperEl: null, sizeKey: '' }; this.spriteMap.set(id, rec); }
+      if (!rec) {
+        rec = { sprite: null, bakedTex: null, bakeScale: 1, pendingTex: null, pendingScale: 1, baking: false, wrapperEl: null, sizeKey: '', filtersDirty: true };
+        this.spriteMap.set(id, rec);
+      }
       return rec;
     };
 
-    const startBake = async (id, contentEl) => {
-      const rec = this.spriteMap.get(id);
-      if (!rec || rec.baking) return;
-      rec.baking = true;
-      try {
-        const baked = await bakeElementToTexture(contentEl);
-        rec.pendingTexture = baked.texture;
-        rec.pendingScale = baked.scaleUsed || 1;
-      } catch (e) {
-        console.warn('[PixiOverlay] bake failed', id, e);
-      } finally {
-        rec.baking = false;
-      }
-    };
-
-    // Content change marks bake request; actual bake and sprite commit happen in ticker
     const onContentUpdated = ({ id }) => {
       const reg = animator.getRegisteredByAdapter('card').find(r => r.id === id);
       if (!reg) return;
       const rec = this._ensureRecord(id);
       rec.wrapperEl = reg.element;
-      rec.requestBake = true;
+      const key = computeSizeKey(reg.element);
+      if (key && rec.sizeKey !== key) { rec.sizeKey = key; rec.baking = false; rec.pendingTex = null; this._requestBake(id); }
     };
     frontendEventBus.on('card-content-updated', onContentUpdated);
     this._offContentUpdated = () => frontendEventBus.off('card-content-updated', onContentUpdated);
 
+    const onAddEffect = ({ id, name, options }) => { this._addEffect(id, name, options || {}); };
+    const onRemoveEffect = ({ id, effectId, name }) => { this._removeEffect(id, { effectId, name }); };
+    const onInterruptEffect = ({ id, effectId, name }) => { this._interruptEffect(id, { effectId, name }); };
+    frontendEventBus.on('overlay:effect:add', onAddEffect);
+    frontendEventBus.on('overlay:effect:remove', onRemoveEffect);
+    frontendEventBus.on('overlay:effect:interrupt', onInterruptEffect);
+    this._offEffectBus = () => {
+      frontendEventBus.off('overlay:effect:add', onAddEffect);
+      frontendEventBus.off('overlay:effect:remove', onRemoveEffect);
+      frontendEventBus.off('overlay:effect:interrupt', onInterruptEffect);
+    };
+
+    this._rebuildFilters = (id, rec) => {
+      if (!rec?.sprite) return;
+      const list = this.effectsById.get(id) || [];
+      const ordered = list.slice().sort((a,b) => { const rank = { state: 0, pulse: 1, anim: 2 }; return (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9); });
+      const filters = [];
+      for (const fx of ordered) { if (fx?.filters?.length) filters.push(...fx.filters); }
+      rec.sprite.filters = filters.length ? filters : null;
+      rec.filtersDirty = false;
+    };
+
+    this._requestBake = async (id) => {
+      const rec = this.spriteMap.get(id);
+      if (!rec || !rec.wrapperEl || rec.baking) return;
+      rec.baking = true;
+      try {
+        const contentEl = rec.wrapperEl.firstElementChild || rec.wrapperEl;
+        const baked = await BakeManager.enqueue(id, contentEl, {});
+        rec.pendingTex = baked.texture;
+        rec.pendingScale = baked.scaleUsed || 1;
+      } finally {
+        rec.baking = false;
+      }
+    };
+
     app.ticker.add(() => {
+      this._frame++;
       const regs = animator.getRegisteredByAdapter('card');
       const snaps = animator.getTransformsSnapshotByAdapter('card');
-      const snappedIds = new Set(snaps.map(s => s.id));
+      const dt = app.ticker.deltaMS || 16.7;
 
-      // Maintain records from regs
-      for (const { id, element: wrapper } of regs) {
+      // Phase 1: ensure records and trigger bake
+      for (const { id, element } of regs) {
         const rec = this._ensureRecord(id);
-        rec.wrapperEl = wrapper;
-        const key = computeSizeKey(wrapper);
-        if (key && rec.sizeKey !== key) { rec.sizeKey = key; rec.requestBake = true; }
-      }
-
-      // Launch bakes for requests
-      for (const [id, rec] of this.spriteMap.entries()) {
-        if (!rec.wrapperEl) continue;
-        if (rec.requestBake && !rec.baking) {
-          const contentEl = rec.wrapperEl.firstElementChild || rec.wrapperEl;
-          const rect = contentEl.getBoundingClientRect();
-          if (rect && rect.width > 0 && rect.height > 0) {
-            startBake(id, contentEl);
-            rec.requestBake = false; // queued
-          }
+        if (rec.wrapperEl !== element) rec.wrapperEl = element;
+        if (!rec.sizeKey) {
+          const key = computeSizeKey(element);
+          if (key) { rec.sizeKey = key; this._requestBake(id); }
         }
       }
 
-      // Commit pending textures and create sprites only inside ticker when snapshot exists
+      // Phase 2: commit/new sprites and texture swaps
       for (const [id, rec] of this.spriteMap.entries()) {
         const snap = snaps.find(s => s.id === id);
-        if (!rec.sprite && rec.pendingTexture && snap) {
-          const sprite = new PIXI.Sprite(rec.pendingTexture);
+        if (!snap) continue;
+        if (!rec.sprite && rec.pendingTex) {
+          const sprite = new PIXI.Sprite(rec.pendingTex);
           sprite.__cardId = id;
           sprite.anchor.set(0.5);
-          sprite.zIndex = 0;
-          sprite.interactive = false;
           sprite.eventMode = 'none';
-          const s = Math.max(1, rec.pendingScale || 1);
-          sprite.position.set(snap.cx, snap.cy);
-          sprite.scale.set(snap.sx / s, snap.sy / s);
-          sprite.rotation = snap.rot;
-          sprite.alpha = Math.max(0, Math.min(1, snap.opacity));
-          sprite.visible = !!snap.visible;
           this.layer.addChild(sprite);
           rec.sprite = sprite;
-          rec.baked = rec.pendingTexture;
+          rec.bakedTex = rec.pendingTex;
           rec.bakeScale = rec.pendingScale || 1;
-          rec.pendingTexture = null;
-          // Notify container to hide wrapper visuals
-          frontendEventBus.emit('pixi-sprite-committed', { id });
-        } else if (rec.sprite && rec.pendingTexture) {
+          rec.pendingTex = null;
+          rec.filtersDirty = true;
+        } else if (rec.sprite && rec.pendingTex) {
           const oldTex = rec.sprite.texture;
-          rec.sprite.texture = rec.pendingTexture;
-          rec.baked = rec.pendingTexture;
+          rec.sprite.texture = rec.pendingTex;
+          rec.bakedTex = rec.pendingTex;
           rec.bakeScale = rec.pendingScale || rec.bakeScale || 1;
-          rec.pendingTexture = null;
-          try { oldTex?.destroy(true); } catch(_) {}
+          rec.pendingTex = null;
+          // defer texture destroy to next frame
+          if (oldTex) this._deferredTextures.push(() => { try { oldTex.destroy(true); } catch(_) {} });
+          rec.filtersDirty = true;
+          rec.applyAfter = this._frame + 1;
         }
       }
 
-      // Sync transforms and visibility/opacity
+      // Phase 3: update effects (pulse/anim), queue finished disposals
+      for (const [id, list] of this.effectsById.entries()) {
+        if (!list?.length) continue;
+        let changed = false;
+        for (let i = list.length - 1; i >= 0; i--) {
+          const fx = list[i];
+          if (typeof fx.update === 'function' && fx.update(dt)) {
+            list.splice(i, 1);
+            changed = true;
+            // defer destroy of effect filters
+            if (fx.filters?.length) {
+              for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
+            }
+          }
+        }
+        if (changed && (this.spriteMap.get(id)?.sprite)) this.spriteMap.get(id).filtersDirty = true;
+        if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+      }
+
+      // Phase 4: sync transforms and rebuild filters for dirty sprites
       for (const snap of snaps) {
         const rec = this.spriteMap.get(snap.id);
         if (!rec?.sprite) continue;
-        rec.sprite.visible = !!snap.visible;
         const s = Math.max(1, rec.bakeScale || 1);
         rec.sprite.position.set(snap.cx, snap.cy);
         rec.sprite.scale.set(snap.sx / s, snap.sy / s);
         rec.sprite.rotation = snap.rot;
         rec.sprite.alpha = Math.max(0, Math.min(1, snap.opacity));
-      }
-      // Hide any sprite without a snapshot this frame
-      for (const [id, rec] of this.spriteMap.entries()) {
-        if (rec.sprite && !snappedIds.has(id)) rec.sprite.visible = false;
+        rec.sprite.visible = !!snap.visible;
+        if (rec.filtersDirty && (rec.applyAfter == null || this._frame >= rec.applyAfter)) {
+          this._rebuildFilters(snap.id, rec);
+          delete rec.applyAfter;
+        }
       }
 
-      // Remove records for cards no longer registered
+      // Phase 5: cleanup missing regs (defer sprite/texture destroys)
       const regIds = new Set(regs.map(r => r.id));
       for (const [id, rec] of [...this.spriteMap.entries()]) {
         if (!regIds.has(id)) {
           if (rec.sprite) {
+            try { rec.sprite.filters = null; } catch(_) {}
             try { this.layer.removeChild(rec.sprite); } catch(_) {}
-            try { rec.sprite.destroy({ children:false, texture:false, baseTexture:false }); } catch(_) {}
+            const toDestroy = rec.sprite;
+            this._deferredSprites.push(() => { try { toDestroy.destroy({ children:false, texture:false, baseTexture:false }); } catch(_) {} });
           }
-          try { rec.baked?.destroy?.(true); } catch(_) {}
-          try { rec.pendingTexture?.destroy?.(true); } catch(_) {}
+          if (rec.bakedTex) this._deferredTextures.push(() => { try { rec.bakedTex.destroy(true); } catch(_) {} });
+          if (rec.pendingTex) this._deferredTextures.push(() => { try { rec.pendingTex.destroy(true); } catch(_) {} });
           this.spriteMap.delete(id);
-          const g = this.boundsMap.get(id);
-          if (g) { try { g.destroy(); } catch(_) {}; this.boundsMap.delete(id); }
-          frontendEventBus.emit('pixi-sprite-released', { id });
         }
       }
 
-      // Compact layer: remove any Sprite not owned by spriteMap (regardless of __cardId)
-      const owned = new Set(Array.from(this.spriteMap.values()).map(r => r.sprite).filter(Boolean));
-      for (const child of [...this.layer.children]) {
-        const isSprite = child && child.texture != null; // heuristic: PIXI.Sprite has texture
-        if (isSprite && !owned.has(child)) {
-          try { this.layer.removeChild(child); } catch(_) {}
-          try { child.destroy({ children:false, texture:true, baseTexture:true }); } catch(_) {}
-        }
-      }
-
-      // Debug bounds drawing
-      if (this.debugShowBounds) {
-        for (const snap of snaps) {
-          if (!snap.visible) {
-            const gHidden = this.boundsMap.get(snap.id);
-            if (gHidden) {
-              try { gHidden.destroy(); } catch(_) {}
-              this.boundsMap.delete(snap.id);
-            }
-            continue;
-          }
-          let g = this.boundsMap.get(snap.id);
-          if (!g) {
-            g = new PIXI.Graphics();
-            g.zIndex = 1000;
-            g.interactive = false;
-            g.eventMode = 'none';
-            this.layer.addChild(g);
-            this.boundsMap.set(snap.id, g);
-          }
-          g.clear();
-          g.lineStyle(2, 0xff66cc, 0.9);
-          g.beginFill(0xff66cc, 0.12);
-          g.position.set(snap.cx, snap.cy);
-          g.rotation = snap.rot;
-          g.scale.set(snap.sx, snap.sy);
-          g.drawRect(-snap.baseW / 2, -snap.baseH / 2, snap.baseW, snap.baseH);
-          g.endFill();
-        }
-      } else {
-        for (const [bid, g] of this.boundsMap.entries()) {
-          try { g.destroy(); } catch(_) {}
-          this.boundsMap.delete(bid);
-        }
-      }
+      // Phase 6: run deferred disposals (from previous frame)
+      try {
+        const filters = this._deferredFilters; this._deferredFilters = [];
+        for (const d of filters) { try { d(); } catch(_) {} }
+        const texs = this._deferredTextures; this._deferredTextures = [];
+        for (const d of texs) { try { d(); } catch(_) {} }
+        const sprites = this._deferredSprites; this._deferredSprites = [];
+        for (const d of sprites) { try { d(); } catch(_) {} }
+      } catch(_) {}
     });
   },
   methods: {
-    _clearBounds() {
-      for (const [id, g] of this.boundsMap.entries()) {
-        try { g.destroy(); } catch(_) {}
-        this.boundsMap.delete(id);
+    _addEffect(id, name, options = {}) {
+      const list = this.effectsById.get(id) || [];
+      const fx = makeEffect(name, options);
+      if (!fx) return null;
+      list.push(fx);
+      this.effectsById.set(id, list);
+      const rec = this.spriteMap.get(id);
+      if (rec?.sprite) { rec.filtersDirty = true; rec.applyAfter = this._frame + 1; }
+      return fx.id;
+    },
+    _removeEffect(id, { effectId, name } = {}) {
+      const list = this.effectsById.get(id);
+      if (!list?.length) return false;
+      let removed = false;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const fx = list[i];
+        if ((effectId && fx.id === effectId) || (name && fx.name === name)) {
+          list.splice(i, 1);
+          // defer filter destroy
+          if (fx.filters?.length) for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
+          removed = true; if (effectId) break;
+        }
       }
+      if (removed) {
+        const rec2 = this.spriteMap.get(id);
+        if (rec2?.sprite) { rec2.filtersDirty = true; rec2.applyAfter = this._frame + 1; }
+        if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+      }
+      return removed;
+    },
+    _interruptEffect(id, { effectId, name } = {}) {
+      const list = this.effectsById.get(id);
+      if (!list?.length) return false;
+      let changed = false;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const fx = list[i];
+        const matched = (effectId && fx.id === effectId) || (name && fx.name === name) || (!effectId && !name && fx.kind === 'anim');
+        if (matched) {
+          try { fx.interrupt?.(); } catch(_) {}
+          list.splice(i, 1);
+          if (fx.filters?.length) for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
+          changed = true; if (effectId) break;
+        }
+      }
+      if (changed) {
+        const rec3 = this.spriteMap.get(id);
+        if (rec3?.sprite) { rec3.filtersDirty = true; rec3.applyAfter = this._frame + 1; }
+        if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+      }
+      return changed;
     }
   },
   beforeUnmount() {
     try { this._offContentUpdated?.(); } catch(_) {}
-    try { this._clearBounds(); } catch(_) {}
-    try {
-      if (this.layer) { this.layer.removeChildren().forEach(c => c.destroy()); }
-      for (const [, rec] of this.spriteMap.entries()) {
-        try { rec.baked?.destroy?.(true); } catch(_) {}
-        try { rec.pendingTexture?.destroy?.(true); } catch(_) {}
-      }
-      this.spriteMap.clear();
-      this.bakingStamp.clear();
-    } catch (_) {}
+    try { this._offEffectBus?.(); } catch(_) {}
+    for (const [, rec] of this.spriteMap.entries()) {
+      try { rec.sprite && (rec.sprite.filters = null); } catch(_) {}
+      try { rec.sprite && this.layer.removeChild(rec.sprite); } catch(_) {}
+      if (rec.sprite) this._deferredSprites.push(() => { try { rec.sprite.destroy({ children:false, texture:false, baseTexture:false }); } catch(_) {} });
+      if (rec.bakedTex) this._deferredTextures.push(() => { try { rec.bakedTex.destroy(true); } catch(_) {} });
+      if (rec.pendingTex) this._deferredTextures.push(() => { try { rec.pendingTex.destroy(true); } catch(_) {} });
+    }
+    // flush disposals immediately
+    for (const d of this._deferredFilters) { try { d(); } catch(_) {} }
+    for (const d of this._deferredTextures) { try { d(); } catch(_) {} }
+    for (const d of this._deferredSprites) { try { d(); } catch(_) {} }
+    this.spriteMap.clear();
+    this.effectsById.clear();
   }
 }
 </script>
 
 <style scoped>
-.pixi-overlay { position: fixed; inset: 0; z-index: calc(var(--z-animatable-elements, 1100) + 1); pointer-events: none; }
+.pixi-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1100; }
 </style>

@@ -13,6 +13,7 @@ import animationSequencer from "./data/animationSequencer";
 import {registerBackendStateWatcher} from "./data/animationInstructionHelpers";
 import {initGameFlowListeners} from "./game";
 import AbilityManager from "./data/abilityManager";
+import { initDisabledEffectWatcher } from './renderers/disabledEffectWatcher.js';
 
 // 创建路由
 const routes = [
@@ -46,6 +47,9 @@ SkillManager.loadAllSkills().then(skillManager => {
 
 // 初始化后端状态观察者
 registerBackendStateWatcher();
+
+// 初始化前端禁用效果观察者（Pixi 卡牌状态灰显）
+initDisabledEffectWatcher();
 
 // 初始化后端游戏流程在backendEventBus上的监听器
 initGameFlowListeners();

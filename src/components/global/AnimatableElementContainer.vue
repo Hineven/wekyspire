@@ -5,7 +5,7 @@
       <div
         v-for="skill in allSkills"
         :key="skill.uniqueID"
-        class="card-wrapper"
+        class="card-wrapper pixi-hidden"
         :class="{ hidden: !isCardVisible(skill) }"
         :ref="el => registerCard(el, skill.uniqueID)"
         @mousedown="onCardMouseDown(skill.uniqueID, $event)"
@@ -24,7 +24,7 @@
 </template>
 
 <script>
-import { computed, watch, nextTick, ref, onBeforeUnmount, onMounted } from 'vue';
+import { computed, watch, nextTick, ref, onBeforeUnmount } from 'vue';
 import SkillCard from './SkillCard.vue';
 import { displayGameState } from '../../data/gameState.js';
 import frontendEventBus from '../../frontendEventBus.js';
@@ -93,24 +93,6 @@ export default {
       });
     };
 
-    // Pixi overlay integration: hide/show DOM visuals when sprite is committed/released
-    const onSpriteCommitted = ({ id }) => {
-      const el = cardRefs.value[id];
-      if (!el) return;
-      // 添加一个仅影响视觉的隐藏类，避免影响 computed opacity
-      el.classList.add('pixi-hidden');
-    };
-    const onSpriteReleased = ({ id }) => {
-      const el = cardRefs.value[id];
-      if (!el) return;
-      el.classList.remove('pixi-hidden');
-    };
-
-    onMounted(() => {
-      frontendEventBus.on('pixi-sprite-committed', onSpriteCommitted);
-      frontendEventBus.on('pixi-sprite-released', onSpriteReleased);
-    });
-
     let prevSkillIds = [];
     watch(allSkills, (newSkills, oldSkills) => {
       const newIds = newSkills.map(s => s?.uniqueID).filter(id => id != null);
@@ -118,9 +100,7 @@ export default {
       removed.forEach(id => {
         animator.unregister(id);
         disconnectObservers(id);
-        // 移除隐藏类，避免遗留
-        const el = cardRefs.value[id];
-        if (el) el.classList.remove('pixi-hidden');
+        // 清理引用
         delete cardRefs.value[id];
         registeredIds.value.delete(id);
       });
@@ -139,8 +119,6 @@ export default {
         animator.unregister(id);
         disconnectObservers(id);
       }
-      frontendEventBus.off('pixi-sprite-committed', onSpriteCommitted);
-      frontendEventBus.off('pixi-sprite-released', onSpriteReleased);
     });
 
     return { allSkills, player, isCardVisible, registerCard, onCardMouseDown, onCardHover, onCardLeave, onCardClick };
