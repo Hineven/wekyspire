@@ -36,6 +36,7 @@ class Skill {
 
   // 简化：统一冷却事件，仅发送 'cooldown-tick'（不再区分 start/progress/end，也无 progress 数值）
   _emitCooldownTick (deltaCooldown = 1) {
+    if(deltaCooldown === 0) return ; // 无变化不发动画（虽然后端仍然会有指令）
     try {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({

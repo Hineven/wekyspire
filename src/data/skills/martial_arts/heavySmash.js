@@ -45,7 +45,7 @@ export class BasicHeavySmash extends Skill {
 // 赋予易伤3层
 export class StrongHeavySmash extends BasicHeavySmash {
   constructor() {
-    super('强力重击', SkillTier.C_PLUS, 4, 3, 2, 2, 3);
+    super('强力重击', SkillTier.C_PLUS, 6, 3, 2, 2, 3);
     this.precessor = '重击';
   }
 }

@@ -50,9 +50,17 @@ export class CunningPunch extends Skill {
     } else {
       if (player.frontierSkills.length > 1) {
         const leftSkill = player.frontierSkills[0];
-        if (leftSkill && leftSkill.uniqueID !== this.uniqueID) {
-          // 放到牌库顶
-          createAndSubmitDropSkillCard(player, leftSkill.uniqueID, 0, ctx?.parentInstruction ?? null);
+        if (leftSkill) {
+          if(leftSkill.uniqueID !== this.uniqueID) {
+            // 放到牌库顶
+            createAndSubmitDropSkillCard(player, leftSkill.uniqueID, 0, ctx?.parentInstruction ?? null);
+          } else {
+            // 如果最左侧牌是自己，则选择第二张
+            const secondLeftSkill = player.frontierSkills[1];
+            if(secondLeftSkill) {
+              createAndSubmitDropSkillCard(player, secondLeftSkill.uniqueID, 0, ctx?.parentInstruction ?? null);
+            }
+          }
         }
       }
       return true;
