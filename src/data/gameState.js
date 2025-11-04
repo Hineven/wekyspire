@@ -27,7 +27,7 @@ export function createGameState() {
     },
 
     // 玩家数据
-    player: reactive(new Player()),
+    player: new Player(),
 
     // 敌人数据（在战斗开始时赋值）
     enemy: {},

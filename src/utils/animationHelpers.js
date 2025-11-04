@@ -73,7 +73,7 @@ export function enqueueCardAppear(id, fromAnchor = 'deck', options = {}) {
  */
 export function enqueueCardBurn(id, options = {}) {
   console.log("enqueueCardBurn", id);
-  const burnDuration = options.duration || 1200;
+  const burnDuration = options.duration || 1800;
   const scaleUp = options.scaleUp || 1.15;
   
   // 第一阶段：放大
