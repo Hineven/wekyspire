@@ -139,6 +139,11 @@ const namedEntities = {
     icon: '✨',
     color: 'aqua',
     description: '光滑技能在回合结束时，如在手牌中，弃入牌库。'
+  },
+  '进阶': {
+    icon: '🆙',
+    color: 'orange',
+    description: '升级到下一阶技能'
   }
 };
 

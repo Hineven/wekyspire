@@ -1,23 +1,32 @@
 // 斩类攻击技能
 import Skill from "@data/skill";
 // 替换：使用指令式 helpers
-import { createAndSubmitLaunchAttack, createAndSubmitSkillCoolDown } from '@data/battleInstructionHelpers.js';
+import {
+  createAndSubmitLambda,
+  createAndSubmitLaunchAttack,
+  createAndSubmitSkillCoolDown
+} from '@data/battleInstructionHelpers.js';
 import backendEventBus, {EventNames} from "@/backendEventBus";
-import { backendGameState as gameState } from '@data/gameState.js';
 import {SkillTier} from "@/utils/tierUtils";
 
 // 斩（C-）
 export class BasicSlash extends Skill {
-  constructor(name = '斩', tier = SkillTier.C_MINUS, damage = 35, powerMultiplier = 7, coldDown = 5, cardForegroundColdDownDecay = 1) {
+  constructor(name = '斩', tier = SkillTier.C_MINUS, damage = 35, powerMultiplier = 19, coldDown = 5, cardForegroundColdDownDecay = 1, series = 0) {
     super(name, 'normal', tier, 0, 2, 1, '斩');
     this.baseColdDownTurns = coldDown; // 基础冷却时间
     this.baseSlowStart = true; // 慢启动
     this.baseDamage = damage; // 基础伤害
     this.powerMultiplier = powerMultiplier; // 每点力量增加的伤害
-    this.cardForegroundColdDownDecay = cardForegroundColdDownDecay; // 卡牌激活冷却时间
+    this.baseCardForegroundColdDownDecay = cardForegroundColdDownDecay; // 卡牌激活冷却时间
     this.listener_ = null;
     // 反转模式：由“拔刀术”等效果设置；true 时，改为“在牌库中则失去冷却”
     this.reverseMode = this.reverseMode || false;
+    this.unlocks = 0;
+  }
+
+  get cardForegroundColdDownDecay() {
+    if(this.unlocks >= 6) return 999;
+    return this.baseCardForegroundColdDownDecay + this.unlocks;
   }
 
   onEnterBattle(player) {
@@ -43,73 +52,56 @@ export class BasicSlash extends Skill {
   }
 
   get damage () {
-    return Math.max(8, this.baseDamage + this.powerMultiplier * this.power);
+    const base = Math.max(8, this.baseDamage + this.powerMultiplier * this.power);
+    return Math.floor(base * Math.pow(1.8, this.unlocks));
   }
 
   use (player, enemy, stage, ctx) {
     createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
+    createAndSubmitLambda(()=>{this.unlock();});
     return true;
   }
 
-  regenerateDescription(player) {
-    const decayDesc = this.cardForegroundColdDownDecay > 0 ? (this.reverseMode
-      ? `，回合结束在牌库中则失去${this.cardForegroundColdDownDecay}冷却`
-      : `，回合结束在手中则失去${this.cardForegroundColdDownDecay}冷却`) : '';
-    return `${this.damage + (player?.attack ?? 0)}伤害${decayDesc}`;
-  }
-}
-
-// 裂石斩（B-)
-// 伤害提升，难度提升
-export class StoneCleaveSlash extends BasicSlash {
-  constructor() {
-    super('裂石斩', SkillTier.B_MINUS, 61, 21, 6, 2);
-    this.precessor = ['斩', '蓄力斩'];
-  }
-}
-
-// 摧山斩（B+）
-// 伤害大幅提升，难度提升
-export class MountainCrushSlash extends BasicSlash {
-  constructor() {
-    super('崩山斩', SkillTier.B_PLUS, 102, 33, 7, 3);
-    this.precessor = ['裂石斩', '奋力斩'];
-  }
-}
-
-// 分海斩（A）
-// 伤害极大提升，难度提升
-export class SeaDivideSlash extends BasicSlash {
-  constructor() {
-    super('分海斩', SkillTier.A_MINUS, 160, 60, 8, 4);
-    this.precessor = '崩山斩';
-  }
-}
-// 开天斩（A+）
-// 伤害极大提升，难度提升
-export class SkyRendSlash extends BasicSlash {
-  constructor() {
-    super('开天斩', SkillTier.A_PLUS, 280, 105, 9, 5);
-    this.precessor = '开天斩';
-  }
-}
-
-// 断神斩（S）
-// 唯一体修S攻击卡，难度提升
-export class GodSlayerSlash extends BasicSlash {
-  constructor() {
-    super('断神斩', SkillTier.S, 9999, 0, 12, 12);
-    this.precessor = '开天斩';
-  }
-  regenerateDescription(player) {
-    if(this.remainingUses === 0) {
-      return `回合结束在手牌中则损失所有冷却进度`;
+  unlock() {
+    this.unlocks ++;
+    if(this.unlocks === 1) {
+      this.name = '裂石斩';
+      this.tier = Math.max(this.tier, SkillTier.B_MINUS);
+    } else if(this.unlocks === 2) {
+      this.name = '削金斩';
+      this.tier = Math.max(this.tier, SkillTier.B_PLUS);
+    } else if(this.unlocks === 3) {
+      this.name = '摧山斩';
+      this.tier = Math.max(this.tier, SkillTier.A_MINUS);
+    } else if(this.unlocks === 4) {
+      this.name = '分海斩';
+      this.tier = Math.max(this.tier, SkillTier.A);
+    } else if(this.unlocks === 5) {
+      this.name = '开天斩';
+      this.tier = Math.max(this.tier, SkillTier.A_PLUS);
+    } else if(this.unlocks >= 6) {
+      this.name = '断神斩';
+      this.tier = Math.max(this.tier, SkillTier.S);
     }
-    return `/italic{消灭}`;
+  }
+
+  regenerateDescription(player) {
+    if(this.unlocks >= 6) {
+      if(this.remainingUses === 0) {
+        return `回合结束在手牌中则损失所有冷却进度`;
+      }
+      return `/italic{消灭}`;
+    } else {
+      const decayDesc = this.cardForegroundColdDownDecay > 0 ?
+        (this.reverseMode
+        ? `，回合结束在牌库中则失去${this.cardForegroundColdDownDecay}冷却`
+        : `，回合结束在手中则失去${this.cardForegroundColdDownDecay}冷却`) : '';
+      return `${this.damage + (player?.attack ?? 0)}伤害，/named{进阶}${decayDesc}`;
+    }
   }
 }
 
-// 另一条路线：蓄力斩系列技能，伤害提升较低，但发动难度降低
+// 蓄力斩（C+)
 export class ChargedSlash extends BasicSlash {
   constructor() {
     super('蓄力斩', SkillTier.C_PLUS, 35, 19, 5, 0);
