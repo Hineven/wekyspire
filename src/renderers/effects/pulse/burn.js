@@ -6,7 +6,7 @@ import { EffectKinds, genEffectId } from '../core.js';
 // fade the sprite to transparent. No interruptions; auto-finish and cleanup.
 export default function createBurn(options = {}) {
   const duration = typeof options.duration === 'number' ? options.duration : 850;
-  const color = options.color || [1.0, 0.4, 0.15]; // warm orange glow
+  const color = options.color || [0.9, 0.4, 0.15]; // warm orange glow
   const dissolveEdge = options.edgeWidth || 0.10;  // edge softness
   const glowIntensity = options.glow || 0.99;
 
@@ -20,9 +20,44 @@ export default function createBurn(options = {}) {
   const copy = new PIXI.Filter(undefined, passThroughFrag);
   copy.autoFit = true; copy.padding = 0;
 
+
+  const vertex = `
+    attribute vec2 aVertexPosition;
+
+    uniform mat3 projectionMatrix;
+
+    varying vec2 vTextureCoord;
+    varying vec2 vUniformCoord;
+
+    uniform vec4 inputSize;
+    uniform vec4 outputFrame;
+
+    vec4 filterVertexPosition( void )
+    {
+        vec2 position = aVertexPosition * max(outputFrame.zw, vec2(0.)) + outputFrame.xy;
+
+        return vec4((projectionMatrix * vec3(position, 1.0)).xy, 0.0, 1.0);
+    }
+
+    vec2 filterTextureCoord( void )
+    {
+        return aVertexPosition * (outputFrame.zw * inputSize.zw);
+    }
+
+    void main(void)
+    {
+        gl_Position = filterVertexPosition();
+        vTextureCoord = filterTextureCoord();
+        float aspect = 198.0 / 266.0;
+        vUniformCoord = 2.0 * (aVertexPosition - 0.5);
+        vUniformCoord.x *= aspect;
+    }
+  `;
+
   const fragment = `
     precision mediump float;
     varying vec2 vTextureCoord;
+    varying vec2 vUniformCoord;
     uniform sampler2D uSampler;
     
     // time progress 0..1
@@ -54,26 +89,35 @@ export default function createBurn(options = {}) {
     void main(){
       vec4 base = texture2D(uSampler, vTextureCoord);
       // dissolve threshold grows with phase; scale noise to get varied edges
-      float n = noise(vTextureCoord * 64.0);
-      float threshold = uPhase * 1.2; // expand slightly beyond 1 for full clear
-      float d = smoothstep(threshold - uEdge, threshold - uEdge * 2.0, n);
-      float dGlow = smoothstep(threshold + uEdge * 1.0, threshold, n);
-      float dRust = smoothstep(threshold, threshold - uEdge * 1.0, n);
+      float n = noise(vUniformCoord * 5.0) * 0.5 + noise(vUniformCoord * 8.4) * 0.42 + noise(vUniformCoord * 33.0) * 0.08;
+      float border = sqrt(max(abs(vUniformCoord.x), abs(vUniformCoord.y)) * length(vUniformCoord));
+      float borderEdge = max(1.3 - border, 0.0) * (1.0 / 1.3) * 0.99;
+      float borderBonus = smoothstep(borderEdge, min(borderEdge + 0.5, 1.0), uPhase);
+      float threshold = borderBonus * 1.5 + uPhase * 0.6; // expand slightly beyond 1 for full clear
+      float dRust = clamp(smoothstep(threshold, threshold - uEdge * 2.5, n) + uPhase * 0.5, 0.0, 1.0);
+      float dGlow = smoothstep(threshold - uEdge * 3.0, threshold - uEdge * 5.0, n);
+      float d = smoothstep(threshold - uEdge * 3.3, threshold - uEdge * 4.4, n);
 
       // d ~ 0: intact, d ~ 1: dissolved
       float alpha = base.a * (1.0 - d);
 
-      // glow only near the dissolving frontier
-      float rim = smoothstep(0.4, 0.0, max(0.5 - dGlow, 0.0));
-      float glow = uGlowIntensity * rim;
-      // Turns into dark rust after glowing
-      float rust = smoothstep(0.3, 0.0, max(0.5 - dRust, 0.0));
+      // Rust 
+      float rust = dRust;
+      float burnGlowEdge = 0.19;
+      // On the inner glow edge, burning effect further brightens the glow
+      float burn = smoothstep(0.18, 0.05, abs(dGlow - burnGlowEdge));
+      // Turns into glow rust after rusting
+      float glow = uGlowIntensity * smoothstep(burnGlowEdge, burnGlowEdge + 0.02, dGlow) * smoothstep(1.0, burnGlowEdge, dGlow);
 
-      // composite: brighten remaining color slightly with glow
-      vec3 col = mix(base.rgb, uGlowColor, glow);
-      // add rust tint
-      col = mix(col, vec3(0.2, 0.05, 0.0), rust);
-      
+      // composite: add rust tint
+      vec3 col = mix(base.rgb, vec3(0.2, 0.05, 0.0), rust);
+      // brighten remaining color with glow
+      col = mix(col, uGlowColor, glow);
+      // final burn brighten
+      float nBurn = noise(vec2(0.614, 0.781) + vUniformCoord * 29.0) * 0.5 + 0.5;
+      col += vec3(1.0 * (0.7 + nBurn*0.3), 0.7 * nBurn, 0.4 * nBurn) * burn;
+      // Clamp color
+      col = clamp(col, 0.0, 1.0);
       
       // output premultiplied alpha to match Pixi's pipeline
       col *= alpha;
@@ -88,7 +132,7 @@ export default function createBurn(options = {}) {
     uEdge: dissolveEdge
   };
 
-  const filter = new PIXI.Filter(undefined, fragment, uniforms);
+  const filter = new PIXI.Filter(vertex, fragment, uniforms);
   filter.autoFit = true;
   filter.padding = 0;
 

@@ -17,6 +17,7 @@ export default {
       spriteMap: new Map(),
       effectsById: new Map(),
       _deferredFilters: [],
+      _deferredFilterTasks: [],
       _deferredTextures: [],
       _deferredSprites: [],
       _frame: 0
@@ -169,19 +170,29 @@ export default {
       for (const [id, list] of this.effectsById.entries()) {
         if (!list?.length) continue;
         let changed = false;
+        let removedFilters = [];
         for (let i = list.length - 1; i >= 0; i--) {
           const fx = list[i];
           if (typeof fx.update === 'function' && fx.update(dt)) {
+            // collect its filters to destroy later
+            if (fx.filters?.length) removedFilters.push(...fx.filters);
             list.splice(i, 1);
             changed = true;
-            // defer destroy of effect filters
-            if (fx.filters?.length) {
-              for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
-            }
           }
         }
-        if (changed && (this.spriteMap.get(id)?.sprite)) this.spriteMap.get(id).filtersDirty = true;
-        if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+        if (changed) {
+          if (list.length === 0) this.effectsById.delete(id);
+          const rec = this.spriteMap.get(id);
+          if (rec?.sprite) {
+            // Immediately rebuild to detach removed filters before render
+            this._rebuildFilters(id, rec);
+          }
+          // Defer actual filter destruction by 1-2 frames for safety
+          if (removedFilters.length) {
+            const due = this._frame + 2;
+            for (const f of removedFilters) this._deferredFilterTasks.push({ due, fn: () => { try { f.destroy?.(); } catch(_) {} } });
+          }
+        }
       }
 
       // Phase 4: sync transforms and rebuild filters for dirty sprites
@@ -219,6 +230,13 @@ export default {
 
       // Phase 6: run deferred disposals (from previous frame)
       try {
+        // Run due filter tasks only when past due frame
+        const tasks = this._deferredFilterTasks; this._deferredFilterTasks = [];
+        for (const t of tasks) {
+          if (t && typeof t.fn === 'function' && t.due <= this._frame) { try { t.fn(); } catch(_) {} }
+          else this._deferredFilterTasks.push(t);
+        }
+
         const filters = this._deferredFilters; this._deferredFilters = [];
         for (const d of filters) { try { d(); } catch(_) {} }
         const texs = this._deferredTextures; this._deferredTextures = [];
@@ -243,19 +261,26 @@ export default {
       const list = this.effectsById.get(id);
       if (!list?.length) return false;
       let removed = false;
+      let removedFilters = [];
       for (let i = list.length - 1; i >= 0; i--) {
         const fx = list[i];
         if ((effectId && fx.id === effectId) || (name && fx.name === name)) {
+          if (fx.filters?.length) removedFilters.push(...fx.filters);
           list.splice(i, 1);
-          // defer filter destroy
-          if (fx.filters?.length) for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
           removed = true; if (effectId) break;
         }
       }
       if (removed) {
-        const rec2 = this.spriteMap.get(id);
-        if (rec2?.sprite) { rec2.filtersDirty = true; rec2.applyAfter = this._frame + 1; }
         if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+        const rec2 = this.spriteMap.get(id);
+        if (rec2?.sprite) {
+          // Immediately detach filters
+          this._rebuildFilters(id, rec2);
+        }
+        if (removedFilters.length) {
+          const due = this._frame + 2;
+          for (const f of removedFilters) this._deferredFilterTasks.push({ due, fn: () => { try { f.destroy?.(); } catch(_) {} } });
+        }
       }
       return removed;
     },
@@ -263,20 +288,28 @@ export default {
       const list = this.effectsById.get(id);
       if (!list?.length) return false;
       let changed = false;
+      let removedFilters = [];
       for (let i = list.length - 1; i >= 0; i--) {
         const fx = list[i];
         const matched = (effectId && fx.id === effectId) || (name && fx.name === name) || (!effectId && !name && fx.kind === 'anim');
         if (matched) {
           try { fx.interrupt?.(); } catch(_) {}
+          if (fx.filters?.length) removedFilters.push(...fx.filters);
           list.splice(i, 1);
-          if (fx.filters?.length) for (const f of fx.filters) this._deferredFilters.push(() => { try { f.destroy?.(); } catch(_) {} });
           changed = true; if (effectId) break;
         }
       }
       if (changed) {
-        const rec3 = this.spriteMap.get(id);
-        if (rec3?.sprite) { rec3.filtersDirty = true; rec3.applyAfter = this._frame + 1; }
         if ((this.effectsById.get(id)?.length || 0) === 0) this.effectsById.delete(id);
+        const rec3 = this.spriteMap.get(id);
+        if (rec3?.sprite) {
+          // Immediately detach filters
+          this._rebuildFilters(id, rec3);
+        }
+        if (removedFilters.length) {
+          const due = this._frame + 2;
+          for (const f of removedFilters) this._deferredFilterTasks.push({ due, fn: () => { try { f.destroy?.(); } catch(_) {} } });
+        }
       }
       return changed;
     }
