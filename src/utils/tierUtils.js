@@ -30,14 +30,11 @@ export const SkillTier = {
   S: 9
 };
 
-// 能力等阶映射
-const ABILITY_TIER_MAP = {
-  '-1': '特殊',
-  '1': '平庸',
-  '2': '优良',
-  '3': '上佳',
-  '4': '极品',
-  '5': '传奇'
+// 灵脉能力映射
+const LEINO_TIER_MAP = {
+  '1': '良好',
+  '2': '上佳',
+  '3': '天才'
 };
 
 // 商品等阶映射
@@ -88,15 +85,6 @@ const ITEM_TIER_COLORS = {
   '5': '#f44336'  // 红色
 };
 
-// 能力等阶颜色映射
-const ABILITY_TIER_COLORS = {
-  '1': '#4caf50', // 绿色
-  '2': '#2196f3', // 蓝色
-  '3': '#9c27b0', // 紫色
-  '4': '#ff9800', // 橙色
-  '5': '#f44336'  // 红色
-};
-
 // 玩家等阶样式类映射
 const PLAYER_TIER_CLASSES = {
   '0': 'tier-0',
@@ -127,11 +115,6 @@ export function getSkillTierLabel(tier) {
   return SKILL_TIER_MAP[tier] || '';
 }
 
-// 根据能力等阶获取标签
-export function getAbilityTierLabel(tier) {
-  return ABILITY_TIER_MAP[tier] || '';
-}
-
 // 根据商品等阶获取标签
 export function getItemTierLabel(tier) {
   return ITEM_TIER_MAP[tier] || '';
@@ -149,11 +132,6 @@ export function getPlayerTierPallete(tier) {
 // 根据技能等阶获取颜色
 export function getSkillTierColor(tier) {
   return SKILL_TIER_COLORS[tier] || '#000000';
-}
-
-// 根据能力等阶获取颜色
-export function getAbilityTierColor(tier) {
-  return ABILITY_TIER_COLORS[tier] || '';
 }
 
 // 根据商品等阶获取颜色

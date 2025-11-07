@@ -17,7 +17,7 @@
         ]"
         @click="selectAbility(ability)"
       >
-        <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
+        <div class="ability-tier">A</div>
         <div class="ability-name">{{ ability.name }}</div>
         <div class="ability-description">
           <ColoredText :text="ability.description" />
@@ -30,7 +30,6 @@
 
 <script>
 import ColoredText from '../global/ColoredText.vue';
-import { getAbilityTierLabel } from '../../utils/tierUtils.js';
 
 export default {
   name: 'AbilityRewardPanel',
@@ -50,7 +49,6 @@ export default {
     };
   },
   methods: {
-    getAbilityTierLabel,
     selectAbility(ability) {
       // 设置选中的能力
       this.selectedAbility = ability;

@@ -55,56 +55,56 @@ export class SharpenBlade extends BasicSharpenBlade {
 }
 
 // 磨锋（B）（刀系列）
-// 冷却3，ap增1
+// 冷却3
 export class HoneEdge extends BasicSharpenBlade {
   constructor() {
-    super('磨锋', SkillTier.B, 3, 2, 1, 1, true);
+    super('磨锋', SkillTier.B, 3, 1, 1, 1, true);
     this.precessor = '砺刀';
   }
 }
 
 // 展锐（A-）（刀系列）
-// 冷却5，ap增2
+// 冷却5，ap增1
 export class ExtendEdge extends BasicSharpenBlade {
   constructor() {
-    super('展锐', SkillTier.A_MINUS, 5, 4, 1, 1, true);
+    super('展锐', SkillTier.A_MINUS, 5, 2, 1, 1, true);
     this.precessor = '磨锋';
   }
 }
 
 // 另一条升级路线：卡牌变成消耗卡，换取AP降低和光滑特性取消
 // 练刀（C+）（刀系列）
-// 冷却2，消耗
+// 冷却3，消耗
 export class PracticeBlade extends BasicSharpenBlade {
   constructor() {
-    super('练刀', SkillTier.C_PLUS, 2, 0, 1, 0, false);
+    super('练刀', SkillTier.C_PLUS, 3, 0, 1, 0, false);
     this.precessor = '磨刀';
   }
 }
 
 // 精锋（B）（刀系列）
-// 冷却3，消耗
+// 冷却5，消耗
 export class FineBlade extends BasicSharpenBlade {
   constructor() {
-    super('精刀', SkillTier.B, 3, 0, 1, 0, false);
+    super('精刀', SkillTier.B, 5, 0, 1, 0, false);
     this.precessor = '练刀';
   }
 }
 
 // 掌锐（A-）（刀系列）
-// 冷却5，消耗
+// 冷却7，消耗
 export class MasterEdge extends BasicSharpenBlade {
   constructor() {
-    super('掌锐', SkillTier.A_MINUS, 5, 0, 1, 0, false);
+    super('掌锐', SkillTier.A_MINUS, 7, 0, 1, 0, false);
     this.precessor = '精刀';
   }
 }
 
 // 开刃（A）（刀系列）
-// 冷却6，消耗
+// 冷却9，消耗
 export class FinalReveal extends BasicSharpenBlade {
   constructor() {
-    super('开刃', SkillTier.A, 6, 0, 1, 0, false);
+    super('开刃', SkillTier.A, 9, 0, 1, 0, false);
     this.precessor = ['展锐', '掌锐'];
   }
 }

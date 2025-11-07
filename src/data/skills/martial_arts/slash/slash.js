@@ -58,7 +58,7 @@ export class BasicSlash extends Skill {
 
   use (player, enemy, stage, ctx) {
     createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
-    createAndSubmitLambda(()=>{this.unlock();});
+    createAndSubmitLambda(()=>{this.unlock();}, 'unlock slash skill', ctx?.parentInstruction ?? null);
     return true;
   }
 
@@ -111,14 +111,14 @@ export class ChargedSlash extends BasicSlash {
 // 奋力斩（B）
 export class StriveSlash extends BasicSlash {
   constructor() {
-    super('奋力斩', SkillTier.B, 58, 32, 6, 0);
+    super('奋力斩', SkillTier.B, 58, 32, 4, 0);
     this.precessor = '蓄力斩';
   }
 }
 // 极力斩（A-）
 export class VigorSlash extends BasicSlash {
   constructor() {
-    super('极力斩', SkillTier.A_MINUS, 95, 58, 7, 0);
+    super('极力斩', SkillTier.A_MINUS, 95, 58, 4, 0);
     this.precessor = '奋力斩';
   }
 }
