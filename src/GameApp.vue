@@ -32,9 +32,6 @@
     <!-- 对话界面 -->
     <DialogScreen />
 
-    <!-- Boss登场特效界面，之后会逐渐移植到Pixi webgl实现上 -->
-    <BossShowupAnimation />
-
     <!-- 过场动画界面，之后会逐渐移植到Pixi webgl实现上 -->
     <CutsceneScreen :game-state="gameState" />
 
@@ -67,7 +64,6 @@ import BattleScreen from './components/battle/BattleScreen.vue'
 import RestScreen from './components/rest/RestScreen.vue'
 import EndScreen from './components/end/EndScreen.vue'
 import DialogScreen from './components/end/DialogScreen.vue'
-import BossShowupAnimation from './components/battle/BossShowupAnimation.vue'
 import CutsceneScreen from './components/end/CutsceneScreen.vue'
 import AudioControllerScreen from './components/global/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/global/ParticleEffectManager.vue'
@@ -92,7 +88,6 @@ export default {
     RestScreen,
     EndScreen,
     DialogScreen,
-    BossShowupAnimation,
     CutsceneScreen,
     AudioControllerScreen,
     ParticleEffectManager,
