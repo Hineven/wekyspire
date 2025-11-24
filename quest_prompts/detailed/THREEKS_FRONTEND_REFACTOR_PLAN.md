@@ -118,10 +118,10 @@ src/three/
 │   │   ├── NamedEntityComponent.js        # 命名实体组件
 │   │   ├── PlayerBasicStatsComponent.js   # 玩家基础信息组件
 │   │   ├── CostIconsComponent.js          # 费用图标组件
-│   │   ├── TitleTextComponent.js          # 卡牌标题文本组件
+│   │   ├── CardTitleTextComponent.js      # 卡牌标题文本组件
 │   │   ├── FeaturesComponent.js           # 技能特性图标组件
 │   │   ├── DeckIconEntity.js              # 牌库图标实体
-│   │   ├── BurntIconEntity.js             # 焚毁堆图标实体
+│   │   ├── GraveyardIconEntity.js         # 焚毁牌堆图标实体
 │   │   └── CardIconComponent.js           # 通用卡牌图标组件
 │   └── systems/
 │       ├── AnimationRuntime.js   # 动画运行时系统（Tween池、状态机）
@@ -132,10 +132,9 @@ src/three/
 │   ├── CardMaterial.js           # 卡牌基础材质
 │   ├── BarMaterial.js            # 进度条材质（渐变填充）
 │   ├── effects/
-│   │   ├── DissolveEffect.js     # 溶解特效材质
 │   │   ├── BurnEffect.js         # 焚毁特效材质
 │   │   ├── HighlightEffect.js    # 高亮特效材质
-│   │   ├── FlashEffect.js        # 闪光特效材质
+│   │   ├── UpgradeEffect.js      # 升级/降级特效材质
 │   │   └── CooldownEffect.js     # 冷却特效材质
 │   └── shaders/
 │       ├── card/
@@ -145,8 +144,8 @@ src/three/
 │       │   ├── bar.vert.glsl     # 进度条顶点着色器
 │       │   └── bar.frag.glsl     # 进度条片段着色器（渐变）
 │       ├── effects/
-│       │   ├── dissolve.frag.glsl    # 溶解片段着色器
 │       │   ├── burn.frag.glsl        # 焚毁片段着色器
+│       │   ├── upgrade.frag.glsl     # 升级/降级片段着色器
 │       │   ├── cooldown.frag.glsl    # 冷却片段着色器
 │       │   └── flash.frag.glsl       # 闪光片段着色器
 │       └── post/
@@ -452,7 +451,7 @@ EnemyPanelEntity (THREE.Group)
 
 **ParticleEngine设计**：
 ```
-ParticleEngine
+ParticleEngine``
   - emitBurst(type, center, count, options): 爆发发射
   - emitContinuous(type, center, rate, options): 持续发射
   - update(deltaTime): 更新粒子状态
