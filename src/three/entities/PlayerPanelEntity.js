@@ -50,8 +50,8 @@ class PlayerPanelEntity {
     // 2. 生命值条
     yOffset -= 30;
     const healthBar = new HealthBarComponent(
-      this.playerData.health,
-      this.playerData.maxHealth,
+      this.playerData.hp || 0,
+      this.playerData.maxHp || 1,
       { width: 280 }
     );
     const healthGroup = healthBar.getObject3D();
@@ -62,8 +62,8 @@ class PlayerPanelEntity {
     // 3. 魔力条
     yOffset -= 28;
     const manaBar = new ManaBarComponent(
-      this.playerData.mana,
-      this.playerData.maxMana,
+      this.playerData.mana || 0,
+      this.playerData.maxMana || 0,
       { width: 280 }
     );
     const manaGroup = manaBar.getObject3D();
@@ -74,8 +74,8 @@ class PlayerPanelEntity {
     // 4. 行动点条
     yOffset -= 26;
     const apBar = new ActionPointsBarComponent(
-      this.playerData.actionPoints,
-      this.playerData.actionPoints, // 初始最大值等于当前值
+      this.playerData.remainingActionPoints || 0,
+      this.playerData.maxActionPoints || 3,
       { width: 280 }
     );
     const apGroup = apBar.getObject3D();
@@ -86,13 +86,32 @@ class PlayerPanelEntity {
     // 5. 效果图标栏
     yOffset -= 40;
     const effectBar = new EffectDisplayBarComponent(
-      this.playerData.effects || [],
+      this._convertEffectsToArray(this.playerData.effects),
       { iconSize: 28, maxColumns: 8 }
     );
     const effectGroup = effectBar.getObject3D();
     effectGroup.position.set(-140, yOffset, 0.1);
     this.group.add(effectGroup);
     this.components.effectBar = effectBar;
+  }
+
+  /**
+   * 将effects对象转换为数组
+   * effects格式：{ '效果名': 层数, ... }
+   * 返回：[{ effectName: '效果名', stack: 层数, effectId: '效果名' }, ...]
+   */
+  _convertEffectsToArray(effects) {
+    if (!effects || typeof effects !== 'object') {
+      return [];
+    }
+
+    return Object.entries(effects)
+      .filter(([name, stack]) => stack && stack !== 0) // 过滤掉0层或不存在的效果
+      .map(([name, stack]) => ({
+        effectName: name,
+        stack: stack,
+        effectId: name
+      }));
   }
 
   /**
@@ -158,16 +177,19 @@ class PlayerPanelEntity {
 
     // 更新各个组件
     if (this.components.healthBar) {
-      this.components.healthBar.setHealth(newPlayerData.health, newPlayerData.maxHealth);
+      this.components.healthBar.setHealth(newPlayerData.hp || 0, newPlayerData.maxHp || 1);
     }
     if (this.components.manaBar) {
-      this.components.manaBar.setMana(newPlayerData.mana, newPlayerData.maxMana);
+      this.components.manaBar.setMana(newPlayerData.mana || 0, newPlayerData.maxMana || 0);
     }
     if (this.components.apBar) {
-      this.components.apBar.setActionPoints(newPlayerData.actionPoints, newPlayerData.actionPoints);
+      this.components.apBar.setActionPoints(
+        newPlayerData.remainingActionPoints || 0,
+        newPlayerData.maxActionPoints || 3
+      );
     }
     if (this.components.effectBar && newPlayerData.effects) {
-      this.components.effectBar.updateEffects(newPlayerData.effects);
+      this.components.effectBar.updateEffects(this._convertEffectsToArray(newPlayerData.effects));
     }
     if (this.components.infoText) {
       this.textFactory.updateText(

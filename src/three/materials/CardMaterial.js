@@ -79,7 +79,9 @@ class CardMaterial extends THREE.ShaderMaterial {
         uBorderWidth: { value: 0.02 }
       },
       transparent: false,
-      side: THREE.FrontSide
+      side: THREE.FrontSide,
+      depthTest: true,
+      depthWrite: true
     });
 
     this.tier = tier;

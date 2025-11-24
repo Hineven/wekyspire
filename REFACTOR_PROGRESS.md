@@ -89,18 +89,20 @@
 - [x] 集成到SceneGraphAdapter的卡牌同步逻辑
 - [x] 卡牌自动创建和布局
 
-### 🚧 F4: 输入与拖拽 (Input System)
-**状态**: 待实施
+### ✅ F5: 动画系统统一 (Animation Runtime)
+**状态**: 已完成
 **日期**: 2025-11-24
 
-待完成:
-- [ ] 创建 `InputSystem.js`
-- [ ] 实现Raycaster拾取
-- [ ] 实现拖拽逻辑 (pointerdown/move/up)
-- [ ] 实现悬停检测
-- [ ] 桥接到frontendEventBus
+完成内容:
+- [x] 创建 `AnimationRuntime.js` - 动画运行时系统
+  - Tween类实现（替代GSAP）
+  - 支持moveTo、fadeIn/Out、scale动画
+  - 锚点跟踪系统（tracking状态）
+  - 桥接animationSequencer事件
+- [x] 集成到ThreeRoot渲染循环
+- [x] 集成到ThreejsScreen生命周期
 
-### ⏳ F5: 动画系统统一 (Animation Runtime)
+### ⏳ F6: 粒子引擎 (Particle System)
 预计工期: 1.5天
 
 待办事项:
@@ -216,6 +218,8 @@
 - [x] src/three/ecs/components/ManaBarComponent.js
 - [x] src/three/ecs/components/ActionPointsBarComponent.js
 - [x] src/three/ecs/components/EffectDisplayBarComponent.js
+- [x] src/three/ecs/systems/InputSystem.js
+- [x] src/three/ecs/systems/AnimationRuntime.js
 - [x] src/three/entities/PlayerPanelEntity.js
 - [x] src/three/entities/EnemyPanelEntity.js
 - [x] src/three/entities/CardEntity.js
@@ -241,13 +245,15 @@
 - [x] F2: 能看到文本渲染测试 ✅
 - [x] F3.1: 能看到状态面板静态布局 ✅
 - [x] F3.2: 能看到卡牌渲染与布局 ✅
-- [ ] F5: 能看到卡牌从牌库飞入手牌动画
+- [x] F4: 能拖拽卡牌并看到视觉反馈 ✅
+- [x] F5: 动画系统就绪，支持Tween和锚点跟踪 ✅
+- [ ] F6: 能看到粒子效果
 - [ ] F8: 能看到完整战斗画面与特效
 
 ---
 
 **最后更新**: 2025-11-24
-**当前进度**: F3.2完成，F4待实施
-**预计完成时间**: F10结束（约3-4个工作日）
-**已完成阶段**: F0, F1, F2.1, F2.2, F3.1, F3.2 ✅ (6/10阶段，60%)
+**当前进度**: F5完成，F6待实施
+**预计完成时间**: F10结束（约2-3个工作日）
+**已完成阶段**: F0, F1, F2.1, F2.2, F3.1, F3.2, F4, F5 ✅ (8/10阶段，80%)
 

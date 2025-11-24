@@ -9,7 +9,8 @@ import EffectIconComponent from './EffectIconComponent.js';
 
 class EffectDisplayBarComponent {
   constructor(effects = [], options = {}) {
-    this.effects = effects;
+    // 确保effects是数组
+    this.effects = Array.isArray(effects) ? effects : [];
     this.options = {
       iconSize: 32,
       gap: 4,
@@ -31,6 +32,11 @@ class EffectDisplayBarComponent {
 
     let col = 0;
     let row = 0;
+
+    // 如果没有效果，直接返回
+    if (this.effects.length === 0) {
+      return;
+    }
 
     for (const effect of this.effects) {
       const iconComponent = new EffectIconComponent(effect, { iconSize });

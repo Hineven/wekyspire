@@ -55,6 +55,29 @@ class SceneGraphAdapter {
     // 设置响应式监听
     this._setupWatchers();
 
+    // 主动创建玩家面板（不等待watch触发）
+    if (displayGameState.player) {
+      this._updatePlayerPanel(displayGameState.player);
+    }
+
+    // 主动创建敌人面板（如果存在敌人）
+    if (displayGameState.enemy && displayGameState.enemy.name) {
+      this._updateEnemyPanel(displayGameState.enemy);
+    }
+
+    // 主动同步初始卡牌（不等待watch触发）
+    if (displayGameState.player.skills && displayGameState.player.skills.length > 0) {
+      const handIds = displayGameState.player.skills.map(s => s.uniqueID);
+      this._syncCards('hand', handIds, []);
+      console.log('[SceneGraphAdapter] Initial hand cards synced:', handIds.length);
+    }
+
+    if (displayGameState.player.activatedSkills && displayGameState.player.activatedSkills.length > 0) {
+      const activatedIds = displayGameState.player.activatedSkills.map(s => s.uniqueID);
+      this._syncCards('activated', activatedIds, []);
+      console.log('[SceneGraphAdapter] Initial activated skills synced:', activatedIds.length);
+    }
+
     this.isInitialized = true;
     console.log('[SceneGraphAdapter] Initialized');
   }
@@ -142,12 +165,14 @@ class SceneGraphAdapter {
     // 监听玩家状态变化（用于面板更新）
     const playerWatcher = watch(
       () => ({
-        health: displayGameState.player.health,
-        maxHealth: displayGameState.player.maxHealth,
+        hp: displayGameState.player.hp,
+        maxHp: displayGameState.player.maxHp,
         mana: displayGameState.player.mana,
         maxMana: displayGameState.player.maxMana,
-        actionPoints: displayGameState.player.actionPoints,
-        money: displayGameState.player.money
+        remainingActionPoints: displayGameState.player.remainingActionPoints,
+        maxActionPoints: displayGameState.player.maxActionPoints,
+        money: displayGameState.player.money,
+        tier: displayGameState.player.tier
       }),
       (newState) => {
         this._updatePlayerPanel(newState);
@@ -188,15 +213,27 @@ class SceneGraphAdapter {
       }
     }
 
-    // 更新布局锚点（需要在创建卡牌前计算）
-    this._updateCardAnchors(container, newIds);
-
-    // 找出需要添加的卡牌并创建实体
+    // 找出需要添加的卡牌并先创建实体
     for (const id of newSet) {
       if (!oldSet.has(id)) {
         this._createCardEntity(id, container);
-        // 立即应用锚点位置
-        this._applyAnchorToCard(id);
+      }
+    }
+
+    // 计算并应用布局锚点（在所有卡牌创建后）
+    this._updateCardAnchors(container, newIds);
+
+    // 应用锚点到所有卡牌，并设置z坐标
+    for (let i = 0; i < newIds.length; i++) {
+      const id = newIds[i];
+      this._applyAnchorToCard(id);
+
+      // 设置z坐标：每张卡间隔1.0（足够大的间隔）
+      // 后面的卡片z值更大，会渲染在上面
+      const entity = this.entityStore.getEntity(id);
+      if (entity && entity.object3D) {
+        const currentPos = entity.object3D.position;
+        entity.object3D.position.set(currentPos.x, currentPos.y, i * 1.0);
       }
     }
   }
@@ -216,7 +253,6 @@ class SceneGraphAdapter {
     if (rotation !== undefined) {
       object3D.rotation.z = rotation;
     }
-    // scale已经在创建时设置了，这里的anchor.scale是额外的缩放
     if (scale !== undefined && scale !== 1.0) {
       object3D.scale.multiplyScalar(scale);
     }
@@ -275,7 +311,9 @@ class SceneGraphAdapter {
 
     if (container === 'hand') {
       // 手牌扇形布局
-      const cardWidth = 198;
+      const cardDesignWidth = 198;
+      const cardScale = 0.5;
+      const cardWidth = cardDesignWidth * cardScale;
       const gap = 10;
       const count = cardIds.length;
 
@@ -283,16 +321,13 @@ class SceneGraphAdapter {
 
       const totalWidth = count * cardWidth + (count - 1) * gap;
       const startX = (width - totalWidth) / 2;
-      const baseY = height - 160; // 距离底部160px
+      const baseY = height - 100;
 
       for (let i = 0; i < count; i++) {
         const screenX = startX + i * (cardWidth + gap) + cardWidth / 2;
         const screenY = baseY;
-
-        // 转换为世界坐标
         const worldPos = this.coordConverter.screenToWorld(screenX, screenY);
-
-        const rotation = (i - count / 2) * 2 * (Math.PI / 180); // 扇形角度
+        const rotation = (i - (count - 1) / 2) * 3 * (Math.PI / 180);
         const scale = 1.0;
 
         anchors.set(cardIds[i], {
@@ -305,7 +340,9 @@ class SceneGraphAdapter {
       }
     } else if (container === 'activated') {
       // 激活技能水平布局
-      const cardWidth = 198;
+      const cardDesignWidth = 198;
+      const cardScale = 0.5;
+      const cardWidth = cardDesignWidth * cardScale * 0.8;  // 激活技能再缩小20%
       const gap = 10;
       const count = cardIds.length;
 

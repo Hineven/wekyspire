@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { getTextFactory } from '../text/TextFactory.js';
-import { parseColoredText } from '../text/ColoredTextParser.js';
+import ColoredTextComponent from '../ecs/components/ColoredTextComponent.js';
 import CardMaterial from '../materials/CardMaterial.js';
 
 class CardEntity {
@@ -35,9 +35,13 @@ class CardEntity {
    * 构建卡牌
    */
   _build() {
-    const { width, height } = this.options;
+    // 卡牌使用局部坐标系，所有子元素相对于this.group定位
+    // z坐标分层：
+    // 0: 背景
+    // 0.01: 装饰层（边框等）
+    // 0.02: 文本和图标
 
-    // 1. 创建背景卡面
+    // 1. 创建背景
     this._createBackground();
 
     // 2. 创建标题
@@ -67,6 +71,9 @@ class CardEntity {
     const material = new CardMaterial(tier);
     const mesh = new THREE.Mesh(geometry, material);
 
+    // 背景在最底层，z=0
+    mesh.position.z = 0;
+
     this.group.add(mesh);
     this.components.background = { mesh, material };
   }
@@ -88,7 +95,7 @@ class CardEntity {
       outlineColor: 0x000000,
       maxWidth: 180
     });
-    titleText.position.set(0, 110, 0.1);
+    titleText.position.set(0, 110, 0.02);
     this.group.add(titleText);
     this.components.titleText = titleText;
 
@@ -101,7 +108,7 @@ class CardEntity {
         anchorY: 'top',
         maxWidth: 180
       });
-      subtitleText.position.set(0, 88, 0.1);
+      subtitleText.position.set(0, 88, 0.02);
       this.group.add(subtitleText);
       this.components.subtitleText = subtitleText;
     }
@@ -113,31 +120,19 @@ class CardEntity {
   _createDescription() {
     const description = this.skillData.description || '';
 
-    // 解析彩色文本
-    const segments = parseColoredText(description);
-    const descGroup = new THREE.Group();
+    // 使用ColoredTextComponent处理描述文本（支持彩色文本和图标）
+    const coloredTextComponent = new ColoredTextComponent(description, {
+      fontSize: 12,
+      maxWidth: 170,
+      iconSize: 12,
+      lineHeight: 1.4
+    });
 
-    let offsetY = 0;
-    for (const segment of segments) {
-      const text = this.textFactory.createText(segment.text, {
-        fontSize: 14,
-        color: segment.color,
-        anchorX: 'left',
-        anchorY: 'top',
-        maxWidth: 170
-      });
-      text.position.set(-85, offsetY, 0);
-      descGroup.add(text);
-
-      // 简单换行逻辑（实际应该根据文本宽度计算）
-      if (segment.text.length > 15) {
-        offsetY -= 20;
-      }
-    }
-
-    descGroup.position.set(0, 50, 0.1);
+    const descGroup = coloredTextComponent.getObject3D();
+    descGroup.position.set(-85, 50, 0.02);
     this.group.add(descGroup);
     this.components.descGroup = descGroup;
+    this.components.coloredText = coloredTextComponent;
   }
 
   /**
@@ -165,7 +160,7 @@ class CardEntity {
       offsetX += 30;
     }
 
-    costGroup.position.set(0, -100, 0.1);
+    costGroup.position.set(0, -100, 0.02);
     this.group.add(costGroup);
     this.components.costGroup = costGroup;
   }
@@ -181,9 +176,12 @@ class CardEntity {
     const circleMaterial = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.8,
+      depthTest: true,
+      depthWrite: true
     });
     const circle = new THREE.Mesh(circleGeometry, circleMaterial);
+    circle.position.z = 0;
     group.add(circle);
 
     // 数值文本
@@ -195,7 +193,7 @@ class CardEntity {
       outlineWidth: 2,
       outlineColor: 0x000000
     });
-    valueText.position.z = 0.05;
+    valueText.position.z = 0.01;
     group.add(valueText);
 
     return group;
@@ -216,7 +214,7 @@ class CardEntity {
       outlineWidth: 2,
       outlineColor: 0x000000
     });
-    tierText.position.set(85, 110, 0.1);
+    tierText.position.set(85, 110, 0.02);
     this.group.add(tierText);
     this.components.tierText = tierText;
   }
@@ -237,7 +235,7 @@ class CardEntity {
       featureGroup.add(icon);
     }
 
-    featureGroup.position.set(-80, -120, 0.1);
+    featureGroup.position.set(-80, -120, 0.02);
     this.group.add(featureGroup);
     this.components.featureGroup = featureGroup;
   }
@@ -253,9 +251,12 @@ class CardEntity {
     const boxMaterial = new THREE.MeshBasicMaterial({
       color: 0x444444,
       transparent: true,
-      opacity: 0.7
+      opacity: 0.7,
+      depthTest: true,
+      depthWrite: true
     });
     const box = new THREE.Mesh(boxGeometry, boxMaterial);
+    box.position.z = 0;
     group.add(box);
 
     // 特性首字母
@@ -265,7 +266,7 @@ class CardEntity {
       anchorX: 'center',
       anchorY: 'middle'
     });
-    featureText.position.z = 0.05;
+    featureText.position.z = 0.01;
     group.add(featureText);
 
     return group;

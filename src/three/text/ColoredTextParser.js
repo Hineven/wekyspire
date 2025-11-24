@@ -1,7 +1,12 @@
 /**
  * ColoredTextParser - 彩色文本解析器
  *
- * 解析格式：{color}文本{/color}
+ * 解析格式：
+ * - {color}文本{/color} 或 /color{文本}
+ * - /effect{效果名} - 嵌入效果图标
+ * - /named{实体名} - 嵌入命名实体图标
+ * - /skill{技能名} - 嵌入技能图标
+ *
  * 支持的颜色：red, blue, green, yellow, white, gray, orange, purple
  */
 
@@ -25,37 +30,119 @@ const COLOR_MAP = {
 /**
  * 解析彩色文本标记
  * @param {string} text - 带标记的文本
- * @returns {Array} - [{text, color}, ...]
+ * @returns {Array} - [{type: 'text'|'color'|'effect'|'named'|'skill', ...}, ...]
  */
 export function parseColoredText(text) {
   const segments = [];
-  const regex = /\{(\w+)\}(.*?)\{\/\1\}/g;
-  let lastIndex = 0;
+
+  // 正则表达式匹配所有标记
+  const colorRegex = /\/(\w+)\{([^}]+)\}/g;  // /color{文本}
+  const oldColorRegex = /\{(\w+)\}(.*?)\{\/\1\}/g;  // {color}文本{/color}
+  const effectRegex = /\/effect\{([^}]+)\}/g;  // /effect{效果名}
+  const namedRegex = /\/named\{([^}]+)\}/g;  // /named{实体名}
+  const skillRegex = /\/skill\{([^}]+)\}/g;  // /skill{技能名}
+
+  const allMatches = [];
   let match;
 
-  while ((match = regex.exec(text)) !== null) {
-    // 添加标记之前的普通文本
-    if (match.index > lastIndex) {
-      const plainText = text.substring(lastIndex, match.index);
+  // 匹配新格式颜色 /color{文本}
+  while ((match = colorRegex.exec(text)) !== null) {
+    const colorName = match[1].toLowerCase();
+    // 跳过特殊标记
+    if (['effect', 'named', 'skill'].includes(colorName)) continue;
+
+    if (COLOR_MAP[colorName] !== undefined) {
+      allMatches.push({
+        index: match.index,
+        lastIndex: colorRegex.lastIndex,
+        type: 'color',
+        text: match[2],
+        color: COLOR_MAP[colorName]
+      });
+    }
+  }
+
+  // 匹配旧格式颜色 {color}文本{/color}
+  oldColorRegex.lastIndex = 0;
+  while ((match = oldColorRegex.exec(text)) !== null) {
+    const colorName = match[1].toLowerCase();
+    if (COLOR_MAP[colorName] !== undefined) {
+      allMatches.push({
+        index: match.index,
+        lastIndex: oldColorRegex.lastIndex,
+        type: 'color',
+        text: match[2],
+        color: COLOR_MAP[colorName]
+      });
+    }
+  }
+
+  // 匹配效果图标 /effect{效果名}
+  effectRegex.lastIndex = 0;
+  while ((match = effectRegex.exec(text)) !== null) {
+    allMatches.push({
+      index: match.index,
+      lastIndex: effectRegex.lastIndex,
+      type: 'effect',
+      effectName: match[1]
+    });
+  }
+
+  // 匹配命名实体 /named{实体名}
+  namedRegex.lastIndex = 0;
+  while ((match = namedRegex.exec(text)) !== null) {
+    allMatches.push({
+      index: match.index,
+      lastIndex: namedRegex.lastIndex,
+      type: 'named',
+      entityName: match[1]
+    });
+  }
+
+  // 匹配技能图标 /skill{技能名+N/-N}
+  skillRegex.lastIndex = 0;
+  while ((match = skillRegex.exec(text)) !== null) {
+    const raw = match[1].trim();
+    let skillName = raw;
+    let powerDelta = 0;
+
+    // 捕获末尾的 +N 或 -N
+    const powerMatch = raw.match(/^(.*?)([+-]\d+)$/);
+    if (powerMatch) {
+      skillName = powerMatch[1].trim();
+      powerDelta = parseInt(powerMatch[2], 10) || 0;
+    }
+
+    allMatches.push({
+      index: match.index,
+      lastIndex: skillRegex.lastIndex,
+      type: 'skill',
+      skillName,
+      powerDelta
+    });
+  }
+
+  // 按位置排序所有匹配
+  allMatches.sort((a, b) => a.index - b.index);
+
+  // 构建最终的段落数组
+  let lastIndex = 0;
+  for (const cur of allMatches) {
+    // 添加匹配前的普通文本
+    if (cur.index > lastIndex) {
+      const plainText = text.substring(lastIndex, cur.index);
       if (plainText) {
         segments.push({
+          type: 'text',
           text: plainText,
-          color: 0xffffff // 默认白色
+          color: 0xffffff
         });
       }
     }
 
-    // 添加彩色文本
-    const colorName = match[1].toLowerCase();
-    const colorText = match[2];
-    const colorValue = COLOR_MAP[colorName] !== undefined ? COLOR_MAP[colorName] : 0xffffff;
-
-    segments.push({
-      text: colorText,
-      color: colorValue
-    });
-
-    lastIndex = regex.lastIndex;
+    // 添加当前匹配
+    segments.push(cur);
+    lastIndex = cur.lastIndex;
   }
 
   // 添加剩余的普通文本
@@ -63,6 +150,7 @@ export function parseColoredText(text) {
     const remainingText = text.substring(lastIndex);
     if (remainingText) {
       segments.push({
+        type: 'text',
         text: remainingText,
         color: 0xffffff
       });
@@ -72,6 +160,7 @@ export function parseColoredText(text) {
   // 如果没有任何匹配，返回整个文本
   if (segments.length === 0) {
     segments.push({
+      type: 'text',
       text: text,
       color: 0xffffff
     });

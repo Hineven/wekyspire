@@ -78,8 +78,8 @@ class EnemyPanelEntity {
     // 4. 生命值条
     yOffset -= 30;
     const healthBar = new HealthBarComponent(
-      this.enemyData.health,
-      this.enemyData.maxHealth,
+      this.enemyData.hp || 0,
+      this.enemyData.maxHp || 1,
       { width: 260 }
     );
     const healthGroup = healthBar.getObject3D();
@@ -90,13 +90,30 @@ class EnemyPanelEntity {
     // 5. 效果图标栏
     yOffset -= 40;
     const effectBar = new EffectDisplayBarComponent(
-      this.enemyData.effects || [],
+      this._convertEffectsToArray(this.enemyData.effects),
       { iconSize: 28, maxColumns: 6 }
     );
     const effectGroup = effectBar.getObject3D();
     effectGroup.position.set(-130, yOffset, 0.1);
     this.group.add(effectGroup);
     this.components.effectBar = effectBar;
+  }
+
+  /**
+   * 将effects对象转换为数组
+   */
+  _convertEffectsToArray(effects) {
+    if (!effects || typeof effects !== 'object') {
+      return [];
+    }
+
+    return Object.entries(effects)
+      .filter(([name, stack]) => stack && stack !== 0)
+      .map(([name, stack]) => ({
+        effectName: name,
+        stack: stack,
+        effectId: name
+      }));
   }
 
   /**
@@ -153,10 +170,10 @@ class EnemyPanelEntity {
 
     // 更新各个组件
     if (this.components.healthBar) {
-      this.components.healthBar.setHealth(newEnemyData.health, newEnemyData.maxHealth);
+      this.components.healthBar.setHealth(newEnemyData.hp || 0, newEnemyData.maxHp || 1);
     }
     if (this.components.effectBar && newEnemyData.effects) {
-      this.components.effectBar.updateEffects(newEnemyData.effects);
+      this.components.effectBar.updateEffects(this._convertEffectsToArray(newEnemyData.effects));
     }
     if (this.components.statsText) {
       this.textFactory.updateText(

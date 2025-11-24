@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { getAnimationRuntime } from '../ecs/systems/AnimationRuntime.js';
 import PassStack from './PassStack.js';
 
 class ThreeRoot {
@@ -130,6 +131,12 @@ class ThreeRoot {
       this.fps = this.frameCount;
       this.frameCount = 0;
       this.lastFpsTime = currentTime;
+    }
+
+    // 更新动画系统（deltaTime转换为秒）
+    const animationRuntime = getAnimationRuntime();
+    if (animationRuntime.isInitialized) {
+      animationRuntime.update(deltaTime / 1000);
     }
 
     // 执行渲染回调（ECS系统更新）
