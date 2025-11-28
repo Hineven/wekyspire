@@ -89,8 +89,8 @@
 - [x] 集成到SceneGraphAdapter的卡牌同步逻辑
 - [x] 卡牌自动创建和布局
 
-### ✅ F5: 动画系统统一 (Animation Runtime)
-**状态**: 已完成
+### [WIP] F5: 动画系统统一 (Animation Runtime)
+**状态**: 调试中
 **日期**: 2025-11-24
 
 完成内容:

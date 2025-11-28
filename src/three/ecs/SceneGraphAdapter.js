@@ -246,10 +246,13 @@ class SceneGraphAdapter {
     const entity = this.entityStore.getEntity(cardId);
     if (!entity || !entity.anchor) return;
 
-    const { x, y, z, scale, rotation } = entity.anchor;
+    const { x, y, scale, rotation } = entity.anchor;
     const object3D = entity.object3D;
 
-    object3D.position.set(x, y, z);
+    // 只设置x和y坐标，z坐标由_syncCards方法单独设置
+    object3D.position.x = x;
+    object3D.position.y = y;
+    
     if (rotation !== undefined) {
       object3D.rotation.z = rotation;
     }

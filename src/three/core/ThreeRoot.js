@@ -59,13 +59,21 @@ class ThreeRoot {
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
-      premultipliedAlpha: true
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: true // 减少闪烁
     });
 
     // 设置DPR（限制最大为2避免性能问题）
     const dpr = Math.min(window.devicePixelRatio, 2);
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(hostElement.clientWidth, hostElement.clientHeight);
+    
+    // 优化透明物体渲染，减少闪烁
+    this.renderer.sortObjects = true;
+    this.renderer.autoClear = true;
+    this.renderer.autoClearColor = true;
+    this.renderer.autoClearDepth = true;
+    this.renderer.autoClearStencil = true;
 
     // 启用阴影（可选）
     this.renderer.shadowMap.enabled = false; // 初期关闭，需要时再开启
@@ -139,6 +147,9 @@ class ThreeRoot {
       animationRuntime.update(deltaTime / 1000);
     }
 
+    // 更新所有卡牌材质的时间uniform（用于动画效果）
+    this._updateCardMaterialsTime(currentTime);
+
     // 执行渲染回调（ECS系统更新）
     for (const callback of this.renderCallbacks) {
       callback(deltaTime);
@@ -150,6 +161,24 @@ class ThreeRoot {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+  }
+
+  /**
+   * 更新所有卡牌材质的时间uniform
+   * @param {number} currentTime - 当前时间（毫秒）
+   */
+  _updateCardMaterialsTime(currentTime) {
+    if (!this.scene) return;
+    
+    // 遍历场景中的所有对象，找到使用CardMaterial的对象
+    this.scene.traverse((object) => {
+      if (object.isMesh && object.material) {
+        // 检查是否是CardMaterial（通过uniforms判断）
+        if (object.material.uniforms && object.material.uniforms.uTime) {
+          object.material.uniforms.uTime.value = currentTime / 1000; // 转换为秒
+        }
+      }
+    });
   }
 
   /**
@@ -194,6 +223,18 @@ class ThreeRoot {
     // 更新后处理管线
     if (this.passStack) {
       this.passStack.setSize(width, height);
+    }
+
+    // 通知SceneGraphAdapter更新布局
+    // 通过全局访问或回调机制
+    try {
+      const { getSceneGraphAdapter } = require('../ecs/SceneGraphAdapter.js');
+      const sceneGraphAdapter = getSceneGraphAdapter();
+      if (sceneGraphAdapter && sceneGraphAdapter.updateLayout) {
+        sceneGraphAdapter.updateLayout();
+      }
+    } catch (e) {
+      // 忽略导入错误，可能还未初始化
     }
 
     console.log('[ThreeRoot] Window resized:', { width, height });

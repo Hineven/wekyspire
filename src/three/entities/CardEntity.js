@@ -25,6 +25,8 @@ class CardEntity {
     };
 
     this.group = new THREE.Group();
+    // 设置卡牌组的renderOrder，确保渲染顺序正确
+    this.group.renderOrder = 1;
     this.textFactory = getTextFactory();
     this.components = {};
 
@@ -73,6 +75,9 @@ class CardEntity {
 
     // 背景在最底层，z=0
     mesh.position.z = 0;
+    
+    // 确保背景渲染在所有子元素之下
+    mesh.renderOrder = 0;
 
     this.group.add(mesh);
     this.components.background = { mesh, material };
@@ -96,6 +101,8 @@ class CardEntity {
       maxWidth: 180
     });
     titleText.position.set(0, 110, 0.02);
+    titleText.renderOrder = 2;
+
     this.group.add(titleText);
     this.components.titleText = titleText;
 
@@ -109,6 +116,8 @@ class CardEntity {
         maxWidth: 180
       });
       subtitleText.position.set(0, 88, 0.02);
+      subtitleText.renderOrder = 2;
+
       this.group.add(subtitleText);
       this.components.subtitleText = subtitleText;
     }
@@ -130,6 +139,7 @@ class CardEntity {
 
     const descGroup = coloredTextComponent.getObject3D();
     descGroup.position.set(-85, 50, 0.02);
+    descGroup.renderOrder = 2;
     this.group.add(descGroup);
     this.components.descGroup = descGroup;
     this.components.coloredText = coloredTextComponent;
@@ -141,6 +151,7 @@ class CardEntity {
   _createCostIcons() {
     const costs = this.skillData.costs || {};
     const costGroup = new THREE.Group();
+    costGroup.renderOrder = 2;
 
     let offsetX = -80;
 
@@ -215,6 +226,7 @@ class CardEntity {
       outlineColor: 0x000000
     });
     tierText.position.set(85, 110, 0.02);
+    tierText.renderOrder = 2;
     this.group.add(tierText);
     this.components.tierText = tierText;
   }
@@ -227,6 +239,7 @@ class CardEntity {
     if (features.length === 0) return;
 
     const featureGroup = new THREE.Group();
+    featureGroup.renderOrder = 2;
 
     for (let i = 0; i < Math.min(features.length, 3); i++) {
       const feature = features[i];
@@ -288,7 +301,100 @@ class CardEntity {
       this.textFactory.updateText(this.components.titleText, newSkillData.name);
     }
 
-    // TODO: 更新其他组件
+    // 更新副标题
+    if (this.components.subtitleText) {
+      const subtitle = newSkillData.subtitle || '';
+      if (subtitle) {
+        this.textFactory.updateText(this.components.subtitleText, subtitle);
+      } else {
+        // 如果副标题为空，隐藏或移除
+        this.components.subtitleText.visible = false;
+      }
+    }
+
+    // 更新描述文本
+    if (this.components.coloredText) {
+      this.components.coloredText.update(newSkillData.description || '');
+    }
+
+    // 更新费用图标
+    this._updateCostIcons();
+
+    // 更新等阶标签
+    if (this.components.tierText) {
+      const tier = newSkillData.tier || 1;
+      this.textFactory.updateText(this.components.tierText, `T${tier}`);
+    }
+
+    // 更新特性图标
+    this._updateFeatures();
+  }
+
+  /**
+   * 更新费用图标
+   */
+  _updateCostIcons() {
+    const costs = this.skillData.costs || {};
+    
+    // 移除旧的费用图标
+    if (this.components.costGroup) {
+      this.components.costGroup.children.forEach(child => {
+        this.components.costGroup.remove(child);
+        // 清理材质和几何体
+        if (child.material) {
+          child.material.dispose();
+        }
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+      });
+    }
+
+    let offsetX = -80;
+
+    // 魔力费用
+    if (costs.mana) {
+      const manaIcon = this._createCostIcon('M', costs.mana, 0x0088ff);
+      manaIcon.position.x = offsetX;
+      this.components.costGroup.add(manaIcon);
+      offsetX += 30;
+    }
+
+    // 行动点费用
+    if (costs.actionPoints) {
+      const apIcon = this._createCostIcon('A', costs.actionPoints, 0xffd700);
+      apIcon.position.x = offsetX;
+      this.components.costGroup.add(apIcon);
+      offsetX += 30;
+    }
+  }
+
+  /**
+   * 更新特性图标
+   */
+  _updateFeatures() {
+    const features = this.skillData.features || [];
+    
+    // 移除旧的特性图标
+    if (this.components.featureGroup) {
+      this.components.featureGroup.children.forEach(child => {
+        this.components.featureGroup.remove(child);
+        // 清理材质和几何体
+        if (child.material) {
+          child.material.dispose();
+        }
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+      });
+    }
+
+    for (let i = 0; i < Math.min(features.length, 3); i++) {
+      const feature = features[i];
+      const icon = this._createFeatureIcon(feature);
+      icon.position.x = i * 25;
+      this.components.featureGroup.add(icon);
+    }
   }
 
   /**
@@ -297,6 +403,55 @@ class CardEntity {
   setDisabled(disabled) {
     if (this.components.background) {
       this.components.background.material.setDisabled(disabled);
+    }
+  }
+
+  /**
+   * 设置高亮效果
+   * @param {number} intensity - 高亮强度 (0.0 - 1.0)
+   */
+  setHighlight(intensity) {
+    if (this.components.background) {
+      this.components.background.material.setHighlight(intensity);
+    }
+  }
+
+  /**
+   * 设置冷却效果
+   * @param {number} progress - 冷却进度 (0.0 - 1.0)
+   */
+  setCooldown(progress) {
+    if (this.components.background) {
+      this.components.background.material.setCooldownProgress(progress);
+    }
+  }
+
+  /**
+   * 设置焚毁效果
+   * @param {number} progress - 焚毁进度 (0.0 - 1.0)
+   */
+  setBurn(progress) {
+    if (this.components.background) {
+      this.components.background.material.setBurnProgress(progress);
+    }
+  }
+
+  /**
+   * 设置闪光效果
+   * @param {number} intensity - 闪光强度 (0.0 - 1.0)
+   */
+  setFlash(intensity) {
+    if (this.components.background) {
+      this.components.background.material.setFlashIntensity(intensity);
+    }
+  }
+
+  /**
+   * 重置所有特效
+   */
+  resetEffects() {
+    if (this.components.background) {
+      this.components.background.material.resetEffects();
     }
   }
 

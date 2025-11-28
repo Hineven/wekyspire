@@ -49,22 +49,39 @@ class InputSystem {
     this.domElement = domElement;
 
     // 注册事件监听
+    // 使用pointer事件处理鼠标和触摸
     this.domElement.addEventListener('pointerdown', this.onPointerDown);
     this.domElement.addEventListener('pointermove', this.onPointerMove);
     this.domElement.addEventListener('pointerup', this.onPointerUp);
     this.domElement.addEventListener('pointerleave', this.onPointerLeave);
+    
+    // 额外添加触摸事件支持，确保在各种设备上都能正常工作
+    this.domElement.addEventListener('touchstart', this.onPointerDown);
+    this.domElement.addEventListener('touchmove', this.onPointerMove);
+    this.domElement.addEventListener('touchend', this.onPointerUp);
+    this.domElement.addEventListener('touchcancel', this.onPointerUp);
 
     this.isInitialized = true;
     console.log('[InputSystem] Initialized');
   }
 
   /**
-   * 更新鼠标NDC坐标
+   * 更新鼠标/触摸NDC坐标
    */
   updateMousePosition(event) {
     const rect = this.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // 处理触摸事件
+    if (event.touches && event.touches.length > 0) {
+      // 使用第一个触摸点
+      const touch = event.touches[0];
+      this.mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+    } else {
+      // 处理鼠标事件
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
   }
 
   /**
@@ -137,6 +154,10 @@ class InputSystem {
 
     // 视觉反馈：放大
     object3D.scale.multiplyScalar(1.1);
+    
+    // 提升z坐标，确保拖拽的卡牌渲染在最上层
+    this.originalZ = object3D.position.z;
+    object3D.position.z = 100; // 设置一个很高的z值
 
     // 发出事件
     frontendEventBus.emit('card-drag-start', {
@@ -181,20 +202,56 @@ class InputSystem {
       // 应用偏移
       target.sub(this.dragOffset);
 
-      // 限制在屏幕范围内（简单实现）
-      const maxX = 400;
-      const maxY = 300;
-      target.x = THREE.MathUtils.clamp(target.x, -maxX, maxX);
-      target.y = THREE.MathUtils.clamp(target.y, -maxY, maxY);
+      // 动态计算边界限制（基于当前相机和屏幕尺寸）
+      const bounds = this._calculateDragBounds();
+      target.x = THREE.MathUtils.clamp(target.x, bounds.minX, bounds.maxX);
+      target.y = THREE.MathUtils.clamp(target.y, bounds.minY, bounds.maxY);
 
-      this.draggedEntity.object3D.position.copy(target);
+      // 平滑更新位置
+      this.draggedEntity.object3D.position.lerp(target, 0.2);
 
       // 发出拖拽事件
       frontendEventBus.emit('card-dragging', {
         id: this.draggedEntity.id,
-        position: { x: target.x, y: target.y }
+        position: { 
+          x: this.draggedEntity.object3D.position.x, 
+          y: this.draggedEntity.object3D.position.y 
+        }
       });
     }
+  }
+
+  /**
+   * 计算拖拽边界
+   * @returns {Object} {minX, maxX, minY, maxY}
+   */
+  _calculateDragBounds() {
+    if (!this.camera || !this.domElement) {
+      return { minX: -400, maxX: 400, minY: -300, maxY: 300 };
+    }
+
+    // 获取屏幕尺寸
+    const rect = this.domElement.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+
+    // 计算边界（基于相机视锥体）
+    const distance = this.camera.position.z;
+    const fov = this.camera.fov * Math.PI / 180;
+    const aspect = this.camera.aspect;
+
+    // 计算视锥体在z=0平面的高度和宽度
+    const heightAtZ0 = 2 * Math.tan(fov / 2) * distance;
+    const widthAtZ0 = heightAtZ0 * aspect;
+
+    // 边界留出10%的边距
+    const margin = 0.1;
+    const minX = -widthAtZ0 / 2 * (1 - margin);
+    const maxX = widthAtZ0 / 2 * (1 - margin);
+    const minY = -heightAtZ0 / 2 * (1 - margin);
+    const maxY = heightAtZ0 / 2 * (1 - margin);
+
+    return { minX, maxX, minY, maxY };
   }
 
   /**
@@ -238,6 +295,12 @@ class InputSystem {
 
       // 恢复缩放
       object3D.scale.divideScalar(1.1);
+      
+      // 恢复原始z坐标
+      if (this.originalZ !== undefined) {
+        object3D.position.z = this.originalZ;
+        this.originalZ = undefined;
+      }
 
       // 发出事件（后端会处理卡牌使用逻辑）
       frontendEventBus.emit('card-drag-end', {
@@ -245,7 +308,8 @@ class InputSystem {
         skillData: entity.components.card?.skillData,
         position: {
           x: object3D.position.x,
-          y: object3D.position.y
+          y: object3D.position.y,
+          z: object3D.position.z
         }
       });
 
@@ -291,6 +355,12 @@ class InputSystem {
       this.domElement.removeEventListener('pointermove', this.onPointerMove);
       this.domElement.removeEventListener('pointerup', this.onPointerUp);
       this.domElement.removeEventListener('pointerleave', this.onPointerLeave);
+      
+      // 移除触摸事件监听器
+      this.domElement.removeEventListener('touchstart', this.onPointerDown);
+      this.domElement.removeEventListener('touchmove', this.onPointerMove);
+      this.domElement.removeEventListener('touchend', this.onPointerUp);
+      this.domElement.removeEventListener('touchcancel', this.onPointerUp);
     }
 
     this.camera = null;

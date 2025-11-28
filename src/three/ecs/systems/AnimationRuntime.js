@@ -35,6 +35,13 @@ const DEFAULT_TRACKING_LERP = 0.15; // 线性插值系数
  */
 class Tween {
   constructor(object, targetProps, duration, options = {}) {
+    this.reset(object, targetProps, duration, options);
+  }
+
+  /**
+   * 重置Tween对象，用于对象池重用
+   */
+  reset(object, targetProps, duration, options = {}) {
     this.object = object;
     this.targetProps = targetProps;
     this.duration = duration;
@@ -52,6 +59,8 @@ class Tween {
     for (const key in targetProps) {
       this.startProps[key] = this.getNestedValue(object, key);
     }
+    
+    return this;
   }
 
   getNestedValue(obj, path) {
@@ -139,6 +148,11 @@ class AnimationRuntime {
     // 活动Tween列表
     this.activeTweens = [];
 
+    // Tween对象池
+    this.tweenPool = [];
+    this.maxPoolSize = 100; // 预分配100个Tween对象
+    this._initializeTweenPool();
+
     // 容器锚点: containerKey -> Map<entityId, anchor>
     this.containerAnchors = new Map();
 
@@ -150,6 +164,41 @@ class AnimationRuntime {
     this.trackingLerp = DEFAULT_TRACKING_LERP;
 
     this.isInitialized = false;
+  }
+
+  /**
+   * 初始化Tween对象池
+   */
+  _initializeTweenPool() {
+    for (let i = 0; i < this.maxPoolSize; i++) {
+      // 创建空Tween对象并加入池
+      const tween = new Tween({}, {}, 0);
+      this.tweenPool.push(tween);
+    }
+  }
+
+  /**
+   * 从对象池获取Tween对象
+   */
+  _getTweenFromPool(object, targetProps, duration, options = {}) {
+    let tween;
+    if (this.tweenPool.length > 0) {
+      tween = this.tweenPool.pop();
+      tween.reset(object, targetProps, duration, options);
+    } else {
+      // 池为空时创建新对象
+      tween = new Tween(object, targetProps, duration, options);
+    }
+    return tween;
+  }
+
+  /**
+   * 回收Tween对象到对象池
+   */
+  _returnTweenToPool(tween) {
+    if (this.tweenPool.length < this.maxPoolSize) {
+      this.tweenPool.push(tween);
+    }
   }
 
   /**
@@ -216,6 +265,15 @@ class AnimationRuntime {
    */
   onAnimateElement(payload) {
     const { id, from = {}, to = {}, duration = 300, ease, anchor, instructionId } = payload;
+
+    // 检查entityStore是否存在
+    if (!this.entityStore) {
+      console.warn(`[AnimationRuntime] EntityStore not initialized - animate-element event ignored`);
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+      return;
+    }
 
     const entity = this.entityStore.getEntity(id);
     if (!entity || !entity.object3D) {
@@ -286,9 +344,9 @@ class AnimationRuntime {
       opacityTarget = to.opacity;
     }
 
-    // 创建tween
+    // 创建tween（使用对象池）
     const durationSec = Math.max(0.001, duration / 1000);
-    const tween = new Tween(object3D, targetProps, durationSec, {
+    const tween = this._getTweenFromPool(object3D, targetProps, durationSec, {
       easing: ease ? this._getEasingFunction(ease) : undefined,
       onUpdate: hasOpacity ? (t) => {
         const opacity = opacityStart + (opacityTarget - opacityStart) * t;
@@ -304,9 +362,15 @@ class AnimationRuntime {
         if (instructionId) {
           frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
         }
+
+        // 回收Tween到对象池
+        this._returnTweenToPool(tween);
       },
       onInterrupt: () => {
         stateEntry.currentTween = null;
+
+        // 回收Tween到对象池
+        this._returnTweenToPool(tween);
       }
     });
 
@@ -320,12 +384,33 @@ class AnimationRuntime {
   onAnimateToAnchor(payload) {
     const { id, anchor = 'rest', duration = 300, ease, instructionId } = payload;
 
+    // 检查entityStore是否存在
+    if (!this.entityStore) {
+      console.warn(`[AnimationRuntime] EntityStore not initialized - animate-to-anchor event ignored`);
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+      return;
+    }
+
     // 查找锚点
     const entity = this.entityStore.getEntity(id);
-    if (!entity) return;
+    if (!entity) {
+      console.warn(`[AnimationRuntime] Entity not found: ${id}`);
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+      return;
+    }
 
     const anchorData = entity.anchor || this.getAnchorPoint(anchor);
-    if (!anchorData) return;
+    if (!anchorData) {
+      console.warn(`[AnimationRuntime] Anchor not found: ${anchor}`);
+      if (instructionId) {
+        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      }
+      return;
+    }
 
     // 转换为animate-element格式
     this.onAnimateElement({
@@ -347,6 +432,13 @@ class AnimationRuntime {
    */
   onEnterTracking(payload) {
     const { id, durationMs, ease } = payload;
+    
+    // 检查entityStore是否存在
+    if (!this.entityStore) {
+      console.warn(`[AnimationRuntime] EntityStore not initialized - enter-tracking event ignored`);
+      return;
+    }
+    
     const entity = this.entityStore.getEntity(id);
     if (!entity) return;
 
@@ -401,11 +493,23 @@ class AnimationRuntime {
 
     this.containerAnchors.set(containerKey, anchorsMap);
 
+    // 检查entityStore是否存在
+    if (!this.entityStore) {
+      console.warn(`[AnimationRuntime] EntityStore not initialized - update-anchors event ignored`);
+      return;
+    }
+
     // 更新实体的anchor引用
     for (const [entityId, anchor] of anchorsMap) {
       const entity = this.entityStore.getEntity(entityId);
       if (entity) {
         entity.anchor = anchor;
+        
+        // 如果实体正在跟踪锚点，确保它能平滑过渡到新位置
+        const stateEntry = this.stateRegistry.get(entityId);
+        if (stateEntry && stateEntry.state === STATES.TRACKING) {
+          // 不需要额外操作，updateTracking会处理平滑过渡
+        }
       }
     }
   }
@@ -424,7 +528,7 @@ class AnimationRuntime {
   getAnchorPoint(anchorName) {
     // 如果是对象形式的坐标
     if (typeof anchorName === 'object' && anchorName.x != null && anchorName.y != null) {
-      return { x: anchorName.x, y: anchorName.y };
+      return { x: anchorName.x, y: anchorName.y, z: anchorName.z || 0 };
     }
 
     // 从全局锚点获取
@@ -436,7 +540,8 @@ class AnimationRuntime {
     // 默认返回屏幕中心
     return {
       x: 0,
-      y: 0
+      y: 0,
+      z: 0
     };
   }
 
@@ -464,6 +569,11 @@ class AnimationRuntime {
    * 更新跟踪状态
    */
   updateTracking(deltaTime) {
+    // 检查entityStore是否存在
+    if (!this.entityStore) {
+      return;
+    }
+    
     for (const [entityId, stateEntry] of this.stateRegistry) {
       if (stateEntry.state !== STATES.TRACKING) continue;
 
@@ -472,20 +582,34 @@ class AnimationRuntime {
 
       const object3D = entity.object3D;
       const anchor = entity.anchor;
+      
+      // 使用配置的插值系数或默认值
+      const lerpFactor = stateEntry.trackingConfig ? this.trackingLerp : 0.1;
 
-      // 平滑跟随锚点
-      const target = new THREE.Vector3(anchor.x, anchor.y, anchor.z || 0);
-      object3D.position.lerp(target, this.trackingLerp);
+      // 平滑跟随锚点位置
+      const targetPos = new THREE.Vector3(anchor.x, anchor.y, anchor.z || 0);
+      object3D.position.lerp(targetPos, lerpFactor);
 
-      // 同步旋转
+      // 平滑跟随旋转（如果有）
       if (anchor.rotation !== undefined) {
-        object3D.rotation.z = anchor.rotation;
+        // 自定义角度插值，避免绕远路
+        const currentRotation = object3D.rotation.z;
+        const targetRotation = anchor.rotation;
+        
+        // 计算最短路径的角度差
+        let delta = targetRotation - currentRotation;
+        while (delta > Math.PI) delta -= 2 * Math.PI;
+        while (delta < -Math.PI) delta += 2 * Math.PI;
+        
+        // 线性插值
+        const lerpedRotation = currentRotation + delta * lerpFactor;
+        object3D.rotation.z = lerpedRotation;
       }
 
-      // 同步缩放
+      // 平滑跟随缩放（如果有）
       if (anchor.scale !== undefined) {
         const targetScale = new THREE.Vector3(anchor.scale, anchor.scale, anchor.scale);
-        object3D.scale.lerp(targetScale, this.trackingLerp);
+        object3D.scale.lerp(targetScale, lerpFactor);
       }
     }
   }
@@ -538,10 +662,13 @@ class AnimationRuntime {
    * 停止所有动画
    */
   stopAll() {
-    for (const tween of this.activeTweens) {
+    for (let i = this.activeTweens.length - 1; i >= 0; i--) {
+      const tween = this.activeTweens[i];
       tween.interrupt();
+      // 回收Tween到对象池
+      this._returnTweenToPool(tween);
+      this.activeTweens.splice(i, 1);
     }
-    this.activeTweens = [];
 
     for (const [entityId, stateEntry] of this.stateRegistry) {
       stateEntry.state = STATES.IDLE;

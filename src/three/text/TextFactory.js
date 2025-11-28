@@ -118,30 +118,111 @@ class TextFactory {
    */
   createColoredText(segments, baseStyle = {}) {
     const group = new THREE.Group();
-    let offsetX = 0;
-
-    const fontSize = baseStyle.fontSize || this.defaultFontSize;
-    const lineHeight = baseStyle.lineHeight || 1.2;
-
+    
+    // 存储文本段和它们的位置信息
+    const textSegments = [];
+    
+    // 首先创建所有文本段
     for (const segment of segments) {
-      const textMesh = this.createText(segment.text, {
+      const textMesh = new Text();
+      textMesh.text = segment.text;
+      
+      // 应用样式
+      this.applyStyle(textMesh, {
         ...baseStyle,
         color: segment.color || this.defaultColor,
         anchorX: 'left',
         anchorY: 'middle'
       });
-
-      // 定位
-      textMesh.position.x = offsetX;
-
+      
+      textSegments.push({
+        mesh: textMesh,
+        segment
+      });
+      
       group.add(textMesh);
-
-      // 计算下一个段落的偏移（需要等待sync完成后获取宽度）
-      // 这里暂时使用估算，实际应该在sync回调中处理
-      offsetX += segment.text.length * fontSize * 0.6; // 粗略估算
     }
-
+    
+    // 同步所有文本段并计算准确位置
+    this._syncColoredTextSegments(textSegments);
+    
     return group;
+  }
+
+  /**
+   * 同步彩色文本段并计算准确位置
+   * @param {Array} textSegments - 文本段数组
+   */
+  _syncColoredTextSegments(textSegments) {
+    if (textSegments.length === 0) return;
+    
+    let processedCount = 0;
+    let currentOffsetX = 0;
+    
+    // 为每个文本段添加sync回调
+    textSegments.forEach((item, index) => {
+      const { mesh } = item;
+      
+      // 保存原始的onSync回调
+      const originalOnSync = mesh.onSync;
+      
+      // 设置新的onSync回调来处理位置计算
+      mesh.onSync = () => {
+        // 调用原始回调（如果有）
+        if (originalOnSync) {
+          originalOnSync();
+        }
+        
+        // 计算当前文本段的位置
+        mesh.position.x = currentOffsetX;
+        
+        // 更新下一个文本段的偏移量
+        // 使用textBounds来获取准确的文本宽度
+        if (mesh.textBounds) {
+          currentOffsetX += mesh.textBounds.width;
+        } else {
+          // 后备方案：使用字符数估算
+          const fontSize = mesh.fontSize || this.defaultFontSize;
+          currentOffsetX += mesh.text.length * fontSize * 0.6;
+        }
+        
+        processedCount++;
+        
+        // 当所有文本段都处理完成后，再次同步以确保最终位置正确
+        if (processedCount === textSegments.length) {
+          textSegments.forEach(segment => {
+            segment.mesh.sync();
+          });
+        }
+      };
+      
+      // 首次同步
+      mesh.sync();
+    });
+  }
+
+  /**
+   * 更新彩色文本段落
+   * @param {THREE.Group} group - 彩色文本组
+   * @param {Array} segments - 新的文本段落数组
+   * @param {Object} baseStyle - 基础样式
+   */
+  updateColoredText(group, segments, baseStyle = {}) {
+    // 移除旧的文本段
+    group.children.forEach(child => {
+      if (child instanceof Text) {
+        group.remove(child);
+        this.dispose(child);
+      }
+    });
+    
+    // 创建新的彩色文本段
+    const newGroup = this.createColoredText(segments, baseStyle);
+    
+    // 将新的文本段添加到现有组
+    newGroup.children.forEach(child => {
+      group.add(child);
+    });
   }
 
   /**
