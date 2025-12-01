@@ -1,16 +1,13 @@
 <template>
   <div id="debug-app">
-    <ArenaDebugScreen />
   </div>
 </template>
 
 <script>
-import ArenaDebugScreen from './components/global/ArenaDebugScreen.vue';
 
 export default {
   name: 'DebugApp',
   components: {
-    ArenaDebugScreen
   }
 };
 </script>
