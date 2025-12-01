@@ -30,12 +30,12 @@
 #### 需要迁移至Three.js的元素（分阶段实施）
 - **第一阶段（当前重构）**：核心战斗元素（卡牌、面板、粒子、特效）
 - **第二阶段（后续重构）**：
-  - `FloatingTooltip`、`FloatingCardTooltip` → Three.js舞台元素（3D浮动面板）
-  - `CutsceneScreen` → Three.js场景过场动画
-  - `MessagePopupScreen` → Three.js弹窗元素
-  - `PlayerInputController` → 集成至InputSystem
-  - `BattleLogPanel` → Three.js文本滚动面板
-  - `ActionPanel`按钮 → Three.js可交互按钮元素
+    - `FloatingTooltip`、`FloatingCardTooltip` → Three.js舞台元素（3D浮动面板）
+    - `CutsceneScreen` → Three.js场景过场动画
+    - `MessagePopupScreen` → Three.js弹窗元素
+    - `PlayerInputController` → 集成至InputSystem
+    - `BattleLogPanel` → Three.js文本滚动面板
+    - `ActionPanel`按钮 → Three.js可交互按钮元素
 
 #### 核心抽象保留与迁移
 - **保留**：`animationSequencer`（动画指令队列）、`frontendEventBus`（事件总线）、`displayGameState`（响应式状态）
@@ -320,6 +320,7 @@ CardEntity (THREE.Group)
 - 卡牌尺寸：198x266像素（原DOM尺寸）
 - 文本排版：使用Troika的anchorX/anchorY居中对齐
 - 图标位置：通过偏移量手动定位（费用图标、等阶标签）
+- z-index：卡牌背景（Plane Mesh）设为1，文本（Troika Text）设为2，图标（Sprite）设为3，所有z-index在卡牌本身的z-index上做偏移，保证卡牌之间正确的遮挡关系。
 
 #### 3.5.2 卡牌内容组件迁移
 
@@ -662,10 +663,10 @@ BattleScreen (Three.js Scene + 最小Vue HUD)
 **迁移策略**：
 - **完全迁移（阶段1）**：EnemyStatusPanel、PlayerStatusPanel → Three.js面板实体
 - **临时保留Vue（标记TODO）**：
-  - ActionPanel按钮 → **TODO: 阶段2** 迁移为Three.js可交互按钮元素
-  - BattleLogPanel → **TODO: 阶段2** 迁移为Three.js文本滚动面板（类似RPG游戏的3D战斗日志）
-  - FloatingTooltip/FloatingCardTooltip → **TODO: 阶段2** 迁移为Three.js 3D浮动面板（带深度感的舞台元素）
-  - CardsDisplayOverlayPanel → **TODO: 阶段2** 迁移为Three.js卡牌展示面板
+    - ActionPanel按钮 → **TODO: 阶段2** 迁移为Three.js可交互按钮元素
+    - BattleLogPanel → **TODO: 阶段2** 迁移为Three.js文本滚动面板（类似RPG游戏的3D战斗日志）
+    - FloatingTooltip/FloatingCardTooltip → **TODO: 阶段2** 迁移为Three.js 3D浮动面板（带深度感的舞台元素）
+    - CardsDisplayOverlayPanel → **TODO: 阶段2** 迁移为Three.js卡牌展示面板
 - **永久保留Vue（最小HUD）**：DialogScreen、AudioControllerScreen、Changelog
 
 **锚点管理**：
@@ -710,11 +711,11 @@ RestScreen (Three.js Scene + 最小Vue HUD)
 
 **迁移策略**：
 - **完全迁移（阶段1）**：
-  - PlayerStatusPanel → Three.js面板实体（复用battle的实现）
-  - 技能卡片preview → Three.js CardEntity（preview模式）
+    - PlayerStatusPanel → Three.js面板实体（复用battle的实现）
+    - 技能卡片preview → Three.js CardEntity（preview模式）
 - **临时保留Vue（标记TODO）**：
-  - 所有奖励面板 → **TODO: 阶段2** 迁移为Three.js舞台元素（3D面板带过渡动画）
-  - 按钮与控制面板 → **TODO: 阶段2** 迁移为Three.js可交互元素
+    - 所有奖励面板 → **TODO: 阶段2** 迁移为Three.js舞台元素（3D面板带过渡动画）
+    - 按钮与控制面板 → **TODO: 阶段2** 迁移为Three.js可交互元素
 - **永久保留Vue（最小HUD）**：DialogScreen、AudioControllerScreen、Changelog
 
 **技能卡片preview模式**：
@@ -801,10 +802,12 @@ RestScreen (Three.js Scene + 最小Vue HUD)
 - 前后端事件总线分离
 
 **AnimationRuntime的桥接职责**：
-1. 监听`animate-element`事件（由animationSequencer的start回调发出）
-2. 解析payload，创建Tween
-3. 执行动画
-4. 完成后发出`animation-instruction-finished`
+作为animator的超集，接替animator管理所有Animatable Element的状态机、anchor、tween，并执行tween。
+1. 管理所有Animatable Element的状态机，具体查阅旧`animator`实现。
+2. 监听`animate-element`事件（由animationSequencer的start回调发出）
+3. 解析payload，创建Tween
+4. 执行动画
+5. 完成后发出`animation-instruction-finished`
 
 **示例指令流程**（抽卡动画）：
 ```
@@ -864,8 +867,8 @@ RestScreen (Three.js Scene + 最小Vue HUD)
 - 适配器模式 → EntityStore的Component系统
 
 **animator.js处理策略**：
-- **保留文件**：作为过渡期兼容层，逐步废弃
-- **工程实施时参考**：开发者可查看旧实现中的状态转换逻辑、锚点计算方法
+- **保留文件**：在完成Animator重构后废弃
+- **工程实施时参考**：开发者可查看旧实现中的状态转换逻辑、锚点计算方法，务必深刻理解动画系统、前后端分离的思想
 
 ## 六、完整组件迁移映射表
 
@@ -1072,33 +1075,33 @@ RestScreen (Three.js Scene + 最小Vue HUD)
 **待迁移元素清单**：
 
 1. **提示系统** → Three.js 3D浮动面板
-   - `FloatingTooltip` → 带深度感的悬浮提示面板
-   - `FloatingCardTooltip` → 3D卡牌详情展示面板
-   - 支持3D空间定位、视角跟随、景深效果
+    - `FloatingTooltip` → 带深度感的悬浮提示面板
+    - `FloatingCardTooltip` → 3D卡牌详情展示面板
+    - 支持3D空间定位、视角跟随、景深效果
 
 2. **战斗UI元素** → Three.js交互舞台元素
-   - `BattleLogPanel` → 3D文本滚动面板（类似RPG的战斗日志）
-   - `ActionPanel`按钮 → 可交互的3D按钮元素（悬停/点击效果）
-   - `CardsDisplayOverlayPanel` → 3D卡牌展示面板（牌库/坟地查看）
+    - `BattleLogPanel` → 3D文本滚动面板（类似RPG的战斗日志）
+    - `ActionPanel`按钮 → 可交互的3D按钮元素（悬停/点击效果）
+    - `CardsDisplayOverlayPanel` → 3D卡牌展示面板（牌库/坟地查看）
 
 3. **休整UI元素** → Three.js奖励舞台
-   - `MoneyRewardPanel` → 3D金币奖励面板（粒子特效）
-   - `BreakthroughRewardPanel` → 3D突破效果面板
-   - `SkillRewardPanel` → 3D技能选择舞台（卡片已在阶段1迁移）
-   - `UpgradeRewardPanel` → 3D升级舞台
-   - `ShopPanel` → 3D商店场景（商品陈列）
-   - `RestControlPanel` → 3D控制按钮组
-   - `PreparationPanel` → 3D技能排序面板
-   - `SkillSelectionPanel` → 3D技能替换选择面板
-   - `AbilityRewardPanel` → 3D能力奖励面板（如存在）
+    - `MoneyRewardPanel` → 3D金币奖励面板（粒子特效）
+    - `BreakthroughRewardPanel` → 3D突破效果面板
+    - `SkillRewardPanel` → 3D技能选择舞台（卡片已在阶段1迁移）
+    - `UpgradeRewardPanel` → 3D升级舞台
+    - `ShopPanel` → 3D商店场景（商品陈列）
+    - `RestControlPanel` → 3D控制按钮组
+    - `PreparationPanel` → 3D技能排序面板
+    - `SkillSelectionPanel` → 3D技能替换选择面板
+    - `AbilityRewardPanel` → 3D能力奖励面板（如存在）
 
 4. **消息系统** → Three.js剧场元素
-   - `MessagePopupScreen` → 3D弹窗元素（带入场/出场动画）
-   - `CutsceneScreen` → Three.js过场动画场景（相机运镜）
+    - `MessagePopupScreen` → 3D弹窗元素（带入场/出场动画）
+    - `CutsceneScreen` → Three.js过场动画场景（相机运镜）
 
 5. **输入系统集成**
-   - `PlayerInputController` → 完全集成至Three.js InputSystem
-   - 异步输入处理迁移至Three.js事件系统
+    - `PlayerInputController` → 完全集成至Three.js InputSystem
+    - 异步输入处理迁移至Three.js事件系统
 
 **技术方案要点**：
 - **3D面板系统**：使用Plane Mesh + Troika Text + 交互层
