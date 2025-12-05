@@ -21,14 +21,9 @@ class CoordinateConverter {
    */
   screenToWorld(screenX, screenY) {
     // 计算世界坐标的缩放因子
-    const distance = this.camera.position.z;
-    const vFov = this.camera.fov * Math.PI / 180;
-    const height = 2 * Math.tan(vFov / 2) * distance;
-    const width = height * this.camera.aspect;
-
-    // 将屏幕坐标转换为世界坐标
-    const x = (screenX / window.innerWidth - 0.5) * width;
-    const y = -(screenY / window.innerHeight - 0.5) * height;
+    // 因为使用的是正交相机，所以仅使用少量计算即可
+    const x = (screenX / window.innerWidth) * (this.camera.right - this.camera.left) + this.camera.left;
+    const y = (1 - screenY / window.innerHeight) * (this.camera.top - this.camera.bottom) + this.camera.bottom;
 
     return new THREE.Vector3(x, y, 0);
   }

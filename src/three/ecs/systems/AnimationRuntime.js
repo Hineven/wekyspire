@@ -164,6 +164,14 @@ class AnimationRuntime {
     this.trackingLerp = DEFAULT_TRACKING_LERP;
 
     this.isInitialized = false;
+
+    this._trackingTargets = new Map();
+    this._tempVec3 = new THREE.Vector3();
+
+    // 特效定时器集合
+    this._effectTimers = new Set();
+
+    this._originalUnregister = null;
   }
 
   /**
@@ -207,6 +215,7 @@ class AnimationRuntime {
   init(entityStore) {
     this.entityStore = entityStore;
     this._setupEventListeners();
+    this._patchEntityStoreCleanup();
     this.isInitialized = true;
     console.log('[AnimationRuntime] Initialized');
   }
@@ -226,6 +235,9 @@ class AnimationRuntime {
 
     // 锚点更新事件
     frontendEventBus.on('update-anchors', this.onUpdateAnchors.bind(this));
+
+    // 效果完成事件
+    frontendEventBus.on('animate-element-effect', this.onAnimateElementEffect.bind(this));
   }
 
   /**
@@ -450,10 +462,14 @@ class AnimationRuntime {
     // 切换到tracking状态
     stateEntry.state = STATES.TRACKING;
     stateEntry.trackingConfig = {
-      durationMs: durationMs || this.trackingDuration * 1000,
+      durationMs: durationMs ?? this.trackingDuration * 1000,
       ease: ease || 'linear'
     };
-
+    this._trackingTargets.set(id, {
+      position: (entity.anchor && new THREE.Vector3(entity.anchor.x, entity.anchor.y, entity.anchor.z || 0)) || new THREE.Vector3(),
+      scale: entity.anchor?.scale ?? entity.object3D.scale.x,
+      rotation: entity.anchor?.rotation ?? entity.object3D.rotation.z
+    });
     console.log(`[AnimationRuntime] Entity ${id} entered tracking state`);
   }
 
@@ -467,7 +483,7 @@ class AnimationRuntime {
     this._killCurrentTween(stateEntry);
     stateEntry.state = STATES.IDLE;
     stateEntry.trackingConfig = null;
-
+    this._trackingTargets.delete(id);
     console.log(`[AnimationRuntime] Entity ${id} entered idle state`);
   }
 
@@ -480,7 +496,7 @@ class AnimationRuntime {
 
     this._killCurrentTween(stateEntry);
     stateEntry.state = STATES.DRAGGING;
-
+    this._trackingTargets.delete(id);
     console.log(`[AnimationRuntime] Entity ${id} entered dragging state`);
   }
 
@@ -508,7 +524,12 @@ class AnimationRuntime {
         // 如果实体正在跟踪锚点，确保它能平滑过渡到新位置
         const stateEntry = this.stateRegistry.get(entityId);
         if (stateEntry && stateEntry.state === STATES.TRACKING) {
-          // 不需要额外操作，updateTracking会处理平滑过渡
+          const target = this._trackingTargets.get(entityId);
+          if (target) {
+            target.position.set(anchor.x, anchor.y, anchor.z || 0);
+            if (anchor.scale !== undefined) target.scale = anchor.scale;
+            if (anchor.rotation !== undefined) target.rotation = anchor.rotation;
+          }
         }
       }
     }
@@ -569,47 +590,42 @@ class AnimationRuntime {
    * 更新跟踪状态
    */
   updateTracking(deltaTime) {
-    // 检查entityStore是否存在
     if (!this.entityStore) {
       return;
     }
-    
+
     for (const [entityId, stateEntry] of this.stateRegistry) {
       if (stateEntry.state !== STATES.TRACKING) continue;
-
       const entity = this.entityStore.getEntity(entityId);
       if (!entity || !entity.object3D || !entity.anchor) continue;
 
       const object3D = entity.object3D;
       const anchor = entity.anchor;
-      
-      // 使用配置的插值系数或默认值
-      const lerpFactor = stateEntry.trackingConfig ? this.trackingLerp : 0.1;
+      const target = this._trackingTargets.get(entityId);
+      if (!target) continue;
 
-      // 平滑跟随锚点位置
-      const targetPos = new THREE.Vector3(anchor.x, anchor.y, anchor.z || 0);
-      object3D.position.lerp(targetPos, lerpFactor);
+      const config = stateEntry.trackingConfig || { durationMs: this.trackingDuration * 1000, ease: 'linear' };
+      const duration = Math.max(1, config.durationMs);
+      const lerpAlpha = Math.min(1, deltaTime / (duration / 1000));
+      const easeFn = this._getEasingFunction(config.ease || 'linear');
+      const eased = easeFn(Math.min(1, lerpAlpha));
 
-      // 平滑跟随旋转（如果有）
-      if (anchor.rotation !== undefined) {
-        // 自定义角度插值，避免绕远路
-        const currentRotation = object3D.rotation.z;
-        const targetRotation = anchor.rotation;
-        
-        // 计算最短路径的角度差
-        let delta = targetRotation - currentRotation;
-        while (delta > Math.PI) delta -= 2 * Math.PI;
-        while (delta < -Math.PI) delta += 2 * Math.PI;
-        
-        // 线性插值
-        const lerpedRotation = currentRotation + delta * lerpFactor;
-        object3D.rotation.z = lerpedRotation;
+      this._tempVec3.set(anchor.x, anchor.y, anchor.z || 0);
+      target.position.lerp(this._tempVec3, 1);
+      object3D.position.lerp(target.position, eased);
+
+      if (anchor.scale !== undefined) {
+        target.scale = THREE.MathUtils.lerp(target.scale ?? object3D.scale.x, anchor.scale, 1);
+        const currentScale = object3D.scale.x + (target.scale - object3D.scale.x) * eased;
+        object3D.scale.setScalar(currentScale);
       }
 
-      // 平滑跟随缩放（如果有）
-      if (anchor.scale !== undefined) {
-        const targetScale = new THREE.Vector3(anchor.scale, anchor.scale, anchor.scale);
-        object3D.scale.lerp(targetScale, lerpFactor);
+      if (anchor.rotation !== undefined) {
+        const currentRotation = object3D.rotation.z;
+        let delta = anchor.rotation - currentRotation;
+        while (delta > Math.PI) delta -= 2 * Math.PI;
+        while (delta < -Math.PI) delta += 2 * Math.PI;
+        object3D.rotation.z = currentRotation + delta * eased;
       }
     }
   }
@@ -685,6 +701,12 @@ class AnimationRuntime {
     this.stateRegistry.clear();
     this.containerAnchors.clear();
     this.globalAnchors.clear();
+    this._trackingTargets.clear();
+    if (this.entityStore && this._patchedEntityStore && this._originalUnregister) {
+      this.entityStore.unregister = this._originalUnregister;
+      this._originalUnregister = null;
+    }
+    this._patchedEntityStore = false;
 
     frontendEventBus.off('animate-element', this.onAnimateElement);
     frontendEventBus.off('animate-element-to-anchor', this.onAnimateToAnchor);
@@ -692,11 +714,64 @@ class AnimationRuntime {
     frontendEventBus.off('enter-element-idle', this.onEnterIdle);
     frontendEventBus.off('enter-element-dragging', this.onEnterDragging);
     frontendEventBus.off('update-anchors', this.onUpdateAnchors);
+    frontendEventBus.off('animate-element-effect', this.onAnimateElementEffect);
+
+    // 清理所有特效定时器
+    this._effectTimers.forEach((timerId) => clearTimeout(timerId));
+    this._effectTimers.clear();
 
     this.entityStore = null;
     this.isInitialized = false;
 
     console.log('[AnimationRuntime] Disposed');
+  }
+
+  /**
+   * 处理animate-element-effect事件
+   */
+  onAnimateElementEffect(payload = {}) {
+    const { instructionId, duration = 200 } = payload;
+    if (!instructionId) return;
+    const timerId = setTimeout(() => {
+      frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      this._effectTimers.delete(timerId);
+    }, Math.max(0, duration));
+    this._effectTimers.add(timerId);
+  }
+
+  /**
+   * 修补entity-store的清理逻辑
+   */
+  _patchEntityStoreCleanup() {
+    if (!this.entityStore || this._patchedEntityStore) {
+      return;
+    }
+
+    const originalUnregister = this.entityStore.unregister?.bind(this.entityStore);
+    if (typeof originalUnregister !== 'function') {
+      return;
+    }
+
+    const patchedUnregister = (id) => {
+      this._cleanupStateForEntity(id);
+      return originalUnregister(id);
+    };
+    patchedUnregister._original = originalUnregister;
+    patchedUnregister._isPatched = true;
+
+    this.entityStore.unregister = patchedUnregister;
+    this._originalUnregister = originalUnregister;
+    this._patchedEntityStore = true;
+  }
+
+  _cleanupStateForEntity(id) {
+    if (!id) return;
+    const stateEntry = this.stateRegistry.get(id);
+    if (stateEntry) {
+      this._killCurrentTween(stateEntry);
+      this.stateRegistry.delete(id);
+    }
+    this._trackingTargets.delete(id);
   }
 }
 

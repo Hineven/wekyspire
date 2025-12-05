@@ -286,8 +286,7 @@ class SceneGraphAdapter {
     const cardEntity = new CardEntity(skillData);
     const cardGroup = cardEntity.getObject3D();
 
-    // 缩放卡牌到合适大小（卡牌设计尺寸198x266像素）
-    const scale = 0.5;
+    const scale = 1;
     cardGroup.scale.set(scale, scale, 1);
 
     // 暂时放在屏幕中心（稍后会被锚点更新）
@@ -315,7 +314,7 @@ class SceneGraphAdapter {
     if (container === 'hand') {
       // 手牌扇形布局
       const cardDesignWidth = 198;
-      const cardScale = 0.5;
+      const cardScale = 1;
       const cardWidth = cardDesignWidth * cardScale;
       const gap = 10;
       const count = cardIds.length;
@@ -344,8 +343,8 @@ class SceneGraphAdapter {
     } else if (container === 'activated') {
       // 激活技能水平布局
       const cardDesignWidth = 198;
-      const cardScale = 0.5;
-      const cardWidth = cardDesignWidth * cardScale * 0.8;  // 激活技能再缩小20%
+      const cardScale = 1;
+      const cardWidth = cardDesignWidth * cardScale;
       const gap = 10;
       const count = cardIds.length;
 
@@ -392,9 +391,7 @@ class SceneGraphAdapter {
       this.playerPanel = new PlayerPanelEntity(displayGameState.player);
       const panelGroup = this.playerPanel.getObject3D();
 
-      // 缩放面板：将像素尺寸转换为合理的世界单位
-      // 面板设计尺寸是300x252像素，缩放到合适大小
-      const scale = 0.5; // 缩小到50%
+      const scale = 1;
       panelGroup.scale.set(scale, scale, 1);
 
       // 定位到屏幕右上角（使用世界坐标）
@@ -450,8 +447,7 @@ class SceneGraphAdapter {
       this.enemyPanel = new EnemyPanelEntity(enemy);
       const panelGroup = this.enemyPanel.getObject3D();
 
-      // 缩放面板：将像素尺寸转换为合理的世界单位
-      const scale = 0.5; // 缩小到50%
+      const scale = 1;
       panelGroup.scale.set(scale, scale, 1);
 
       // 定位到屏幕左上角（使用世界坐标）
