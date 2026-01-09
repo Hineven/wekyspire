@@ -60,7 +60,7 @@ class ThreeRoot {
       antialias: true,
       alpha: true,
       premultipliedAlpha: true,
-      preserveDrawingBuffer: true // 减少闪烁
+      preserveDrawingBuffer: false
     });
 
     // 设置DPR（限制最大为2避免性能问题）

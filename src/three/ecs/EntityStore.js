@@ -4,11 +4,10 @@
  * 职责：
  * - 管理所有游戏实体（卡牌、面板、粒子、UI元素）
  * - 提供实体CRUD接口
- * - 维护实体的Component集合
- * - 管理锚点系统
  */
 
 import * as THREE from 'three';
+import { getComponentStore } from './ComponentStore.js';
 
 /**
  * 实体状态枚举
@@ -40,54 +39,9 @@ class Entity {
     this.id = id;                           // 唯一标识
     this.type = type;                        // 实体类型
     this.object3D = object3D;                // Three.js场景节点
-    this.components = new Map();             // Component集合
     this.state = EntityState.IDLE;          // 当前状态
     this.anchor = null;                      // 目标锚点 { x, y, z, scale, rotation }
     this.userData = {};                      // 用户自定义数据
-  }
-
-  /**
-   * 添加组件
-   */
-  addComponent(componentType, component) {
-    this.components.set(componentType, component);
-  }
-
-  /**
-   * 获取组件
-   */
-  getComponent(componentType) {
-    return this.components.get(componentType);
-  }
-
-  /**
-   * 移除组件
-   */
-  removeComponent(componentType) {
-    const component = this.components.get(componentType);
-    if (component && component.dispose) {
-      component.dispose();
-    }
-    this.components.delete(componentType);
-  }
-
-  /**
-   * 检查是否有组件
-   */
-  hasComponent(componentType) {
-    return this.components.has(componentType);
-  }
-
-  /**
-   * 清理所有组件
-   */
-  disposeComponents() {
-    for (const [type, component] of this.components) {
-      if (component.dispose) {
-        component.dispose();
-      }
-    }
-    this.components.clear();
   }
 }
 
@@ -98,10 +52,6 @@ class EntityStore {
   constructor() {
     this.entities = new Map();              // id -> Entity
     this.entitiesByType = new Map();        // type -> Set<Entity>
-    this.anchors = {
-      global: new Map(),                    // 全局锚点（如deckAnchor, centerAnchor）
-      containers: new Map()                 // 容器锚点（如hand, activated）
-    };
 
     // 初始化类型集合
     for (const type of Object.values(EntityType)) {
@@ -147,9 +97,6 @@ class EntityStore {
       console.warn(`[EntityStore] Entity ${id} not found`);
       return;
     }
-
-    // 清理组件
-    entity.disposeComponents();
 
     // 从类型集合移除
     const typeSet = this.entitiesByType.get(entity.type);
@@ -213,49 +160,6 @@ class EntityStore {
   }
 
   /**
-   * 添加组件到实体
-   * @param {string} id - 实体ID
-   * @param {string} componentType - 组件类型
-   * @param {Object} component - 组件实例
-   */
-  addComponent(id, componentType, component) {
-    const entity = this.getEntity(id);
-    if (!entity) {
-      console.warn(`[EntityStore] Entity ${id} not found`);
-      return;
-    }
-    entity.addComponent(componentType, component);
-  }
-
-  /**
-   * 更新组件
-   * @param {string} id - 实体ID
-   * @param {string} componentType - 组件类型
-   * @param {Object} updates - 更新数据
-   */
-  updateComponent(id, componentType, updates) {
-    const entity = this.getEntity(id);
-    if (!entity) {
-      console.warn(`[EntityStore] Entity ${id} not found`);
-      return;
-    }
-
-    const component = entity.getComponent(componentType);
-    if (!component) {
-      console.warn(`[EntityStore] Component ${componentType} not found on entity ${id}`);
-      return;
-    }
-
-    // 调用组件的update方法
-    if (component.update) {
-      component.update(updates);
-    } else {
-      // 如果没有update方法，直接赋值
-      Object.assign(component, updates);
-    }
-  }
-
-  /**
    * 设置实体状态
    * @param {string} id - 实体ID
    * @param {string} state - 新状态
@@ -284,47 +188,6 @@ class EntityStore {
   }
 
   /**
-   * 设置全局锚点
-   * @param {string} key - 锚点名称（如'deck', 'center', 'graveyard'）
-   * @param {Object} position - 位置 { x, y, z }
-   */
-  setGlobalAnchor(key, position) {
-    this.anchors.global.set(key, position);
-  }
-
-  /**
-   * 获取全局锚点
-   * @param {string} key - 锚点名称
-   * @returns {Object|null}
-   */
-  getGlobalAnchor(key) {
-    return this.anchors.global.get(key) || null;
-  }
-
-  /**
-   * 更新容器锚点
-   * @param {string} containerKey - 容器名称（如'hand', 'activated'）
-   * @param {Map<string, Object>} anchorsMap - id -> { x, y, z, scale, rotation }
-   */
-  updateContainerAnchors(containerKey, anchorsMap) {
-    this.anchors.containers.set(containerKey, anchorsMap);
-
-    // 自动更新对应实体的锚点
-    for (const [id, anchor] of anchorsMap) {
-      this.setAnchor(id, anchor);
-    }
-  }
-
-  /**
-   * 获取容器锚点
-   * @param {string} containerKey - 容器名称
-   * @returns {Map<string, Object>|null}
-   */
-  getContainerAnchors(containerKey) {
-    return this.anchors.containers.get(containerKey) || null;
-  }
-
-  /**
    * 清空所有实体
    */
   clear() {
@@ -332,8 +195,6 @@ class EntityStore {
     for (const id of ids) {
       this.unregister(id);
     }
-    this.anchors.global.clear();
-    this.anchors.containers.clear();
     console.log('[EntityStore] Cleared all entities');
   }
 }

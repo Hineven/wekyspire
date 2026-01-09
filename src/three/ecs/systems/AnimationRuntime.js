@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import frontendEventBus from '../../../frontendEventBus.js';
+import { getComponentStore } from '../ComponentStore.js';
 
 // 状态常量
 const STATES = Object.freeze({
@@ -141,6 +142,7 @@ class Tween {
 class AnimationRuntime {
   constructor() {
     this.entityStore = null;
+    this.componentStore = getComponentStore();
 
     // 状态注册表: entityId -> { state, currentTween, trackingConfig }
     this.stateRegistry = new Map();
@@ -489,26 +491,39 @@ class AnimationRuntime {
    */
   onUpdateAnchors(payload) {
     const { containerKey, anchorsMap } = payload;
-    if (!containerKey || !anchorsMap) return;
+    if (!containerKey) return;
 
-    this.containerAnchors.set(containerKey, anchorsMap);
-
-    // 检查entityStore是否存在
     if (!this.entityStore) {
       console.warn(`[AnimationRuntime] EntityStore not initialized - update-anchors event ignored`);
       return;
     }
 
-    // 更新实体的anchor引用
-    for (const [entityId, anchor] of anchorsMap) {
-      const entity = this.entityStore.getEntity(entityId);
-      if (entity) {
-        entity.anchor = anchor;
-        
-        // 如果实体正在跟踪锚点，确保它能平滑过渡到新位置
-        const stateEntry = this.stateRegistry.get(entityId);
-        if (stateEntry && stateEntry.state === STATES.TRACKING) {
-          // 不需要额外操作，updateTracking会处理平滑过渡
+    if (anchorsMap) {
+      this.containerAnchors.set(containerKey, anchorsMap);
+
+      for (const [entityId, anchor] of anchorsMap) {
+        const entity = this.entityStore.getEntity(entityId);
+        if (entity) {
+          entity.anchor = anchor;
+          
+          const stateEntry = this.stateRegistry.get(entityId);
+          if (stateEntry && stateEntry.state === STATES.TRACKING) {
+          }
+        }
+      }
+    } else {
+      const anchorComponent = this.componentStore.get('anchor', containerKey);
+      if (anchorComponent) {
+        for (const [entityId, entity] of anchorComponent.mountedEntities) {
+          const anchor = anchorComponent.getEntityMountedPosition(entity);
+          const entityObj = this.entityStore.getEntity(entityId);
+          if (entityObj) {
+            entityObj.anchor = anchor;
+            
+            const stateEntry = this.stateRegistry.get(entityId);
+            if (stateEntry && stateEntry.state === STATES.TRACKING) {
+            }
+          }
         }
       }
     }
@@ -569,7 +584,6 @@ class AnimationRuntime {
    * 更新跟踪状态
    */
   updateTracking(deltaTime) {
-    // 检查entityStore是否存在
     if (!this.entityStore) {
       return;
     }
@@ -578,40 +592,57 @@ class AnimationRuntime {
       if (stateEntry.state !== STATES.TRACKING) continue;
 
       const entity = this.entityStore.getEntity(entityId);
-      if (!entity || !entity.object3D || !entity.anchor) continue;
+      if (!entity || !entity.object3D) continue;
 
       const object3D = entity.object3D;
-      const anchor = entity.anchor;
       
-      // 使用配置的插值系数或默认值
+      const anchor = this._getEntityAnchor(entity);
+      if (!anchor) continue;
+
       const lerpFactor = stateEntry.trackingConfig ? this.trackingLerp : 0.1;
 
-      // 平滑跟随锚点位置
       const targetPos = new THREE.Vector3(anchor.x, anchor.y, anchor.z || 0);
       object3D.position.lerp(targetPos, lerpFactor);
 
-      // 平滑跟随旋转（如果有）
       if (anchor.rotation !== undefined) {
-        // 自定义角度插值，避免绕远路
         const currentRotation = object3D.rotation.z;
         const targetRotation = anchor.rotation;
         
-        // 计算最短路径的角度差
         let delta = targetRotation - currentRotation;
         while (delta > Math.PI) delta -= 2 * Math.PI;
         while (delta < -Math.PI) delta += 2 * Math.PI;
         
-        // 线性插值
         const lerpedRotation = currentRotation + delta * lerpFactor;
         object3D.rotation.z = lerpedRotation;
       }
 
-      // 平滑跟随缩放（如果有）
       if (anchor.scale !== undefined) {
         const targetScale = new THREE.Vector3(anchor.scale, anchor.scale, anchor.scale);
         object3D.scale.lerp(targetScale, lerpFactor);
       }
     }
+  }
+
+  /**
+   * 获取实体的anchor位置信息
+   * @param {Entity} entity - 实体对象
+   * @returns {Object|null} anchor位置信息 { x, y, z, scale, rotation }
+   */
+  _getEntityAnchor(entity) {
+    if (!entity) return null;
+
+    if (entity.anchor) {
+      return entity.anchor;
+    }
+
+    const anchorComponents = this.componentStore.getAll('anchor');
+    for (const [anchorId, anchorComponent] of anchorComponents) {
+      if (anchorComponent.mountedEntities.has(entity.id)) {
+        return anchorComponent.getEntityMountedPosition(entity);
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -18,10 +18,15 @@ import CardEntity from '../entities/CardEntity.js';
 import DeckIconEntity from '../entities/DeckIconEntity.js';
 import GraveyardIconEntity from '../entities/GraveyardIconEntity.js';
 import CoordinateConverter from '../utils/CoordinateConverter.js';
+import { getZAllocator } from '../utils/ZAllocator.js';
+import AnchorComponent from './components/AnchorComponent.js';
+import frontendEventBus from '../../frontendEventBus.js';
+import { getComponentStore } from './ComponentStore.js';
 
 class SceneGraphAdapter {
   constructor() {
     this.entityStore = null;
+    this.componentStore = null;
     this.threeRoot = null;
     this.watchers = [];
     this.isInitialized = false;
@@ -30,6 +35,9 @@ class SceneGraphAdapter {
     // 面板实体引用
     this.playerPanel = null;
     this.enemyPanel = null;
+
+    // Anchor组件集合
+    this.anchors = new Map();
 
     console.log('[SceneGraphAdapter] Created');
   }
@@ -41,6 +49,7 @@ class SceneGraphAdapter {
    */
   init(entityStore, threeRoot) {
     this.entityStore = entityStore;
+    this.componentStore = getComponentStore();
     this.threeRoot = threeRoot;
 
     // 初始化坐标转换器
@@ -99,7 +108,6 @@ class SceneGraphAdapter {
     deckGroup.scale.set(0.5, 0.5, 1);
     scene.add(deckGroup);
     const deckEntity = this.entityStore.register('deck-icon', EntityType.ICON, deckGroup);
-    deckEntity.addComponent('deckIcon', deckIcon);
 
     // 创建墓地图标（左下角）
     const graveyardPos = this.coordConverter.screenToWorld(120, height - 100);
@@ -110,7 +118,6 @@ class SceneGraphAdapter {
     graveyardGroup.scale.set(0.5, 0.5, 1);
     scene.add(graveyardGroup);
     const graveyardEntity = this.entityStore.register('graveyard-icon', EntityType.ICON, graveyardGroup);
-    graveyardEntity.addComponent('graveyardIcon', graveyardIcon);
 
     console.log('[SceneGraphAdapter] Deck and graveyard icons created');
   }
@@ -119,21 +126,94 @@ class SceneGraphAdapter {
    * 设置初始锚点
    */
   _setupAnchors() {
-    // 全局锚点（使用世界坐标）
     const width = window.innerWidth;
     const height = window.innerHeight;
+    const zAllocator = getZAllocator();
 
-    // 中心锚点
+    // 创建手牌anchor（扇形布局）
+    const handAnchor = new AnchorComponent('hand', {
+      layoutType: 'fan',
+      gap: 10,
+      padding: 0,
+      basePosition: { x: width / 2, y: height - 150 },
+      cardScale: 0.3,
+      cardDesignWidth: 198,
+      cardDesignHeight: 266,
+      zAllocator,
+      zType: 'HAND_CARD',
+      coordConverter: this.coordConverter
+    });
+    this.anchors.set('hand', handAnchor);
+    this.componentStore.register(handAnchor);
+
+    // 创建激活技能anchor（水平布局）
+    const activatedAnchor = new AnchorComponent('activated', {
+      layoutType: 'horizontal',
+      gap: 10,
+      padding: 0,
+      basePosition: { x: width / 2, y: 100 },
+      cardScale: 0.25,
+      cardDesignWidth: 198,
+      cardDesignHeight: 266,
+      zAllocator,
+      zType: 'ACTIVATED_SKILL',
+      coordConverter: this.coordConverter
+    });
+    this.anchors.set('activated', activatedAnchor);
+    this.componentStore.register(activatedAnchor);
+
+    // 创建自由区域anchor（用于拖拽中的卡牌）
+    const freeAnchor = new AnchorComponent('free', {
+      layoutType: 'absolute',
+      gap: 0,
+      padding: 0,
+      basePosition: { x: width / 2, y: height / 2 },
+      cardScale: 0.3,
+      cardDesignWidth: 198,
+      cardDesignHeight: 266,
+      zAllocator,
+      zType: 'FREE_CARD',
+      coordConverter: this.coordConverter
+    });
+    this.anchors.set('free', freeAnchor);
+    this.componentStore.register(freeAnchor);
+
+    // 创建墓地anchor（左下角）
+    const graveyardScreenPos = this.coordConverter.screenToWorld(120, height - 120);
+    const burntAnchor = new AnchorComponent('burnt', {
+      layoutType: 'absolute',
+      gap: 0,
+      padding: 0,
+      basePosition: { x: 120, y: height - 120 },
+      cardScale: 0.25,
+      cardDesignWidth: 198,
+      cardDesignHeight: 266,
+      zAllocator,
+      zType: 'BURNT_CARD',
+      coordConverter: this.coordConverter
+    });
+    this.anchors.set('burnt', burntAnchor);
+    this.componentStore.register(burntAnchor);
+
+    // 创建牌库anchor（右下角）
+    const deckAnchor = new AnchorComponent('deck', {
+      layoutType: 'absolute',
+      gap: 0,
+      padding: 0,
+      basePosition: { x: width - 120, y: height - 120 },
+      cardScale: 0.25,
+      cardDesignWidth: 198,
+      cardDesignHeight: 266,
+      zAllocator,
+      zType: 'DECK_CARD',
+      coordConverter: this.coordConverter
+    });
+    this.anchors.set('deck', deckAnchor);
+    this.componentStore.register(deckAnchor);
+
+    // 保持全局锚点兼容性（用于面板等）
     const centerPos = this.coordConverter.screenToWorld(width / 2, height / 2);
-    this.entityStore.setGlobalAnchor('center', centerPos);
-
-    // 牌库锚点（右下角）
-    const deckPos = this.coordConverter.screenToWorld(width - 120, height - 120);
-    this.entityStore.setGlobalAnchor('deck', deckPos);
-
-    // 坟墓锚点（左下角）
     const graveyardPos = this.coordConverter.screenToWorld(120, height - 120);
-    this.entityStore.setGlobalAnchor('graveyard', graveyardPos);
 
     console.log('[SceneGraphAdapter] Anchors setup complete');
   }
@@ -142,7 +222,7 @@ class SceneGraphAdapter {
    * 设置响应式监听器
    */
   _setupWatchers() {
-    // 监听玩家手牌变化
+    // 监听玩家卡牌变化
     const handWatcher = watch(
       () => displayGameState.player.skills.map(s => s.uniqueID),
       (newIds, oldIds) => {
@@ -196,12 +276,18 @@ class SceneGraphAdapter {
 
   /**
    * 同步卡牌实体
-   * @param {string} container - 容器名称 'hand' | 'activated'
+   * @param {string} containerKey - 容器名称（'hand' 或 'activated'）
    * @param {string[]} newIds - 新的卡牌ID列表
    * @param {string[]} oldIds - 旧的卡牌ID列表
    */
-  _syncCards(container, newIds, oldIds) {
+  _syncCards(containerKey, newIds, oldIds) {
     if (!this.isInitialized) return;
+
+    const anchor = this.anchors.get(containerKey);
+    if (!anchor) {
+      console.warn(`[SceneGraphAdapter] Anchor ${containerKey} not found`);
+      return;
+    }
 
     const oldSet = new Set(oldIds || []);
     const newSet = new Set(newIds || []);
@@ -209,76 +295,89 @@ class SceneGraphAdapter {
     // 找出需要移除的卡牌
     for (const id of oldSet) {
       if (!newSet.has(id)) {
+        // 从anchor卸载
+        const entity = this.entityStore.getEntity(id);
+        if (entity) {
+          anchor.onUnmounted(entity);
+        }
+        // 从EntityStore移除
         this.entityStore.unregister(id);
       }
     }
 
     // 找出需要添加的卡牌并先创建实体
-    for (const id of newSet) {
+    for (const id of newIds) {
       if (!oldSet.has(id)) {
-        this._createCardEntity(id, container);
+        this._createCardEntity(id);
       }
     }
 
-    // 计算并应用布局锚点（在所有卡牌创建后）
-    this._updateCardAnchors(container, newIds);
-
-    // 应用锚点到所有卡牌，并设置z坐标
-    for (let i = 0; i < newIds.length; i++) {
-      const id = newIds[i];
-      this._applyAnchorToCard(id);
-
-      // 设置z坐标：每张卡间隔1.0（足够大的间隔）
-      // 后面的卡片z值更大，会渲染在上面
+    // 将所有卡牌挂载到anchor
+    for (const id of newIds) {
       const entity = this.entityStore.getEntity(id);
-      if (entity && entity.object3D) {
-        const currentPos = entity.object3D.position;
-        entity.object3D.position.set(currentPos.x, currentPos.y, i * 1.0);
+      if (entity) {
+        // 如果实体还未挂载到此anchor，则挂载
+        if (!anchor.mountedEntities.has(id)) {
+          anchor.onMounted(entity);
+        }
       }
     }
+
+    // 应用锚点位置到所有卡牌
+    for (const id of newIds) {
+      this._applyAnchorToCard(id, containerKey);
+    }
+
+    // 通知AnimationRuntime anchor已更新
+    frontendEventBus.emit('update-anchors', { containerKey });
   }
 
   /**
    * 应用锚点位置到卡牌
    * @param {string} cardId - 卡牌ID
+   * @param {string} containerKey - 容器名称
    */
-  _applyAnchorToCard(cardId) {
-    const entity = this.entityStore.getEntity(cardId);
-    if (!entity || !entity.anchor) return;
+  _applyAnchorToCard(cardId, containerKey) {
+    const anchor = this.anchors.get(containerKey);
+    if (!anchor) {
+      console.warn(`[SceneGraphAdapter] Anchor ${containerKey} not found`);
+      return;
+    }
 
-    const { x, y, scale, rotation } = entity.anchor;
+    const entity = this.entityStore.getEntity(cardId);
+    if (!entity) {
+      console.warn(`[SceneGraphAdapter] Entity ${cardId} not found`);
+      return;
+    }
+
+    const position = anchor.getEntityMountedPosition(entity);
     const object3D = entity.object3D;
 
-    // 只设置x和y坐标，z坐标由_syncCards方法单独设置
-    object3D.position.x = x;
-    object3D.position.y = y;
+    object3D.position.x = position.x;
+    object3D.position.y = position.y;
+    object3D.position.z = position.z;
     
-    if (rotation !== undefined) {
-      object3D.rotation.z = rotation;
+    if (position.rotation !== undefined) {
+      object3D.rotation.z = position.rotation;
     }
-    if (scale !== undefined && scale !== 1.0) {
-      object3D.scale.multiplyScalar(scale);
-    }
+    object3D.scale.set(position.scale, position.scale, 1);
+
+    entity.anchor = position;
   }
 
   /**
    * 创建卡牌实体
    * @param {string} cardId - 卡牌ID
-   * @param {string} container - 容器名称
    */
-  _createCardEntity(cardId, container) {
+  _createCardEntity(cardId) {
     const scene = this.threeRoot.getScene();
 
     // 从displayGameState中查找卡牌数据
     let skillData = null;
-    if (container === 'hand') {
-      skillData = displayGameState.player.skills.find(s => s.uniqueID === cardId);
-    } else if (container === 'activated') {
-      skillData = displayGameState.player.activatedSkills.find(s => s.uniqueID === cardId);
-    }
-
+    skillData = displayGameState.player.skills.find(s => s.uniqueID === cardId);
+    
     if (!skillData) {
-      console.warn(`[SceneGraphAdapter] Card ${cardId} not found in ${container}`);
+      console.warn(`[SceneGraphAdapter] Card ${cardId} not found in player skills`);
       return;
     }
 
@@ -287,7 +386,7 @@ class SceneGraphAdapter {
     const cardGroup = cardEntity.getObject3D();
 
     // 缩放卡牌到合适大小（卡牌设计尺寸198x266像素）
-    const scale = 0.5;
+    const scale = 1.0;
     cardGroup.scale.set(scale, scale, 1);
 
     // 暂时放在屏幕中心（稍后会被锚点更新）
@@ -297,87 +396,8 @@ class SceneGraphAdapter {
 
     // 注册到EntityStore
     const entity = this.entityStore.register(cardId, EntityType.CARD, cardGroup);
-    entity.addComponent('card', cardEntity);
 
-    console.log(`[SceneGraphAdapter] Card ${cardId} created in ${container}`);
-  }
-
-  /**
-   * 更新卡牌布局锚点
-   * @param {string} container - 容器名称
-   * @param {string[]} cardIds - 卡牌ID列表
-   */
-  _updateCardAnchors(container, cardIds) {
-    const anchors = new Map();
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    if (container === 'hand') {
-      // 手牌扇形布局
-      const cardDesignWidth = 198;
-      const cardScale = 0.5;
-      const cardWidth = cardDesignWidth * cardScale;
-      const gap = 10;
-      const count = cardIds.length;
-
-      if (count === 0) return;
-
-      const totalWidth = count * cardWidth + (count - 1) * gap;
-      const startX = (width - totalWidth) / 2;
-      const baseY = height - 100;
-
-      for (let i = 0; i < count; i++) {
-        const screenX = startX + i * (cardWidth + gap) + cardWidth / 2;
-        const screenY = baseY;
-        const worldPos = this.coordConverter.screenToWorld(screenX, screenY);
-        const rotation = (i - (count - 1) / 2) * 3 * (Math.PI / 180);
-        const scale = 1.0;
-
-        anchors.set(cardIds[i], {
-          x: worldPos.x,
-          y: worldPos.y,
-          z: 0,
-          scale,
-          rotation
-        });
-      }
-    } else if (container === 'activated') {
-      // 激活技能水平布局
-      const cardDesignWidth = 198;
-      const cardScale = 0.5;
-      const cardWidth = cardDesignWidth * cardScale * 0.8;  // 激活技能再缩小20%
-      const gap = 10;
-      const count = cardIds.length;
-
-      if (count === 0) return;
-
-      const totalWidth = count * cardWidth + (count - 1) * gap;
-      const startX = (width - totalWidth) / 2;
-      const baseY = 150; // 距离顶部150px
-
-      for (let i = 0; i < count; i++) {
-        const screenX = startX + i * (cardWidth + gap) + cardWidth / 2;
-        const screenY = baseY;
-
-        // 转换为世界坐标
-        const worldPos = this.coordConverter.screenToWorld(screenX, screenY);
-
-        const rotation = 0;
-        const scale = 0.8; // 激活技能缩小显示
-
-        anchors.set(cardIds[i], {
-          x: worldPos.x,
-          y: worldPos.y,
-          z: 0,
-          scale,
-          rotation
-        });
-      }
-    }
-
-    // 更新容器锚点
-    this.entityStore.updateContainerAnchors(container, anchors);
-    console.log(`[SceneGraphAdapter] Updated ${container} anchors:`, anchors.size);
+    console.log(`[SceneGraphAdapter] Card ${cardId} created.`);
   }
 
   /**
@@ -406,7 +426,6 @@ class SceneGraphAdapter {
 
       // 注册到EntityStore
       const entity = this.entityStore.register('player-panel', EntityType.PANEL, panelGroup);
-      entity.addComponent('playerPanel', this.playerPanel);
 
       // 添加到渲染回调以更新进度条动画
       this.threeRoot.addRenderCallback((deltaTime) => {
@@ -462,7 +481,6 @@ class SceneGraphAdapter {
 
       // 注册到EntityStore
       const entity = this.entityStore.register('enemy-panel', EntityType.PANEL, panelGroup);
-      entity.addComponent('enemyPanel', this.enemyPanel);
 
       // 添加到渲染回调以更新进度条动画
       this.threeRoot.addRenderCallback((deltaTime) => {
@@ -486,16 +504,14 @@ class SceneGraphAdapter {
 
     // 重新计算所有容器锚点
     const handIds = displayGameState.player.skills.map(s => s.uniqueID);
-    const activatedIds = displayGameState.player.activatedSkills.map(s => s.uniqueID);
-
     if (handIds.length > 0) {
-      this._updateCardAnchors('hand', handIds);
-    }
-    if (activatedIds.length > 0) {
-      this._updateCardAnchors('activated', activatedIds);
+      this._syncCards('hand', handIds, handIds);
     }
 
-    console.log('[SceneGraphAdapter] Layout updated');
+    const activatedIds = displayGameState.player.activatedSkills.map(s => s.uniqueID);
+    if (activatedIds.length > 0) {
+      this._syncCards('activated', activatedIds, activatedIds);
+    }
   }
 
   /**
@@ -524,4 +540,3 @@ export function getSceneGraphAdapter() {
 }
 
 export default SceneGraphAdapter;
-

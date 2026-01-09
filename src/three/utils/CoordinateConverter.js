@@ -2,6 +2,7 @@
  * CoordinateConverter - 坐标转换工具类
  *
  * 提供屏幕坐标与世界坐标之间的转换
+ * 使用Three.js内置的unproject和project方法确保转换准确性
  */
 
 import * as THREE from 'three';
@@ -14,23 +15,29 @@ class CoordinateConverter {
   }
 
   /**
-   * 屏幕坐标转世界坐标（Z=0平面）
+   * 屏幕坐标转世界坐标（指定Z深度）
    * @param {number} screenX - 屏幕X坐标（像素）
    * @param {number} screenY - 屏幕Y坐标（像素）
+   * @param {number} z - 世界坐标Z值（默认：0，靠近相机）
    * @returns {THREE.Vector3}
+   * 
+   * 转换原理：
+   * 1. 将屏幕坐标转换为标准化设备坐标(NDC)
+   * 2. 使用unproject方法将NDC转换为世界坐标方向
+   * 3. 计算从相机位置到指定Z平面的射线交点
    */
-  screenToWorld(screenX, screenY) {
-    // 计算世界坐标的缩放因子
-    const distance = this.camera.position.z;
-    const vFov = this.camera.fov * Math.PI / 180;
-    const height = 2 * Math.tan(vFov / 2) * distance;
-    const width = height * this.camera.aspect;
-
-    // 将屏幕坐标转换为世界坐标
-    const x = (screenX / window.innerWidth - 0.5) * width;
-    const y = -(screenY / window.innerHeight - 0.5) * height;
-
-    return new THREE.Vector3(x, y, 0);
+  screenToWorld(screenX, screenY, z = 0) {
+    // 使用Three.js内置的unproject方法进行准确的坐标转换
+    const vector = new THREE.Vector3(
+      (screenX / window.innerWidth) * 2 - 1,
+      -(screenY / window.innerHeight) * 2 + 1,
+      0.5
+    );
+    vector.unproject(this.camera);
+    
+    const dir = vector.sub(this.camera.position).normalize();
+    const distance = (z - this.camera.position.z) / dir.z;
+    return this.camera.position.clone().add(dir.multiplyScalar(distance));
   }
 
   /**
