@@ -412,9 +412,7 @@ class SceneGraphAdapter {
       this.playerPanel = new PlayerPanelEntity(displayGameState.player);
       const panelGroup = this.playerPanel.getObject3D();
 
-      // 缩放面板：将像素尺寸转换为合理的世界单位
-      // 面板设计尺寸是300x252像素，缩放到合适大小
-      const scale = 0.5; // 缩小到50%
+      const scale = 1;
       panelGroup.scale.set(scale, scale, 1);
 
       // 定位到屏幕右上角（使用世界坐标）
@@ -469,8 +467,7 @@ class SceneGraphAdapter {
       this.enemyPanel = new EnemyPanelEntity(enemy);
       const panelGroup = this.enemyPanel.getObject3D();
 
-      // 缩放面板：将像素尺寸转换为合理的世界单位
-      const scale = 0.5; // 缩小到50%
+      const scale = 1;
       panelGroup.scale.set(scale, scale, 1);
 
       // 定位到屏幕左上角（使用世界坐标）

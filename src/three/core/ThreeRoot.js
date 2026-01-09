@@ -37,23 +37,14 @@ class ThreeRoot {
   init(hostElement, options = {}) {
     this.hostElement = hostElement;
 
-    const {
-      fov = 50,
-      near = 0.1,
-      far = 2000,
-      cameraZ = 100,
-      backgroundColor = 0x000000,
-      backgroundAlpha = 0
-    } = options;
-
     // 创建Scene
     this.scene = new THREE.Scene();
     this.scene.background = null; // 透明背景，后续通过后处理管线设置
 
     // 创建Camera（透视相机）
     const aspect = hostElement.clientWidth / hostElement.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    this.camera.position.z = cameraZ;
+
+    this.camera = new THREE.OrthographicCamera(0, 1920, 0, 1080, 0, 1000);
 
     // 创建Renderer
     this.renderer = new THREE.WebGLRenderer({
@@ -91,8 +82,7 @@ class ThreeRoot {
 
     console.log('[ThreeRoot] Initialized', {
       size: { width: hostElement.clientWidth, height: hostElement.clientHeight },
-      dpr,
-      camera: { fov, aspect, position: this.camera.position }
+      dpr
     });
 
     // 启动渲染循环
