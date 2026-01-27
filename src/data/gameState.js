@@ -1,7 +1,7 @@
 // gameState.js - 游戏状态管理（前后端分离）
 
 import { reactive } from 'vue';
-import { Player } from './player.js';
+import { Player } from './character.js';
 import SkillManager from './skillManager.js';
 
 // 工厂方法：创建一个“干净”的游戏状态对象（非响应式）

@@ -1,37 +1,20 @@
-import animationSequencer from './animationSequencer.js';
-import {enqueueDelay, enqueueState} from "./animationInstructionHelpers";
+import animationSequencer from './animation_sequencing/animationSequencer.js';
+import {enqueueDelay, enqueueState} from "./animation_sequencing/animationInstructionHelpers.js";
 
 // 技能抽象类
 class Skill {
-  constructor(name, type, tier, baseManaCost, baseActionPointCost, baseMaxUses, skillSeriesName = undefined, spawnWeight = undefined) {
+  constructor(name, type, tier,
+    baseManaCost, baseDurationCost,
+    skillSeriesName = undefined) {
     this.name = name; // 技能名称
-    this.type = type; // 技能所属灵脉。特别地：'normal'（都可用）,'curse'（诅咒）
+    this.type = type; // 技能所属灵脉。特别地：'universal'（无属性）,'curse'（负面效果）
     this.tier = tier; // 技能等阶
-    // 随机生成一个唯一ID。注意！前后台技能的id可能不同。
+    // 随机生成一个唯一ID。
     this.uniqueID = Math.random().toString(36).substring(2, 10);
-    this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
-    this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
+    this.subtitle = ''; // 副标题，仅少量特殊技能拥有此条目
     this.baseManaCost = baseManaCost || 0; // 魏启消耗
-    this.baseActionPointCost = (baseActionPointCost !== undefined) ? baseActionPointCost : 1; // 行动点消耗，默认为1
-    this.baseMaxUses = baseMaxUses || 1; // 基础最大充能次数，inf代表无需充能，可以随便用
-    this.remainingUses = this.maxUses; // 剩余充能次数
+    this.baseDurationCost = baseDurationCost || 0; // 脉位耐久消耗
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
-    this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
-    this.remainingColdDownTurns = 0; // 回合剩余冷却时间
-    this.baseColdDownTurns = 0;
-    this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
-    this.isActivated = false; // 是否激活，仅对咏唱类技能有效
-    this.canSpawnAsReward_ = true; // 是否可以自然生成为奖励，某些特殊技能（如大力一击等战斗中生成的卡牌）不可自然生成
-    // 卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
-    this.cardMode = 'normal';
-    // 获得此技能的前置技能
-    // null：自由出现
-    // 字符串：由某一些技能升级而来，要求必须有该技能
-    // 数组：由某一集合技能升级而来，要求必须有该系列的某一个技能
-    this.precessor = null;
-    // 字符串数组，按灵脉的出现概率提升乘子，灵脉相性越好，出现概率越高
-    // 格式：'leinoName': {threshold: 灵脉等级阈值, weight: 超过阈值后的权重提升乘子}
-    this.leinoModifiers = []
   }
 
   // 简化：统一冷却事件，仅发送 'cooldown-tick'（不再区分 start/progress/end，也无 progress 数值）

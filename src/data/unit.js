@@ -1,4 +1,4 @@
-import { createAndSubmitAddEffect, createAndSubmitApplyHeal } from './battleInstructionHelpers.js';
+import { createAndSubmitAddEffect, createAndSubmitApplyHeal } from './combat/battleInstructionHelpers.js';
 import effectDescriptions from './effectDescription.js'
 
 // 基础作战单位抽象类（玩家/敌人公用）
