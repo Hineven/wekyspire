@@ -1,21 +1,16 @@
 <template>
   <div class="battle-screen">
-    <!-- 战斗场次 -->
-    <h3 style="color: white;"> 第{{ level }}层 </h3>
-    <!-- 顶部状态面板区域 -->
+    <!-- 战斗标题 -->
+    <h3 style="color: white;"> {{name}} </h3>
+    <!-- 悬空Display区域 -->
     <div class="status-panels">
-      <!-- 敌人状态面板 -->
-      <EnemyStatusPanel 
+      <!-- 敌人 -->
+      <EnemyStatusDisplay
         :enemy="enemy"
         :z-index="2"
-        ref="enemyStatusPanel"
+        ref="enemyStatusDisplay"
       />
 
-      <!-- 玩家状态面板 -->
-      <PlayerStatusPanel 
-        :player="player"
-        ref="playerStatusPanel"
-      />
     </div>
 
     <!-- 战斗日志面板 -->
@@ -35,8 +30,7 @@
 
 <script>
 import BattleLogPanel from './BattleLogPanel.vue';
-import EnemyStatusPanel from './EnemyStatusPanel.vue';
-import PlayerStatusPanel from '../global/PlayerStatusPanel.vue';
+import EnemyStatusDisplay from './EnemyStatusDisplay.vue';
 import ActionPanel from './ActionPanel.vue';
 import frontendEventBus from '../../frontendEventBus.js';
 
@@ -44,8 +38,7 @@ export default {
   name: 'BattleScreen',
   components: {
     BattleLogPanel,
-    EnemyStatusPanel,
-    PlayerStatusPanel,
+    EnemyStatusDisplay,
     ActionPanel,
   },
   props: {
@@ -54,27 +47,7 @@ export default {
     isPlayerTurn: { type: Boolean, default: true },
     level: { type: Number, default: 1 }
   },
-  data() {
-    return {
-      logs: [],
-    };
-  },
-  mounted() {
-    frontendEventBus.on('add-battle-log', this.onAddBattleLog);
-    frontendEventBus.on('clear-battle-log', this.onClearBattleLog);
-  },
-  beforeUnmount() {
-    frontendEventBus.off('add-battle-log', this.onAddBattleLog);
-    frontendEventBus.off('clear-battle-log', this.onClearBattleLog);
-  },
   methods: {
-    onAddBattleLog(value) {
-      // 兼容字符串与对象格式
-      this.logs.push(value);
-    },
-    onClearBattleLog() {
-      this.logs = [];
-    },
   }
 };
 </script>
@@ -91,17 +64,4 @@ export default {
   position: relative;
 }
 
-/* 顶部状态面板区域 */
-.status-panels {
-  display: flex;
-  justify-content: space-between; /* 左右贴边对齐 */
-  align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 20px;
-  min-height: 200px;
-}
-/* 确保面板保持各自的固定宽度，不被拉伸或压缩 */
-.status-panels > * {
-  flex: 0 0 auto;
-}
 </style>

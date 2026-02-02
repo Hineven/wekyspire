@@ -17,10 +17,9 @@ import SkillManager from '../../data/skillManager.js';
 import { getSkillTierColor } from '../../utils/tierUtils.js';
 
 export default {
-  name: 'CardIcon',
+  name: 'SkillIcon',
   props: {
-    skillName: { type: String, required: true },
-    powerDelta: { type: Number, default: 0 }
+    skillName: { type: String, required: true }
   },
   data() {
     return { skillInstance: null };
@@ -31,34 +30,20 @@ export default {
       return '#aaaaaa';
     },
     displayIcon() {
-      if (!this.skillInstance) return '🀫';
-      switch (this.skillInstance.type) {
-        case 'fire': return '♨';
-        case 'normal': return '⚔';
-        case 'heal': return '✚';
-        default: return '✦';
-      }
+      return '🀫';
     },
     displayName() {
       if (!this.skillInstance) return this.skillName;
-      if (this.powerDelta !== 0) {
-        const sign = this.powerDelta > 0 ? '+' : '';
-        return `${this.skillInstance.name}${sign}${this.powerDelta}`;
-      }
       return this.skillInstance.name;
     },
     inlineStyle() { return { cursor: 'help' }; }
-  },
-  watch: {
-    powerDelta() { this.applyPowerDelta(); },
-    skillName() { this.skillInstance = null; }
   },
   methods: {
     ensureInstance() {
       if (!this.skillInstance) {
         try {
           const mgr = SkillManager.getInstance();
-          const inst = mgr.createSkill(this.skillName);
+          const inst = mgr.getSkillSingleton(this.skillName);
           this.skillInstance = inst;
           this.applyPowerDelta();
         } catch (_) {}
