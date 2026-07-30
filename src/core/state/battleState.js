@@ -1,0 +1,96 @@
+import { createRng } from './rng.js';
+
+// battleState：单场战斗寿命，进战斗装配、战斗结束销毁。
+// zones 为有序数组（牌序玩法依赖顺序）；牌的 zone 不显式存储在 runtime 上，
+// 由 zoneOf 反查派生，防双写失同步。
+export const ZONES = ['hand', 'deck', 'discard', 'burnt'];
+
+export function createBattleState({ enemies = [], allies = [], seed = 1, chantCapacity = 1 } = {}) {
+  for (const e of enemies) e.side = 'enemy';
+  for (const a of allies) a.side = 'player';
+  return {
+    enemies,        // 敌方单位（有序 = 行动顺序；死亡单位留在数组中，靠 isDead() 过滤）
+    allies,         // 我方 AI 队友（如瑞米；有序 = 行动顺序，玩家回合先于玩家行动）
+    zones: {
+      hand: [],       // 手牌（有序，位置有语义：两侧/最右等）
+      deck: [],       // 牌库（有序，约定：顶 = index 0，即下次抽的牌）
+      discard: [],    // 弃牌堆
+      burnt: [],      // 焚毁区
+    },
+    chant: { capacity: chantCapacity, slots: [] },  // 咏唱槽（slots 放 skillRuntime）
+    turn: { count: 0, side: 'player' },             // side: 'player' | 'enemy'
+    history: freshHistory(),
+    rng: createRng(seed),
+  };
+}
+
+export function freshHistory() {
+  const counters = () => ({
+    played: 0, drawn: 0, discarded: 0, burnt: 0,
+    damageDealt: 0, damageTaken: 0, healing: 0,
+  });
+  return { turn: counters(), battle: counters() };
+}
+
+export function resetTurnHistory(battleState) {
+  const counters = freshHistory().turn;
+  battleState.history.turn = counters;
+}
+
+// 反查卡牌所在 zone：'hand' | 'deck' | 'discard' | 'burnt' | 'chantSlot' | null
+export function zoneOf(battleState, uniqueID) {
+  for (const name of ZONES) {
+    if (battleState.zones[name].some(c => c.uniqueID === uniqueID)) return name;
+  }
+  if (battleState.chant.slots.some(c => c.uniqueID === uniqueID)) return 'chantSlot';
+  return null;
+}
+
+// 在 zone 内/间移动卡牌（保持数组为唯一事实源）
+export function moveCard(battleState, uniqueID, toZone, { index = null } = {}) {
+  const from = zoneOf(battleState, uniqueID);
+  if (!from) throw new Error(`卡牌 ${uniqueID} 不在任何 zone`);
+  const fromArr = from === 'chantSlot' ? battleState.chant.slots : battleState.zones[from];
+  const i = fromArr.findIndex(c => c.uniqueID === uniqueID);
+  const [card] = fromArr.splice(i, 1);
+  const toArr = toZone === 'chantSlot' ? battleState.chant.slots : battleState.zones[toZone];
+  if (index === null) toArr.push(card);
+  else toArr.splice(index, 0, card);
+  return card;
+}
+
+// 手牌位置查询（两侧/索引，供"飞刀弃两侧"类机制）
+export function handNeighbors(battleState, uniqueID) {
+  const hand = battleState.zones.hand;
+  const i = hand.findIndex(c => c.uniqueID === uniqueID);
+  if (i < 0) return { left: null, right: null };
+  return { left: hand[i - 1] ?? null, right: hand[i + 1] ?? null };
+}
+
+// ---- 单位选择器（主语/宾语解析用） ----
+
+export function aliveEnemies(battleState) {
+  return battleState.enemies.filter(e => !e.isDead());
+}
+
+export function aliveAllies(battleState) {
+  return battleState.allies.filter(a => !a.isDead());
+}
+
+// 默认攻击目标：第一个存活敌人
+export function firstAliveEnemy(battleState) {
+  return aliveEnemies(battleState)[0] ?? null;
+}
+
+// 某阵营的全部存活单位（含/不含玩家本体）
+export function unitsOfSide(battleState, player, side, { includePlayer = true } = {}) {
+  if (side === 'enemy') return aliveEnemies(battleState);
+  const units = [...aliveAllies(battleState)];
+  if (includePlayer && !player.isDead()) units.unshift(player);
+  return units;
+}
+
+// 全场存活单位
+export function allAliveUnits(battleState, player) {
+  return [...unitsOfSide(battleState, player, 'player'), ...aliveEnemies(battleState)];
+}
