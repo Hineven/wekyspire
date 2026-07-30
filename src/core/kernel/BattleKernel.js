@@ -17,7 +17,7 @@ export const MAX_TRIGGER_DEPTH = 32;
 //   - 被 veto 的节点从未执行，不触发任何 POST。
 //   - 取消入口只在本内核（veto / abort / 终局检查），外部不得直写 cancelled。
 export default class BattleKernel {
-  constructor({ isBattleOver = null, onWaitingCancelled = null, getAbortTarget = null } = {}) {
+  constructor({ isBattleOver = null, onWaitingCancelled = null, getAbortTarget = null, tracer = null } = {}) {
     this.stack = [];
     this.subscriptions = [];
     this._subSeq = 0;
@@ -25,6 +25,7 @@ export default class BattleKernel {
     this.isBattleOver = isBattleOver;           // (ctx) => 'victory' | 'defeat' | null
     this.onWaitingCancelled = onWaitingCancelled; // WAIT 节点被取消时的撤回钩子（如收回输入请求）
     this.getAbortTarget = getAbortTarget;       // 终局 abort 的目标节点（默认栈底根；战斗装配指定 TurnLoop，让战后清理指令能正常执行）
+    this.tracer = tracer;                       // 调试追踪钩子 ({type, instr, ...}) => void，可选
     this.verdict = null;                        // 最近一次终局判定结果
     this.currentInstruction = null;             // 正在执行的指令（submitInstruction 的默认父节点）
   }
@@ -138,20 +139,24 @@ export default class BattleKernel {
         top.buildPayload(ctx);
         this._runPhaseSubscriptions(top, 'pre', ctx);
         if (top.cancelled) { // 被 veto：从未执行，直接弹掉
+          this.tracer?.({ type: 'veto', instr: top, reason: top.cancelReason });
           this.stack.pop();
           continue;
         }
       }
 
       this.currentInstruction = top;
+      this.tracer?.({ type: 'execute', instr: top, stage: top._stage });
       const r = top.execute(ctx);
 
       if (r === WAIT) {
         top._waiting = true;
+        this.tracer?.({ type: 'wait', instr: top });
         return;
       }
       if (r === true) {
         top._isCompleted = true;
+        this.tracer?.({ type: 'complete', instr: top });
         // 弹出前先结算全部 POST 反应（作为本节点的子节点追加）
         this._runPhaseSubscriptions(top, 'post', ctx);
         this._afterInstructionCompleted(ctx);

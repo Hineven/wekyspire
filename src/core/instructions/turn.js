@@ -21,7 +21,11 @@ export class TurnEndInstruction extends BattleInstruction {
     super(opts);
     this.side = side;
   }
-  execute() { return true; }
+  execute(ctx) {
+    // turn 窗口订阅（如"本回合内丢牌时抽牌"）随回合结束清扫
+    ctx.kernel.clearWindow('turn');
+    return true;
+  }
 }
 
 export class PlayerTurnStartInstruction extends TurnStartInstruction {

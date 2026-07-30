@@ -90,3 +90,17 @@ export function playerEndTurn(battle) {
   kernel.resume(turn, ctx);
   return true;
 }
+
+// ---- 结算期玩家输入（AwaitPlayerInputInstruction 的流程侧应答） ----
+
+export function getPendingInput(battle) {
+  return battle.battleState.pendingInput ?? null;
+}
+
+export function respondInput(battle, selection) {
+  const pending = battle.battleState.pendingInput;
+  if (!pending) return false;
+  pending.instruction.selection = selection;
+  battle.kernel.resume(pending.instruction, battle.ctx);
+  return true;
+}

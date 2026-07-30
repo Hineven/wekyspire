@@ -92,16 +92,20 @@
 **战斗作为一棵根指令**：
 
 ```
-BattleInstruction（根；完成=战斗结束，清理随出栈/取消传播白拿）
-├── PreBattleInstruction（洗牌、初始充能、开场效果、初始抽牌）
-├── TurnLoopInstruction（多阶段，交替提交玩家/敌方回合，直到内核判定终局）
-│   ├── PlayerTurnInstruction（阶段机；回合开始结算后进入 WAIT 挂起，
-│   │   玩家每次出牌/换牌作为其子指令提交；结束回合操作令其完成）
-│   └── EnemyTurnInstruction（回合开始效果 → EnemyActInstruction → 回合结束效果）
-└── PostBattleInstruction（胜负判定、奖励生成入口、注销全部 battle 窗口订阅）
+BattleInstruction（根；完成=战斗结束）
+├── PreBattleInstruction（重置玩家战斗字段、克隆构筑进牌库、洗牌、
+│   注册技能/能力订阅、能力 onBattleStart、初始意图、起手抽牌）
+├── TurnLoopInstruction（多阶段，交替提交玩家/敌方回合）
+│   ├── PlayerTurnInstruction（阶段机：开始结算 → 冷却 → 抽牌（首回合跳过）→
+│   │   友方 AI（瑞米）依次行动 → WAIT 挂起等玩家输入，出牌/换牌作为其子指令提交）
+│   └── EnemyTurnInstruction（开始结算 → 敌人按数组序依次 AIActInstruction →
+│       预算下回合意图 → 结束结算）
+└── PostBattleInstruction（记录结果、注销全部 battle 窗口订阅、播报 battleEnd）
 ```
 
-`battleVictory` 的手动清理与 try/catch 全部删除：战斗结束 = 根出栈，订阅按 window 自动注销，取消传播即清理。
+> **落地修正（v3）**：终局时内核 abort 的目标是 **TurnLoopInstruction 而非根**——
+> 根存活，TurnLoop 子树回退后根继续推进到 PostBattleInstruction，
+> 战后清理因此在树内正常执行（若 abort 根，清理会被取消传播一并杀死）。
 
 **秩序规则（定死）**：① 同时匹配多个订阅：priority 降序，同 priority 按注册序，禁止依赖遍历序；② 触发链深度上限（如 32，独立计数，超限抛错）——互触发死循环必须有明确死法；③ 取消传播即上述规则，无例外通道。
 
@@ -158,11 +162,18 @@ BattleInstruction（根；完成=战斗结束，清理随出栈/取消传播白�
 - 注册表不再硬编码 import 列表：技能目录按约定自动收集（`import.meta.glob`）。
 - `ctx` 约定：`{ player, enemy, zones, history, rng, presenter }`。zones 暴露有序区域（hand / deck / discard / burnt / chantSlot）与位置查询（neighborsOf、deckTop/deckBottom、handIndexOf）；history 提供本回合出牌/弃牌/抽牌计数支撑条件类机制；rng 注入种子保证 headless 可测。
 
-### 2.5 Enemy 新契约（重写）
+### 2.5 单位契约：Player / Enemy / Ally（多单位，v3 重写）
 
-- `act(ctx)` 只提交指令；`getIntention(ctx)` 返回结构化意图对象（类型、数值、富文本描述），供 Stage 渲染意图图标。
-- 预留方向：意图未来可对 `act` 做 dry-run（录制提交序列但不执行）自动生成；初版保留显式 `getIntention`。
-- 敌人注册表同样走 `import.meta.glob` 自动收集。
+战斗是**双边多单位**：敌方可有数个敌人，我方除玩家外可有 AI 队友（瑞米）。
+
+- **三态单位**：`Player`（人类操作，run 级实体，跨战斗存活）/ `Enemy` / `Ally`。后两者同为 **AI 驱动单位**，共享 `AIUnit` 基类（defId + 行动游标 + intention），阵营由 `side`（'player' | 'enemy'）区分。
+- **battleState**：`enemies[]` + `allies[]` 有序数组（顺序即行动顺序）；死亡单位留在数组中靠 `isDead()` 过滤。选择器：`aliveEnemies / aliveAllies / firstAliveEnemy / unitsOfSide / allAliveUnits`。
+- **回合行动序**：玩家回合 = 开始结算 → **allies 依次行动** → 玩家 WAIT 输入；敌方回合 = enemies 按数组序依次行动。
+- **AI 单位定义契约**（Enemy/Ally 同构）：`{ id, name, createUnit(), act(actx), getIntention?(unit) }`。`act` 只提交指令（actx = { ...ctx, unit, def }），固定序列按 actionIndex 分支；执行器是共用的 `AIActInstruction({ unit, resolveDef })`（死亡跳过、游标不推进）。
+- **胜负判定**：victory = enemies 全灭；defeat = 玩家死亡（队友死亡不算败北）。
+- **history 按阵营统计**：瑞米的输出计入 damageDealt、承伤计入 damageTaken。
+- **主语/宾语**：指令一律显式 source/target；目标解析（默认 = 第一个存活敌人）经选择器完成。
+- 预留方向：意图未来可对 `act` 做 dry-run 自动生成；初版保留显式 `getIntention`。
 
 ### 2.6 流程编排
 
@@ -297,7 +308,7 @@ src/
 ## 8. 工作分解（按依赖序，rewrite 分支一次性推进）
 
 1. **仓库手术**：删除旧内容/旧渲染层/旧依赖；引入 three；搭新目录骨架。
-2. **Core**：状态底座（纯对象）→ 结算内核（指令树 + WAIT + 订阅注册表 + 取消三动词）→ effect 并轨 → skill/enemy/ability 新契约 → 战斗根指令装配 → 最小测试内容。产出：注入录制 presenter 的 headless 结算可跑通一场战斗（node 环境单测，含触发链、veto、abort 用例）。
+2. **Core** ✅（v3 完成，57 测试全绿）：状态底座（纯对象）→ 结算内核（指令树 + WAIT + 订阅注册表 + 取消三动词）→ effect 并轨 → skill/enemy/ability 新契约 → 战斗根指令装配 → 最小测试内容。产出：注入录制 presenter 的 headless 结算可跑通一场战斗（node 环境单测，含触发链、veto、abort、WAIT 用例）。
 3. **Bridge**：事件枚举收口 → sequencer 迁入 → projection（内核标脏）→ intents → interactionHandler。
 4. **Stage 基座**：StageManager + 相机约定 → RichTextEngine（parser/layout/texture/hit map）→ CardObject → LayoutEngine → StageAnimator → Picker。产出：手牌可渲染、可 hover（tooltip 打通）、可拖拽出牌。
 5. **Stage 战斗完整化**：UnitObject → 粒子 → shader 特效移植（burn/hit/cooldown/disabled）→ 意图/血条/效果条 → 受击死亡演出。
@@ -320,3 +331,18 @@ src/
 - **触发链复杂度**：订阅模型表达力强，要靠 §2.2 秩序规则（priority、链深上限）与 headless 测试约束，警惕"什么都能做"退化成"什么都没法推理"。
 - **单人重写体量**：§8 每步内部再拆小提交；Core 先行保证逻辑正确，Stage 可先用纯色 placeholder 纹理占位接通链路，再补视觉。
 - 旧仓库内容（技能/敌人数据）删除前打 tag 或保留分支，供日后回迁内容时参考文本。
+
+## 11. v3 落地记录（Core 实施确认项）
+
+Core 实施过程中确认/修正的约定，与上文有出入处以本节为准：
+
+- **多单位改造**：见 §2.5（v3 重写）。Unit 补 `uniqueID`（投影 reconcile / presenter 寻址）与 `side`；`ctx.enemy` 便利字段取消，目标一律经选择器解析。
+- **abort 目标**：终局 abort TurnLoopInstruction 而非根（见 §2.2 落地修正）。
+- **牌库约定**：顶 = 数组 index 0；**首回合不抽牌**（起手 = `config.initialDraw`，`drawPerTurn` 自第二回合起）。
+- **护盾**：在己方阵回合开始清零（玩家护盾覆盖整个敌方回合）。
+- **效果订阅生命周期**：`AddEffectInstruction` 在首次获得效果时挂载其 subscriptions（window:'battle'，owner=`effect:{unit}:{effect}`），层数扣尽自动注销；addEffect 支持负层数扣减。
+- **技能触发订阅**：战斗开始时每张卡注册一次（window:'battle'），zone 限定写在 filter（匹配时查 zoneOf），卡牌换 zone 无需重注册；咏唱 activated 订阅在入槽时注册、停止时按 owner 注销。
+- **位置敏感冷却**：`def.cooldownZones`（默认 `['hand','deck']`）。
+- **费用管线**：技能消耗提交 `ConsumeMana/ConsumeActionPointsInstruction` 子指令，PRE 改费订阅因此对技能费用生效。
+- **内容注册**：Core 内显式 import 登记（保持环境无关，不用 import.meta.glob）；应用层如需自动收集可自行 glob。
+- **注册表工厂**：effect/skill/enemy/ally/ability 五表同构（`createRegistry`）。
