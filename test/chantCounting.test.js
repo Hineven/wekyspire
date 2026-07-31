@@ -1,0 +1,122 @@
+import { describe, it, expect } from 'vitest';
+import '../src/core/content/index.js';
+import { BattleDriver } from '../src/core/sdk/driver.js';
+import Enemy from '../src/core/state/enemy.js';
+import { registerSkill } from '../src/core/skills/registry.js';
+import { DrawCardsInstruction, DiscardCardInstruction } from '../src/core/instructions/cards.js';
+import { UseSkillInstruction } from '../src/core/instructions/skill.js';
+
+// ---- 太极/混元系（计数触发）原型：压测跨回合计数订阅 ----
+// 计数器放在 skillRuntime（plain data，可序列化）上，不藏闭包。
+
+// 太极（咏唱）：每打 3 张牌（不计自身），抽 1 张牌。
+registerSkill({
+  id: 'taiji', name: '太极',
+  cost: { mana: 0, actionPoint: 1 },
+  cardMode: 'chant',
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: UseSkillInstruction, phase: 'post',
+      filter: (instr) => instr.skill.uniqueID !== sctx.self.uniqueID,
+      react: (instr, ctx) => {
+        sctx.self.chantCount = (sctx.self.chantCount ?? 0) + 1;
+        if (sctx.self.chantCount % 3 === 0) {
+          ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
+        }
+      },
+    }],
+  },
+});
+
+// 混元（咏唱，太极深入分支）：每弃 3 张牌，抽 1 张牌。
+registerSkill({
+  id: 'hunyuan', name: '混元',
+  cost: { mana: 0, actionPoint: 1 },
+  cardMode: 'chant',
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: DiscardCardInstruction, phase: 'post',
+      react: (instr, ctx) => {
+        sctx.self.chantCount = (sctx.self.chantCount ?? 0) + 1;
+        if (sctx.self.chantCount % 3 === 0) {
+          ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
+        }
+      },
+    }],
+  },
+});
+
+describe('太极：每打 3 张牌抽 1 张', () => {
+  it('计数跨回合累积，第 3、6 张触发抽牌', () => {
+    const d = new BattleDriver({
+      deck: ['taiji', 'punch', 'punch', 'punch', 'punch'],
+      enemies: [new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 100 })], // 高血量避免中途胜利
+      seed: 5, config: { initialDraw: 5 },
+      player: { maxActionPoints: 6 }, // 一回合内打 太极+3拳 需要 4 点行动力
+    });
+    d.start();
+
+    d.play('taiji'); // 入咏唱槽，不计入计数
+    const taiji = d.state.chant.slots[0];
+    expect(taiji.defId).toBe('taiji');
+    expect(taiji.chantCount ?? 0).toBe(0);
+
+    // 第 1、2 张不触发
+    d.play('punch');
+    d.play('punch');
+    expect(d.state.zones.hand).toHaveLength(2);
+    expect(taiji.chantCount).toBe(2);
+
+    // 第 3 张触发：牌库空 → 洗回弃牌 → 抽 1
+    d.play('punch');
+    expect(taiji.chantCount).toBe(3);
+    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+
+    // 跨回合：计数不清零，第 6 张再次触发
+    d.endTurn(); // 敌方回合 → 回合 2 抽牌（牌库 2 张，抽 2 后弃牌堆空即止）
+    expect(d.state.zones.hand).toHaveLength(4);
+    d.play('punch');
+    d.play('punch');
+    expect(d.state.zones.hand).toHaveLength(2);
+    d.play('punch'); // 第 6 张
+    expect(taiji.chantCount).toBe(6);
+    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+  });
+});
+
+describe('混元：每弃 3 张牌抽 1 张', () => {
+  it('弃牌计数跨回合累积并触发抽牌', () => {
+    const d = new BattleDriver({
+      deck: ['hunyuan', 'punch', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], seed: 5, config: { initialDraw: 5 },
+    });
+    d.start();
+
+    d.play('hunyuan');
+    const hunyuan = d.state.chant.slots[0];
+    expect(d.state.zones.hand).toHaveLength(4);
+
+    const discardOne = () => {
+      const card = d.state.zones.hand[0];
+      d.dispatch(new DiscardCardInstruction({ uniqueID: card.uniqueID }));
+    };
+
+    discardOne();
+    discardOne();
+    expect(d.state.zones.hand).toHaveLength(2);
+    discardOne(); // 第 3 弃 → 抽 1
+    expect(hunyuan.chantCount).toBe(3);
+    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+
+    // 跨回合累积到 6 再次触发
+    d.endTurn();
+    expect(d.state.zones.hand).toHaveLength(4); // 回合 2 抽牌（牌库 2 张）
+    discardOne();
+    discardOne();
+    discardOne();
+    expect(hunyuan.chantCount).toBe(6);
+    expect(d.state.zones.hand).toHaveLength(2); // 4 - 3 + 1
+  });
+});
