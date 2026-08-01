@@ -14,13 +14,20 @@ registerSkill({
   use(sctx) {
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player,
-      target: firstAliveEnemy(sctx.battleState),
+      target: enemyTarget(sctx),
       amount: 6 + sctx.player.getStat('attack') + sctx.self.power,
     }));
     return true;
   },
   describe: (sctx) => `造成 ${6 + sctx.player.getStat('attack')} 点伤害。`,
 });
+
+// 玩家指定目标（须为敌方存活单位）优先，否则默认首个存活敌人
+function enemyTarget(sctx) {
+  return (sctx.target?.side === 'enemy' && !sctx.target.isDead())
+    ? sctx.target
+    : firstAliveEnemy(sctx.battleState);
+}
 
 // ② 获得护盾牌
 registerSkill({
@@ -42,7 +49,7 @@ registerSkill({
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
-    const target = firstAliveEnemy(sctx.battleState);
+    const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player, target, amount: 2,
     }));

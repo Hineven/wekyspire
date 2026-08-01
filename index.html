@@ -2,12 +2,33 @@
 <html lang="zh">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>魏启尖塔</title>
+    <title>魏启尖塔 · 战斗调试</title>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #1a1d24; }
+      #stage-canvas { display: block; position: fixed; inset: 0; }
+      #debug-overlay { position: fixed; inset: 0; pointer-events: none; font-family: sans-serif; }
+      #debug-counts {
+        position: absolute; top: 8px; left: 12px; color: #ccd; font-size: 13px;
+        background: rgba(0,0,0,.45); padding: 4px 10px; border-radius: 4px;
+      }
+      #debug-log {
+        position: absolute; top: 40px; left: 12px; max-width: 320px; max-height: 45vh;
+        overflow: hidden; color: #aab; font-size: 12px;
+      }
+      #debug-log .log-combat { color: #e8b; }
+      #debug-log .log-skill { color: #8ce; }
+      #debug-tooltip {
+        position: absolute; color: #fff; background: rgba(20,20,30,.92); border: 1px solid #557;
+        padding: 6px 10px; border-radius: 4px; font-size: 13px; z-index: 10;
+      }
+      #debug-end {
+        position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%);
+        color: #ffd; font-size: 32px; background: rgba(0,0,0,.7); padding: 24px 48px; border-radius: 8px;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/debug/main.js"></script>
   </body>
 </html>

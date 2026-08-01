@@ -67,7 +67,9 @@ export class PlayerTurnInstruction extends BattleInstruction {
         // 首回合不抽牌：起手牌由 PreBattle 的 initialDraw 发放
         if (ctx.battleState.turn.count > 1) {
           ctx.kernel.submitInstruction(
-            new DrawCardsInstruction({ count: ctx.battleState.config.drawPerTurn }), this);
+            new DrawCardsInstruction({
+              count: ctx.battleState.config.drawPerTurn, reason: 'turnStart',
+            }), this);
         }
         return false;
       case 3:

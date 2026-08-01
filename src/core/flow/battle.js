@@ -1,8 +1,10 @@
 import BattleKernel from '../kernel/BattleKernel.js';
-import { createBattleState, aliveEnemies } from '../state/battleState.js';
+import { createBattleState, aliveEnemies, swapCostOf } from '../state/battleState.js';
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
+import { ManualStopChantInstruction } from '../instructions/skill.js';
+import { SwapCardInstruction } from '../instructions/cards.js';
 import { PlayerTurnInstruction, TurnLoopInstruction } from '../instructions/turn.js';
 import {
   BattleRootInstruction, PreBattleInstruction, PostBattleInstruction,
@@ -21,7 +23,7 @@ export function createBattle({
     enemies, allies, seed,
     chantCapacity: runState.player.chantSlotBase,
   });
-  battleState.config = { initialDraw: 4, drawPerTurn: 3, ...config };
+  battleState.config = { initialDraw: 4, drawPerTurn: 3, swapBaseCost: 0, ...config };
   battleState.result = null;
 
   const kernel = new BattleKernel({
@@ -29,6 +31,10 @@ export function createBattle({
       if (ctx.player.isDead()) return 'defeat';
       if (aliveEnemies(ctx.battleState).length === 0) return 'victory';
       return null;
+    },
+    // 挂起的输入请求被取消（如祖先被 abort）时清掉 pendingInput，防残留
+    onWaitingCancelled: (instr) => {
+      if (battleState.pendingInput?.instruction === instr) battleState.pendingInput = null;
     },
   });
   const ctx = {
@@ -69,14 +75,16 @@ export function isBattleFinished(battle) {
   return battle.kernel.stack.length === 0;
 }
 
-// 玩家出牌：可用性检查 → 作为当前回合指令的子节点提交 → 恢复泵
-export function playerUseSkill(battle, uniqueID) {
+// 玩家出牌：可用性检查 → 作为当前回合指令的子节点提交 → 恢复泵。
+// targetUniqueID：玩家拖牌指定的目标（白名单解析——结算时须为存活单位，否则落 null，
+// 技能决定是否采用 sctx.target，未采用则走各自默认选靶）。
+export function playerUseSkill(battle, uniqueID, targetUniqueID = null) {
   const { ctx, kernel } = battle;
   const turn = currentPlayerTurn(battle);
   if (!turn || !turn._waiting) return false;
   const skill = ctx.battleState.zones.hand.find(s => s.uniqueID === uniqueID);
   if (!skill || !canUseSkill(ctx, skill)) return false;
-  kernel.submitInstruction(new UseSkillInstruction({ skill }), turn);
+  kernel.submitInstruction(new UseSkillInstruction({ skill, targetUniqueID }), turn);
   kernel.resume(turn, ctx);
   return true;
 }
@@ -88,6 +96,35 @@ export function playerEndTurn(battle) {
   if (!turn || !turn._waiting) return false;
   turn.endRequested = true;
   kernel.resume(turn, ctx);
+  return true;
+}
+
+// 玩家换牌：弃 1 抽 1，费用 = swapCostOf（首个 0，逐次 +1，能力可封顶）。
+// 费用走资源指令子节点（PRE 可修饰）；可用性按当前费用检查。
+export function canSwapCard(battle, uniqueID) {
+  const { ctx } = battle;
+  const turn = currentPlayerTurn(battle);
+  if (!turn || !turn._waiting || turn.endRequested) return false;
+  const skill = ctx.battleState.zones.hand.find(s => s.uniqueID === uniqueID);
+  if (!skill) return false;
+  return ctx.player.actionPoints >= swapCostOf(ctx.battleState);
+}
+
+export function playerSwapCard(battle, uniqueID) {
+  if (!canSwapCard(battle, uniqueID)) return false;
+  const turn = currentPlayerTurn(battle);
+  battle.kernel.submitInstruction(new SwapCardInstruction({ uniqueID }), turn);
+  battle.kernel.resume(turn, battle.ctx);
+  return true;
+}
+
+// 玩家手动停止咏唱（anchored 守卫在指令内，此处只管提交）
+export function playerStopChant(battle, uniqueID) {
+  const turn = currentPlayerTurn(battle);
+  if (!turn || !turn._waiting || turn.endRequested) return false;
+  if (!battle.battleState.chant.slots.some(s => s.uniqueID === uniqueID)) return false;
+  battle.kernel.submitInstruction(new ManualStopChantInstruction({ uniqueID }), turn);
+  battle.kernel.resume(turn, battle.ctx);
   return true;
 }
 

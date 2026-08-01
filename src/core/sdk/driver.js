@@ -6,7 +6,7 @@ import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { canUseSkill } from '../skills/helpers.js';
 import {
-  createBattle, startBattle, playerUseSkill, playerEndTurn,
+  createBattle, startBattle, playerUseSkill, playerEndTurn, playerSwapCard,
   isBattleFinished, isWaitingPlayerInput, currentPlayerTurn,
   getPendingInput, respondInput,
 } from '../flow/battle.js';
@@ -80,6 +80,17 @@ export class BattleDriver {
 
   endTurn() {
     if (!playerEndTurn(this.battle)) throw new Error('无法结束回合（不在等待输入或战斗已结束）');
+    return this;
+  }
+
+  // 换牌：defId（第一张）或 uniqueID
+  swap(defIdOrUniqueID) {
+    const hand = this.state.zones.hand;
+    const skill = hand.find(s => s.uniqueID === defIdOrUniqueID)
+      ?? hand.find(s => s.defId === defIdOrUniqueID);
+    if (!skill || !playerSwapCard(this.battle, skill.uniqueID)) {
+      throw new Error(`无法换牌 '${defIdOrUniqueID}'（不在手牌/费用不足/不在等待输入）`);
+    }
     return this;
   }
 

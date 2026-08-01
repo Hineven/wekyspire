@@ -6,12 +6,20 @@ import { ConsumeManaInstruction, ConsumeActionPointsInstruction } from './resour
 
 // 使用技能：三阶段。
 //   stage 0: 播报 + 提交 ConsumeSkillResourcesInstruction（费用/充能）
-//   stage 1: 提交 ActivateSkillInstruction（执行 def.use，可多阶段）
+//   stage 1: 提交 ActivateSkillInstruction（执行 def.use，可多阶段）；
+//            targetUniqueID（玩家指定目标）在此解析为存活单位 → sctx.target，
+//            结算时才解析——点击到结算之间目标可能已死亡（解析失败落 null，走默认选靶）
 //   stage 2: history.played++ + 收尾 zone 迁移（咏唱→chantSlot / 消耗→burnt / 否则→discard）
+//            + 离场播报（cardBurnt/cardMoved）——离场动画因此成为 sequencer 节拍，
+//            串行队列天然保证"发动 → 效果 → 离场"的播放次序
+// costOverride: { mana?, actionPoint? } 费用覆写——嵌套出牌（万变拳"0AP 打出任意手牌"）
+// 由技能逻辑直接提交 UseSkillInstruction，不经 playerUseSkill 的可用性检查。
 export class UseSkillInstruction extends BattleInstruction {
-  constructor({ skill }, opts = {}) {   // skill = skillRuntime
+  constructor({ skill, costOverride = null, targetUniqueID = null }, opts = {}) {   // skill = skillRuntime
     super(opts);
     this.skill = skill;
+    this.costOverride = costOverride;
+    this.targetUniqueID = targetUniqueID;
   }
 
   execute(ctx) {
@@ -19,10 +27,14 @@ export class UseSkillInstruction extends BattleInstruction {
     switch (this._stage) {
       case 0:
         ctx.presenter?.skillUsed?.({ skill: this.skill, def: sctx.def });
-        ctx.kernel.submitInstruction(new ConsumeSkillResourcesInstruction({ skill: this.skill }), this);
+        ctx.kernel.submitInstruction(
+          new ConsumeSkillResourcesInstruction({ skill: this.skill, costOverride: this.costOverride }), this);
         return false;
       case 1:
-        ctx.kernel.submitInstruction(new ActivateSkillInstruction({ skill: this.skill }), this);
+        ctx.kernel.submitInstruction(new ActivateSkillInstruction({
+          skill: this.skill,
+          target: this.targetUniqueID ? findAliveUnit(ctx, this.targetUniqueID) : null,
+        }), this);
         return false;
       default: {
         ctx.battleState.history.turn.played += 1;
@@ -40,8 +52,10 @@ export class UseSkillInstruction extends BattleInstruction {
           ctx.presenter?.chantStarted?.({ skill: this.skill });
         } else if (def.keywords?.includes('exhaust')) {
           moveCard(ctx.battleState, this.skill.uniqueID, 'burnt');
+          ctx.presenter?.cardBurnt?.({ card: this.skill });
         } else {
           moveCard(ctx.battleState, this.skill.uniqueID, 'discard');
+          ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'discard' });
         }
         return true;
       }
@@ -50,17 +64,19 @@ export class UseSkillInstruction extends BattleInstruction {
 }
 
 // 资源消耗：费用不直接扣，而是提交资源指令——费用修正（PRE 订阅）因此对技能费用生效。
+// costOverride 覆写定义费用（嵌套出牌的费用豁免）；充能消耗不受影响。
 export class ConsumeSkillResourcesInstruction extends BattleInstruction {
-  constructor({ skill }, opts = {}) {
+  constructor({ skill, costOverride = null }, opts = {}) {
     super(opts);
     this.skill = skill;
+    this.costOverride = costOverride;
   }
 
   execute(ctx) {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
-      const mana = def.cost?.mana ?? 0;
-      const ap = def.cost?.actionPoint ?? 0;
+      const mana = this.costOverride?.mana ?? def.cost?.mana ?? 0;
+      const ap = this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
       if (mana > 0) ctx.kernel.submitInstruction(new ConsumeManaInstruction({ amount: mana }), this);
       if (ap > 0) ctx.kernel.submitInstruction(new ConsumeActionPointsInstruction({ amount: ap }), this);
       return false;
@@ -78,15 +94,18 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
 
 // 激活技能：执行 def.use(sctx, stage)。def.use 返回 false 则推进其自有 stage 计数，
 // 支持多阶段技能（选牌、二段结算等）。
+// target：玩家指定的目标单位（存活校验已在提交前完成；可为 null——技能走默认选靶）。
 export class ActivateSkillInstruction extends BattleInstruction {
-  constructor({ skill }, opts = {}) {
+  constructor({ skill, target = null }, opts = {}) {
     super(opts);
     this.skill = skill;
+    this.target = target;
     this._skillStage = 0;
   }
 
   execute(ctx) {
     const sctx = makeSkillCtx(ctx, this.skill);
+    sctx.target = this.target;
     const done = sctx.def.use ? sctx.def.use(sctx, this._skillStage) : true;
     if (done === false) {
       this._skillStage += 1;
@@ -96,7 +115,15 @@ export class ActivateSkillInstruction extends BattleInstruction {
   }
 }
 
+// 玩家指定目标的白名单解析：全场存活单位（敌/友/玩家），找不到或已死亡 → null
+function findAliveUnit(ctx, uniqueID) {
+  const all = [...ctx.battleState.enemies, ...ctx.battleState.allies, ctx.player];
+  const unit = all.find(u => u.uniqueID === uniqueID);
+  return unit && !unit.isDead() ? unit : null;
+}
+
 // 手动停止咏唱：onDisable → 按 owner 注销订阅 → 离槽进弃牌堆。
+// keywords 含 'anchored' 的咏唱无法撤下（燃心决等）。
 export class ManualStopChantInstruction extends BattleInstruction {
   constructor({ uniqueID }, opts = {}) {
     super(opts);
@@ -107,6 +134,10 @@ export class ManualStopChantInstruction extends BattleInstruction {
     const skill = ctx.battleState.chant.slots.find(s => s.uniqueID === this.uniqueID);
     if (!skill) return true;
     const sctx = makeSkillCtx(ctx, skill);
+    if (sctx.def.keywords?.includes('anchored')) {
+      ctx.presenter?.chantStopFailed?.({ skill, reason: 'anchored' });
+      return true;
+    }
     sctx.def.activated?.onDisable?.(sctx, 'manual');
     skill.isActivated = false;
     ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);

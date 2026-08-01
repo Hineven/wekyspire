@@ -1,7 +1,6 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import { cloneSkillRuntime } from '../state/skillRuntime.js';
-import { getSkillDefinition } from '../skills/registry.js';
-import { registerSkillSubscriptions } from '../skills/helpers.js';
+import { enterBattle } from '../skills/helpers.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
@@ -24,23 +23,10 @@ export class PreBattleInstruction extends BattleInstruction {
       player.mana = player.maxMana;
       player.actionPoints = player.maxActionPoints;
 
-      // 构筑牌组：克隆 runtime，初始化充能（slowStart 起手 0 充能）
-      battleState.zones.deck = player.deck.map(rt => {
-        const clone = cloneSkillRuntime(rt);
-        const def = getSkillDefinition(clone.defId);
-        const slow = def.keywords?.includes('slowStart');
-        const max = def.charges?.max ?? Infinity;
-        clone.remainingUses = slow ? 0 : max;
-        clone.currentCooldown = def.charges?.cooldownTurns ?? 0;
-        clone.isActivated = false;
-        return clone;
-      });
+      // 构筑牌组：克隆 runtime 进牌库，洗牌后逐卡走"进入战斗"元语（充能初始化 + 常驻订阅）
+      battleState.zones.deck = player.deck.map(rt => cloneSkillRuntime(rt));
       battleState.rng.shuffle(battleState.zones.deck);
-
-      // 注册订阅：每张技能卡一份（zone 限定在 filter 内，跨 zone 无需重注册）
-      for (const skill of battleState.zones.deck) {
-        registerSkillSubscriptions(ctx, skill);
-      }
+      for (const skill of battleState.zones.deck) enterBattle(ctx, skill);
       // 能力：onBattleStart + 常驻订阅
       for (const abilityId of player.abilities) {
         const def = getAbilityDefinition(abilityId);

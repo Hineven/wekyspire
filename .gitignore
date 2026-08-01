@@ -107,3 +107,5 @@ out/
 
 # built
 dist/
+
+.playwright-mcp/*

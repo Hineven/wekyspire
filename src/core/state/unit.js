@@ -63,14 +63,17 @@ export default class Unit {
     this.effects = predicate ? this.effects.filter(e => !predicate(e)) : [];
   }
 
-  // ---- 读轨：属性修正 ----
+  // ---- 读轨：属性修正（面板） ----
   // getStat('attack') = base + Σ 效果的 statModifiers。
-  // UI 显示、AI 意图、技能 describe 全部走这里；结算时的反应走订阅（写轨）。
-  getStat(stat) {
+  // 规则：面板只加性（乘除/条件结算走 PRE 订阅写轨，不进面板）。
+  // view（可选，通常为 battleState）：供跨实体衍生使用——如火焰主宰
+  // "每3层燃烧提供1点灵能"需要读敌人身上的燃烧层数。不需要 view 的修饰忽略它。
+  // UI 显示、AI 意图、技能 amount/describe 全部走这里；结算时的反应走订阅（写轨）。
+  getStat(stat, view = null) {
     let value = this[stat] ?? 0;
     for (const e of this.effects) {
       const mod = getEffectDefinition(e.effectId).statModifiers?.[stat];
-      if (mod) value += mod(e.stacks, this);
+      if (mod) value += mod(e.stacks, this, view);
     }
     return value;
   }

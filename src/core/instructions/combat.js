@@ -1,15 +1,18 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 
-// 伤害结算：防御减免 → 护盾吸收（pierce 跳过护盾与防御）→ 扣 HP。
+// 伤害结算：防御减免 → 护盾吸收（pierce 跳过护盾与防御）→ 扣 HP（不低于 minHp 地板）。
 // payload 白名单 ['damage', 'pierce']：PRE 订阅可改伤害/穿透（斩灭翻倍、易伤加深等）。
 // POST 订阅经 result 读结算明细（暴怒反击、受伤联动等）。
+// tags：机制标记位（如 'aoe' 群伤），供 filter 识别（爆发"群伤单目标三倍"），不可修饰。
+// minHp 地板：经 getStat('minHp') 读轨（不灭等效果的 statModifiers 提供），默认 0。
 export class DealDamageInstruction extends BattleInstruction {
-  constructor({ source = null, target, amount, pierce = false }, opts = {}) {
+  constructor({ source = null, target, amount, pierce = false, tags = [] }, opts = {}) {
     super(opts);
     this.source = source;       // Unit | null（环境伤害等无来源）
     this.target = target;       // Unit
     this.amount = amount;       // 基础伤害（不含攻击面板；攻击面板由调用方算入或经 PRE）
     this.basePierce = pierce;
+    this.tags = tags;
   }
 
   get modifiablePayload() { return ['damage', 'pierce']; }
@@ -32,7 +35,7 @@ export class DealDamageInstruction extends BattleInstruction {
       dmg -= shieldAbsorbed;
     }
 
-    target.hp = Math.max(target.hp - dmg, 0);
+    target.hp = Math.max(target.hp - dmg, target.getStat('minHp'));
 
     this.result = {
       damage: this.payload.damage,

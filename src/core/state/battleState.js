@@ -19,9 +19,17 @@ export function createBattleState({ enemies = [], allies = [], seed = 1, chantCa
     },
     chant: { capacity: chantCapacity, slots: [] },  // 咏唱槽（slots 放 skillRuntime）
     turn: { count: 0, side: 'player' },             // side: 'player' | 'enemy'
+    swapCount: 0,       // 本场换牌次数（换牌费用 = swapBaseCost + swapCount，刀客/刀圣用 cap 封顶）
+    swapCostCap: null,  // 换牌费用上限（能力在 onBattleStart 设置；null = 无上限）
     history: freshHistory(),
     rng: createRng(seed),
   };
+}
+
+// 换牌费用：base + 次数，cap 封顶（旧仓库语义：首次 0，每次 +1）
+export function swapCostOf(battleState) {
+  const base = (battleState.config?.swapBaseCost ?? 0) + battleState.swapCount;
+  return Math.min(base, battleState.swapCostCap ?? Infinity);
 }
 
 export function freshHistory() {

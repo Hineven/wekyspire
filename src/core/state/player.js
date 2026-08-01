@@ -4,7 +4,7 @@ import Unit from './unit.js';
 // shield/effects/actionPoints/mana 由战斗流程在每场战斗内重置与推进。
 export default class Player extends Unit {
   constructor(opts = {}) {
-    super(opts);
+    super({ name: '玩家', ...opts });
     this.side = 'player';
     this.maxMana = opts.maxMana ?? 3;
     this.mana = this.maxMana;
