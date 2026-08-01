@@ -3,7 +3,9 @@
 // 命中 token 热区 → 发 tooltip:*（Shell 消费）；未命中 → 整卡 hover（card:hover/leave）。
 // 拖拽由 BattleStage 在 Picker 的 card 命中基础上驱动（射线与牌桌平面求交），不在本模块内。
 //
-// three 的 Raycaster 是纯数学，node 单测可用真实射线 + 真实 plane 验证优先级。
+// 双相机路由：pickable 带 space（'world'|'ui'，缺省 world）——UI pass 用专用 uiCamera
+// 渲染且永远盖在世界 pass 上方，故拾取也先查 UI（uiCamera 射线）再查世界（camera 射线），
+// UI 命中即返回。three 的 Raycaster 是纯数学，node 单测可用真实射线 + 真实 plane 验证优先级。
 
 import * as THREE from 'three';
 import { EventNames } from '../../bridge/events.js';
@@ -11,21 +13,21 @@ import { EventNames } from '../../bridge/events.js';
 export class Picker {
   /**
    * @param {object} options
-   *   stageManager: StageManager   相机与 screenToWorld 来源
+   *   stageManager: StageManager   相机（世界 + UI）与 viewSize 来源
    *   bus: 事件总线（tooltip/card-hover 协议事件的出口，接哪条总线由装配层定）
    */
   constructor({ stageManager, bus }) {
     this._sm = stageManager;
     this._bus = bus;
     this._raycaster = new THREE.Raycaster();
-    this._pickables = new Map(); // id -> { object3D, kind:'card'|'button'|'unit', cardObject? }
+    this._pickables = new Map(); // id -> { object3D, kind:'card'|'button'|'unit', space, cardObject? }
     this._hoverToken = null;     // { id, region }
     this._hoverCard = null;      // id
   }
 
-  addPickable(id, object3D, { kind = 'card', cardObject = null } = {}) {
+  addPickable(id, object3D, { kind = 'card', cardObject = null, space = 'world' } = {}) {
     object3D.userData.pickableId = id;
-    this._pickables.set(id, { object3D, kind, cardObject });
+    this._pickables.set(id, { object3D, kind, cardObject, space });
   }
 
   removePickable(id) {
@@ -37,31 +39,34 @@ export class Picker {
   /**
    * 拾取查询（纯函数，不发事件）。
    * @param {object} filter  kinds: 只取这些 kind 的 pickable；excludeIds: 排除的 id（如拖拽中的卡）
-   * @returns { kind:'token', id, region } | { kind:'card'|'button'|'unit', id } | { kind:'background' }
+   * @returns { kind:'token', id, region } | { kind:'card'|'button'|'unit'|'pile'|'viewer', id } | { kind:'background' }
    */
   pick(screenX, screenY, { kinds = null, excludeIds = null } = {}) {
-    const world = this._sm.screenToWorld(screenX, screenY);
-    const camera = this._sm.camera;
-    camera.updateMatrixWorld(); // 相机不在场景图内，matrixWorld 需手动刷新
+    const { width, height } = this._sm.viewSize;
     const ndc = new THREE.Vector2(
-      (world.x / (camera.right - camera.left)) * 2,
-      (world.y / (camera.top - camera.bottom)) * 2,
+      (screenX / width) * 2 - 1,
+      -((screenY / height) * 2 - 1),
     );
-    this._raycaster.setFromCamera(ndc, camera);
-
-    const roots = [...this._pickables.entries()]
-      .filter(([id, p]) => (!kinds || kinds.includes(p.kind)) && !excludeIds?.includes(id))
-      .map(([, p]) => p.object3D);
-    const hits = this._raycaster.intersectObjects(roots, true);
-    for (const hit of hits) {
-      const owner = this._findPickable(hit.object);
-      if (!owner) continue;
-      // 整卡命中后做 hit map 二级查询（仅卡面面片）
-      if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {
-        const region = owner.entry.cardObject.hitTestUV({ u: hit.uv.x, v: hit.uv.y });
-        if (region) return { kind: 'token', id: owner.id, region };
+    // UI 先世界后（UI pass 渲染次序即覆盖次序）
+    for (const space of ['ui', 'world']) {
+      const camera = space === 'ui' ? this._sm.uiCamera : this._sm.camera;
+      const entries = [...this._pickables.entries()]
+        .filter(([id, p]) => (p.space ?? 'world') === space
+          && (!kinds || kinds.includes(p.kind)) && !excludeIds?.includes(id));
+      if (!camera || !entries.length) continue;
+      camera.updateMatrixWorld(); // 相机不在场景图内，matrixWorld 需手动刷新
+      this._raycaster.setFromCamera(ndc, camera);
+      const hits = this._raycaster.intersectObjects(entries.map(([, p]) => p.object3D), true);
+      for (const hit of hits) {
+        const owner = this._findPickable(hit.object);
+        if (!owner) continue;
+        // 整卡命中后做 hit map 二级查询（仅卡面面片）
+        if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {
+          const region = owner.entry.cardObject.hitTestUV({ u: hit.uv.x, v: hit.uv.y });
+          if (region) return { kind: 'token', id: owner.id, region };
+        }
+        return { kind: owner.entry.kind, id: owner.id };
       }
-      return { kind: owner.entry.kind, id: owner.id };
     }
     return { kind: 'background' };
   }

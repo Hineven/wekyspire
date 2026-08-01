@@ -109,3 +109,6 @@ out/
 dist/
 
 .playwright-mcp/*
+
+# seedream 素材管线虚拟环境（tools/seedream/out/ 已被顶层 out/ 规则覆盖）
+tools/seedream/.venv/

@@ -10,7 +10,7 @@ import AwaitPlayerInputInstruction from '../src/core/instructions/input.js';
 import { DiscardCardInstruction } from '../src/core/instructions/cards.js';
 import { createBridge, EventNames } from '../src/bridge/index.js';
 import { StageManager } from '../src/stage/StageManager.js';
-import { BattleStage } from '../src/stage/stages/BattleStage.js';
+import { BattleStage, BUTTON_POSITIONS } from '../src/stage/stages/BattleStage.js';
 
 // BattleStage 无头联调：真 bridge + 真场景图，fake 烘焙 + 同步 tween。
 // 验证 reconcile 建销、拖拽出牌、按钮结束回合、结算期点选输入 的完整链路。
@@ -70,19 +70,22 @@ function make(deck = ['punch', 'punch', 'punch', 'punch'], enemyCount = 1) {
   return { bridge, sm, stage };
 }
 
-const toScreen = (wx, wy) => ({ x: (wx + 50) * 10, y: (50 - wy) * 10 });
+// 世界 → 屏幕像素：走相机投影（透视下 z≠0 的点投影位置不同，必须带真实 z）。
+// 双相机：单位在世界 pass 用世界相机（斜视）；卡牌/按钮/图标在 UI pass 用 uiCamera（正直）。
+const toScreen = (stage, wx, wy, wz = 0) => stage._sm.worldToScreen(wx, wy, wz);
+const toScreenUI = (stage, wx, wy, wz = 0) => stage._sm.worldToScreen(wx, wy, wz, stage._sm.uiCamera);
 
-// 模拟一次完整拖拽：从 (fromWorld) 拖到 (toWorld) 松手
+// 模拟一次完整拖拽：从 (fromWorld) 拖到 (toWorld) 松手（两端均为 UI 空间坐标）
 function drag(stage, fromWorld, toWorld) {
-  const a = toScreen(...fromWorld);
-  const b = toScreen(...toWorld);
+  const a = toScreenUI(stage, ...fromWorld);
+  const b = toScreenUI(stage, ...toWorld);
   stage.handlePointerDown(a.x, a.y);
   stage.handlePointerMove(b.x, b.y);
   stage.handlePointerUp(b.x, b.y);
 }
 
 function click(stage, worldPos) {
-  const p = toScreen(...worldPos);
+  const p = toScreenUI(stage, ...worldPos);
   stage.handlePointerDown(p.x, p.y);
   stage.handlePointerUp(p.x, p.y);
 }
@@ -111,19 +114,61 @@ describe('BattleStage 无头联调', () => {
     for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThan(xs[i - 1]);
   });
 
-  it('拖拽过出牌线松手 = 打出：敌人掉血、手牌对象移除', () => {
+  it('免目标卡（格挡）旧式拖拽：拖过出牌线松手 = 打出，卡随指针走', () => {
+    const { bridge, stage } = make(['guard', 'punch', 'punch', 'punch']);
+    bridge.start();
+    const player = bridge.battle.ctx.player;
+    const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
+    expect(guard.targetMode).toBe('none'); // 投影带交互声明
+    const cardPos = stage._cards.get(guard.uniqueID).object.position;
+
+    // 拖拽中：卡随指针走（旧 behavior）
+    const a = toScreenUI(stage, cardPos.x, cardPos.y, cardPos.z);
+    const b = toScreenUI(stage, 0, 0);
+    stage.handlePointerDown(a.x, a.y);
+    stage.handlePointerMove(b.x, b.y);
+    expect(stage._dragging?.id).toBe(guard.uniqueID);
+    expect(stage._aiming).toBeNull();
+    expect(stage._arrow.visible).toBe(false);
+    expect(stage._cards.get(guard.uniqueID).object.position.y).toBeGreaterThan(-5); // 已离开手牌扇区（≈0，z=30 平面反投影略有透视偏移）
+
+    stage.handlePointerUp(b.x, b.y); // 过线松手 → 打出
+    expect(player.shield).toBe(5);
+    expect(stage._cards.has(guard.uniqueID)).toBe(false);
+    expect(stage._cards.size).toBe(bridge.getProjection().hand.length);
+  });
+
+  it('选目标卡（冲拳）瞄准：卡留手牌高亮，松手不在敌人身上 = 取消（过线也不打出）', () => {
     const { bridge, stage } = make();
     bridge.start();
     const slime = bridge.battle.battleState.enemies[0];
-    const hpBefore = slime.hp;
     const firstCard = bridge.getProjection().hand[0];
-    const cardPos = stage._cards.get(firstCard.uniqueID).object.position;
+    expect(firstCard.targetMode).toBe('enemy');
+    const obj = stage._cards.get(firstCard.uniqueID).object;
+    const home = obj.position.clone();
 
-    drag(stage, [cardPos.x, cardPos.y], [0, 0]); // 拖到桌面中央（y=0 > -20）
+    const a = toScreenUI(stage, home.x, home.y, home.z);
+    const b = toScreenUI(stage, 0, 0); // 桌面中央（y=0 > 出牌线，但不在敌人身上）
+    stage.handlePointerDown(a.x, a.y);
+    stage.handlePointerMove(b.x, b.y);
 
-    expect(slime.hp).toBeLessThan(hpBefore);
-    expect(stage._cards.has(firstCard.uniqueID)).toBe(false);
-    expect(stage._cards.size).toBe(bridge.getProjection().hand.length);
+    // 瞄准中：卡不随指针走（留在手牌区），箭头显示且未锁定目标
+    expect(stage._aiming?.id).toBe(firstCard.uniqueID);
+    expect(stage._dragging).toBeNull();
+    expect(stage._arrow.visible).toBe(true);
+    expect(stage._arrow.targetValid).toBe(false);
+    expect(obj.position.y).toBeLessThan(-25); // 仍在手牌扇区（home.y≈-40，撑开抬升有限）
+    expect(obj.visualState).toBe('highlighted');
+
+    stage.handlePointerUp(b.x, b.y); // 松手不在敌人身上 → 取消
+    expect(slime.hp).toBe(slime.maxHp);
+    expect(stage._cards.has(firstCard.uniqueID)).toBe(true);
+    expect(stage._arrow.visible).toBe(false);
+    expect(stage._aiming).toBeNull();
+    // 取消后回到扇形锚点（去高亮、收撑开）
+    expect(obj.position.x).toBeCloseTo(home.x);
+    expect(obj.position.y).toBeCloseTo(home.y);
+    expect(obj.visualState).toBe('normal');
   });
 
   it('拖回手牌区松手 = 取消：牌回锚点，不掉血', () => {
@@ -142,35 +187,100 @@ describe('BattleStage 无头联调', () => {
     expect(pos.y).toBeCloseTo(home.y);
   });
 
-  it('拖牌到指定敌人身上：目标高亮，伤害落在该敌人', () => {
+  it('瞄准到指定敌人身上：箭头锁定变色 + 目标高亮，伤害落在该敌人', () => {
     const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch'], 2);
     bridge.start();
     const [e0, e1] = bridge.battle.battleState.enemies;
     const first = bridge.getProjection().hand[0];
-    const cardPos = stage._cards.get(first.uniqueID).object.position;
+    const obj = stage._cards.get(first.uniqueID).object;
+    const cardPos = obj.position;
 
-    // 拖到第二个敌人（x=14+18=32, y=10）身上
-    const a = toScreen(cardPos.x, cardPos.y);
-    const b = toScreen(32, 10);
+    // 拖到第二个敌人身上（槽位由 scene 战线轴换算，读对象实际位置而非硬编码）
+    const e1Pos = stage._units.get(e1.uniqueID).position;
+    const a = toScreenUI(stage, cardPos.x, cardPos.y, cardPos.z);
+    const b = toScreen(stage, e1Pos.x, e1Pos.y + 4, e1Pos.z); // 立牌下半身（组原点在脚底锚点；单位在世界空间）
     stage.handlePointerDown(a.x, a.y);
     stage.handlePointerMove(b.x, b.y);
 
-    // 掠过 → 只有 e1 高亮
+    // 掠过 → 只有 e1 高亮，箭头锁定变色；卡本体仍留在手牌区
     expect(stage._dragTargetId).toBe(e1.uniqueID);
     expect(stage._units.get(e1.uniqueID).highlighted).toBe(true);
     expect(stage._units.get(e0.uniqueID).highlighted).toBe(false);
+    expect(stage._arrow.visible).toBe(true);
+    expect(stage._arrow.targetValid).toBe(true);
+    expect(obj.position.y).toBeLessThan(-25);
 
     stage.handlePointerUp(b.x, b.y);
     expect(e1.hp).toBeLessThan(e1.maxHp);  // 指定目标受伤
     expect(e0.hp).toBe(e0.maxHp);          // 首个敌人未受牵连
     expect(stage._units.get(e1.uniqueID).highlighted).toBe(false); // 高亮已清
+    expect(stage._arrow.visible).toBe(false);
   });
   it('点主按钮 = 结束回合：敌人行动，玩家掉血', () => {
     const { bridge, stage } = make();
     bridge.start();
     const hpBefore = bridge.battle.ctx.player.hp;
-    click(stage, [44, -12]); // 主按钮位置
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
     expect(bridge.battle.ctx.player.hp).toBeLessThan(hpBefore);
+  });
+
+  it('换卡按钮：进模式手牌高亮 → 点手牌换出（弃1抽1，费用递增）', () => {
+    // 牌库需多于初始抽牌数，否则换牌弃牌会立刻被洗回牌库
+    const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch', 'punch', 'punch']);
+    bridge.start();
+    const proj0 = bridge.getProjection();
+    expect(proj0.swapCost).toBe(0);
+    // 换卡按钮初始可用（自由行动窗 + 手牌非空 + 费用够）
+    expect(stage._buttons.swap.cardData).toMatchObject({ label: '换卡', enabled: true });
+
+    // 点换卡按钮进入换卡模式：按钮激活态、手牌全部高亮
+    click(stage, [BUTTON_POSITIONS.swap.x, BUTTON_POSITIONS.swap.y]);
+    expect(stage._swapMode).toBe(true);
+    expect(stage._buttons.swap.cardData.active).toBe(true);
+    for (const c of bridge.getProjection().hand) {
+      expect(stage._cards.get(c.uniqueID).object.visualState).toBe('highlighted');
+    }
+
+    // 点一张手牌换出：手牌数不变、弃牌+1、换卡费用递增、模式退出
+    const target = bridge.getProjection().hand[0];
+    const handBefore = bridge.getProjection().hand.length;
+    const discardBefore = bridge.getProjection().counts.discard;
+    const tPos = stage._cards.get(target.uniqueID).object.position;
+    click(stage, [tPos.x, tPos.y, tPos.z]);
+
+    const proj1 = bridge.getProjection();
+    expect(stage._swapMode).toBe(false);
+    expect(proj1.hand.length).toBe(handBefore);          // 抽回 1 张
+    expect(proj1.counts.discard).toBe(discardBefore + 1); // 换出的牌进弃牌堆
+    expect(proj1.hand.some(c => c.uniqueID === target.uniqueID)).toBe(false);
+    expect(proj1.swapCost).toBe(1);
+    // 退出模式后手牌恢复可发动性着色（不再是换卡高亮）
+    for (const c of proj1.hand) {
+      expect(stage._cards.get(c.uniqueID).object.visualState).not.toBe('highlighted');
+    }
+  });
+
+  it('换卡模式可再点按钮取消；换卡模式下点手牌不会误触发拖拽', () => {
+    const { bridge, stage } = make();
+    bridge.start();
+    click(stage, [BUTTON_POSITIONS.swap.x, BUTTON_POSITIONS.swap.y]);
+    expect(stage._swapMode).toBe(true);
+
+    // 模式下按住手牌移动：不构成拖拽（down 被模式拦截）
+    const card = bridge.getProjection().hand[0];
+    const cPos = stage._cards.get(card.uniqueID).object.position;
+    const a = toScreen(stage, cPos.x, cPos.y, cPos.z);
+    stage.handlePointerDown(a.x, a.y);
+    expect(stage._dragging).toBeNull();
+    expect(stage._aiming).toBeNull();
+    stage.handlePointerUp(a.x, a.y); // 点按 = 换出
+
+    // 再进模式 → 再点按钮取消
+    click(stage, [BUTTON_POSITIONS.swap.x, BUTTON_POSITIONS.swap.y]);
+    expect(stage._swapMode).toBe(true);
+    click(stage, [BUTTON_POSITIONS.swap.x, BUTTON_POSITIONS.swap.y]);
+    expect(stage._swapMode).toBe(false);
+    expect(stage._buttons.swap.cardData.active).toBe(false);
   });
 
   it('结算期选卡输入：候选高亮，点选候选牌即应答', () => {
@@ -178,7 +288,7 @@ describe('BattleStage 无头联调', () => {
     bridge.start();
     const ask = bridge.getProjection().hand.find(c => c.defId === 'askDiscardStage');
     const askPos = stage._cards.get(ask.uniqueID).object.position;
-    drag(stage, [askPos.x, askPos.y], [0, 0]); // 打出问询
+    drag(stage, [askPos.x, askPos.y, askPos.z], [0, 0]); // 打出问询
 
     const proj = bridge.getProjection();
     expect(proj.pendingInput?.request.kind).toBe('selectHandCard');
@@ -187,7 +297,7 @@ describe('BattleStage 无头联调', () => {
 
     const discardBefore = proj.counts.discard;
     const cPos = stage._cards.get(candidateId).object.position;
-    click(stage, [cPos.x, cPos.y]); // 点选候选牌
+    click(stage, [cPos.x, cPos.y, cPos.z]); // 点选候选牌
 
     expect(bridge.getProjection().pendingInput).toBeNull();
     // +2：候选牌弃掉 + 问询卡本身在 stage 2 收尾进弃牌堆
@@ -202,7 +312,7 @@ describe('BattleStage 无头联调', () => {
     const before = stage._cards.get(mid.uniqueID).object.scale.x;
 
     const pos = stage._cards.get(mid.uniqueID).object.position;
-    const p = toScreen(pos.x, pos.y);
+    const p = toScreen(stage, pos.x, pos.y, pos.z);
     stage.handlePointerMove(p.x, p.y);
 
     expect(stage._hoveredCardId).toBe(mid.uniqueID);
@@ -303,14 +413,14 @@ describe('BattleStage 无头联调', () => {
     expect(bridge.getProjection().chant.slots).toHaveLength(1);
 
     // 按下在咏唱卡上、松手在别处 → 不触发
-    const down = toScreen(-74, 32);
-    const away = toScreen(0, -45);
+    const down = toScreenUI(stage, -74, 32, 4); // 咏唱列 z≈4（UI 空间）
+    const away = toScreenUI(stage, 0, -45);
     stage.handlePointerDown(down.x, down.y);
     stage.handlePointerUp(away.x, away.y);
     expect(bridge.getProjection().chant.slots).toHaveLength(1);
 
     // 同一卡上点按 → 停止咏唱，卡进坟墓
-    click(stage, [-74, 32]);
+    click(stage, [-74, 32, 4]);
     expect(bridge.getProjection().chant.slots).toHaveLength(0);
     expect(bridge.getProjection().counts.discard).toBe(1);
   });

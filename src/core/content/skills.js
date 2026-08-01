@@ -11,6 +11,7 @@ registerSkill({
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  targetMode: 'enemy', // 前端交互声明：需指定敌方目标（曲线箭头瞄准）
   use(sctx) {
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player,
@@ -48,6 +49,7 @@ registerSkill({
   cost: { mana: 1, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  targetMode: 'enemy',
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({

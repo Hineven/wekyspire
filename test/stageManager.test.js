@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { StageManager, WORLD_HEIGHT } from '../src/stage/StageManager.js';
+import { StageManager, WORLD_HEIGHT, CAMERA_LOOK_AT } from '../src/stage/StageManager.js';
 
 function make() {
   const renders = [];
@@ -16,22 +16,41 @@ function make() {
 }
 
 describe('StageManager', () => {
-  it('世界约定：屏幕高 = 100 世界单位，resize 只改相机', () => {
+  it('世界约定：z=0 平面屏幕高 = 100 世界单位，resize 只改相机', () => {
     const { sm } = make();
     sm.resize(1600, 900);
     expect(WORLD_HEIGHT).toBe(100);
-    expect(sm.camera.top).toBe(50);
-    expect(sm.camera.bottom).toBe(-50);
-    expect(sm.camera.right).toBeCloseTo(50 * 1600 / 900);
+    expect(sm.camera.aspect).toBeCloseTo(1600 / 900);
     expect(sm.worldWidth).toBeCloseTo(100 * 1600 / 900);
   });
 
-  it('screenToWorld：屏幕中心 = 原点，y 向上', () => {
+  it('screenToWorld：屏幕中心 = lookAt 锚点，y 向上 x 向右（斜视约定）', () => {
     const { sm } = make();
     sm.resize(1000, 1000);
-    expect(sm.screenToWorld(500, 500)).toEqual({ x: 0, y: 0 });
-    expect(sm.screenToWorld(1000, 0)).toEqual({ x: 50, y: 50 });
-    expect(sm.screenToWorld(0, 1000)).toEqual({ x: -50, y: -50 });
+    const c = sm.screenToWorld(500, 500);
+    expect(c.x).toBeCloseTo(0);
+    expect(c.y).toBeCloseTo(CAMERA_LOOK_AT.y); // 视轴锚在牌桌上方（z=0 平面）
+    // 单调性：屏幕上方世界 y 更大，右方 x 更大（斜视下 z=0 平面不再对称，只断方向）
+    const up = sm.screenToWorld(500, 100);
+    const down = sm.screenToWorld(500, 900);
+    expect(up.y).toBeGreaterThan(c.y);
+    expect(down.y).toBeLessThan(c.y);
+    const right = sm.screenToWorld(900, 500);
+    expect(right.x).toBeGreaterThan(0);
+  });
+
+  it('透视纵深：同 xy 不同 z 投影位置不同；worldToScreen/screenToWorld 互逆', () => {
+    const { sm } = make();
+    sm.resize(1000, 1000);
+    // 透视：z>0（近）与 z<0（远）投影到不同屏幕位置（斜相机下不做轴向断言，断分离即可）
+    const near = sm.worldToScreen(20, 0, 30);
+    const far = sm.worldToScreen(20, 0, -30);
+    expect(Math.hypot(near.x - far.x, near.y - far.y)).toBeGreaterThan(1);
+    // 互逆：屏幕点 → z 平面求交 → 投影回原屏幕点
+    const w = sm.screenToWorld(800, 200, 30);
+    const s = sm.worldToScreen(w.x, w.y, 30);
+    expect(s.x).toBeCloseTo(800);
+    expect(s.y).toBeCloseTo(200);
   });
 
   it('场景切换触发 onExit/onEnter 生命周期', () => {

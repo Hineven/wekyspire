@@ -47,6 +47,8 @@ export function projectCardFull(battle, rt) {
     cost: def.cost ?? { mana: 0, actionPoint: 0 },
     keywords: def.keywords ?? [],
     cardMode: def.cardMode ?? 'normal',
+    // 前端交互声明：'enemy' = 需指定敌方目标（瞄准交互）；'none' = 免目标（拖拽出牌）
+    targetMode: def.targetMode ?? 'none',
     charges: def.charges ?? null,
     text: def.describe ? def.describe(sctx) : '',
   };

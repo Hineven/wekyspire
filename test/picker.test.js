@@ -20,8 +20,8 @@ function make() {
   return { sm, bus, events, picker, scene };
 }
 
-// 屏幕像素 → 使世界坐标 (wx, wy) 位于像素中心（1000px ↔ 100 世界单位）
-const toScreen = (wx, wy) => ({ x: (wx + 50) * 10, y: (50 - wy) * 10 });
+// 世界坐标 → 屏幕像素（走 StageManager 投影，适配斜视相机；1000px ↔ z=0 平面 100 世界单位）
+const toScreen = (sm, wx, wy, wz = 0) => sm.worldToScreen(wx, wy, wz);
 
 function addCard(picker, scene, id, wx, wy, hitRegions = []) {
   const card = new CardObject({
@@ -40,48 +40,48 @@ function addCard(picker, scene, id, wx, wy, hitRegions = []) {
 
 describe('Picker', () => {
   it('命中整卡（无热区处）', () => {
-    const { picker, scene } = make();
+    const { sm, picker, scene } = make();
     addCard(picker, scene, 'c1', 0, 0);
-    const { x, y } = toScreen(0, 0);
+    const { x, y } = toScreen(sm, 0, 0);
     expect(picker.pick(x, y)).toEqual({ kind: 'card', id: 'c1' });
   });
 
   it('未命中任何对象 → background', () => {
-    const { picker, scene } = make();
+    const { sm, picker, scene } = make();
     addCard(picker, scene, 'c1', 0, 0);
-    const { x, y } = toScreen(40, 40);
+    const { x, y } = toScreen(sm, 40, 40);
     expect(picker.pick(x, y)).toEqual({ kind: 'background' });
   });
 
   it('token 热区优先于整卡', () => {
-    const { picker, scene } = make();
+    const { sm, picker, scene } = make();
     // 热区：局部 x∈[0,10], y∈[0,10]（牌面左上 10x10）
     const region = { type: 'named', payload: { name: '瑞米' }, rect: { x: 0, y: 0, w: 10, h: 10 } };
     addCard(picker, scene, 'c1', 0, 0, [region]);
     // 局部 (5,5) → 世界 (-5, 8.5)：牌中心 (0,0)，宽 20 高 27，左上 (-10, 13.5)
-    const { x, y } = toScreen(-5, 8.5);
+    const { x, y } = toScreen(sm, -5, 8.5);
     const hit = picker.pick(x, y);
     expect(hit.kind).toBe('token');
     expect(hit.region).toEqual(region);
   });
 
   it('叠放时近处卡优先', () => {
-    const { picker, scene } = make();
+    const { sm, picker, scene } = make();
     addCard(picker, scene, 'back', 0, 0);
     const front = addCard(picker, scene, 'front', 0, 0);
     front.position.z = 5;
     front.updateMatrixWorld(true);
-    const { x, y } = toScreen(0, 0);
+    const { x, y } = toScreen(sm, 0, 0);
     expect(picker.pick(x, y)).toEqual({ kind: 'card', id: 'front' });
   });
 
   it('hover 事件流：token show → move → hide，整卡 hover/leave', () => {
-    const { picker, scene, events } = make();
+    const { sm, picker, scene, events } = make();
     const region = { type: 'named', payload: { name: '瑞米' }, rect: { x: 0, y: 0, w: 10, h: 10 } };
     addCard(picker, scene, 'c1', 0, 0, [region]);
-    const tokenPos = toScreen(-5, 8.5);
-    const cardPos = toScreen(5, -5); // 卡面右下角（热区外）
-    const bgPos = toScreen(45, 45);
+    const tokenPos = toScreen(sm, -5, 8.5);
+    const cardPos = toScreen(sm, 5, -5); // 卡面右下角（热区外）
+    const bgPos = toScreen(sm, 45, 45);
 
     picker.hover(tokenPos.x, tokenPos.y);
     picker.hover(tokenPos.x + 5, tokenPos.y + 5); // 同 token 内移动

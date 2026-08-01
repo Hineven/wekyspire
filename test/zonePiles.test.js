@@ -59,9 +59,11 @@ function make(deck = ['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'gua
   return { bridge, sm, stage, tween };
 }
 
-const toScreen = (wx, wy) => ({ x: (wx + 50) * 10, y: (50 - wy) * 10 });
+// 世界 → 屏幕像素：走相机投影（透视下 z≠0 的点投影位置不同，必须带真实 z）。
+// 区域图标在 UI pass → 用 uiCamera 投影（双相机约定，见 battleStage.test.js）
+const toScreen = (stage, wx, wy, wz = 0) => stage._sm.worldToScreen(wx, wy, wz, stage._sm.uiCamera);
 function click(stage, worldPos) {
-  const p = toScreen(...worldPos);
+  const p = toScreen(stage, ...worldPos);
   stage.handlePointerDown(p.x, p.y);
   stage.handlePointerUp(p.x, p.y);
 }
@@ -120,7 +122,7 @@ describe('区域图标与卡流动动画', () => {
     const deckCount = bridge.getProjection().counts.deck;
     expect(deckCount).toBeGreaterThan(0);
 
-    click(stage, [76, -35]); // 牌库图标
+    click(stage, [76, -35, 5]); // 牌库图标（z=5）
     expect(stage._viewer).toBeTruthy();
     expect(stage._viewer.zone).toBe('deck');
     // bg + 每张卡一个对象
@@ -134,11 +136,11 @@ describe('区域图标与卡流动动画', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
-    click(stage, [76, -35]); // 开查看器
+    click(stage, [76, -35, 5]); // 开查看器
     const handBefore = bridge.getProjection().hand.length;
     const first = bridge.getProjection().hand[0];
     const obj = stage._cards.get(first.uniqueID).object;
-    const p = toScreen(obj.position.x, obj.position.y);
+    const p = toScreen(stage, obj.position.x, obj.position.y, obj.position.z);
     stage.handlePointerDown(p.x, p.y);
     expect(stage._dragging).toBeNull();
     expect(bridge.getProjection().hand.length).toBe(handBefore);
@@ -148,7 +150,7 @@ describe('区域图标与卡流动动画', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
-    click(stage, [76, -35]);
+    click(stage, [76, -35, 5]);
     expect(stage._viewer).toBeTruthy();
     bridge.intents.endTurn(); // 状态变更 → 节拍链 → sync 应用 → reconcile 关查看器
     tween.completeAll();
