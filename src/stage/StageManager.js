@@ -15,9 +15,12 @@ export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳�
 export const CAMERA_AZIMUTH = -14;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
 export const CAMERA_ELEVATION = 24;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
 export const CAMERA_LOOK_AT = Object.freeze({ x: 0, y: -15, z: 0 }); // 视轴锚在牌桌上方，底部留给手牌构图
-// UI 相机（牌桌覆盖层专用）：正直俯，即斜向化之前的旧相机——UI 布局坐标全在它下面调好
-export const UI_CAMERA_HEIGHT = 30;
-export const UI_CAMERA_LOOK_AT_Y = -15;
+// UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角（用户定）。
+// 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs
+// 手牌 z=20+ 位置错乱、卡牌飞行 z 变化时忽大忽小）；正交下布局坐标↔屏幕线性映射，
+// 拾取/拖拽反投影也线性，一类问题全消。
+export const UI_CAMERA_LOOK_AT_Y = -15; // 取景中心 y（底部留手牌构图，与旧透视 UI 相机同框架）
+export const UI_CAMERA_Z = 500;         // 正交相机位置只决定可见 z 区间，不改投影
 
 // 世界内 z 分层（renderOrder 约定，数值即约定本身，勿散写魔法数）
 export const Z_LAYERS = Object.freeze({
@@ -54,12 +57,13 @@ export class StageManager {
       CAMERA_LOOK_AT.z + Math.cos(az) * Math.cos(el) * this._cameraDistance,
     );
     this._camera.lookAt(CAMERA_LOOK_AT.x, CAMERA_LOOK_AT.y, CAMERA_LOOK_AT.z);
-    // UI 专用相机（uiScene pass）：牌桌 UI（卡牌/按钮/图标/资源点）必须正对观者，
-    // 不吃世界相机的斜视——用独立正直俯相机渲染（全部 UI 布局坐标都在此约定下调好）。
+    // UI 专用相机（uiScene pass）：正交正视——卡牌/按钮/图标/资源点的布局坐标
+    // 与屏幕线性映射，不吃任何透视畸变（z 只决定前后层，不改投影大小/位置）。
     // 与渲染同理，UI 对象的拾取/拖拽映射也必须走这台相机（Picker 按 space 路由）。
-    this._uiCamera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
-    this._uiCamera.position.set(0, UI_CAMERA_HEIGHT, this._cameraDistance);
+    this._uiCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
+    this._uiCamera.position.set(0, UI_CAMERA_LOOK_AT_Y, UI_CAMERA_Z);
     this._uiCamera.lookAt(0, UI_CAMERA_LOOK_AT_Y, 0);
+    this._fitUiFrustum(16 / 9); // resize 前的合法缺省（16:9 假定）
     this._raycaster = new THREE.Raycaster();
     this._stage = null;         // 当前场景包装：{ name, scene, onEnter?, onExit? }
     this._running = false;
@@ -94,13 +98,26 @@ export class StageManager {
     return this;
   }
 
+  // UI 正交视锥：z=0 平面可视高恰好 = worldHeight（与世界相机同约定）。
+  // 取景中心偏移只由相机位置（0, UI_CAMERA_LOOK_AT_Y）承担——视锥在视图空间
+  // 必须对称，再把 top/bottom 也偏移等于把取景中心算两遍
+  _fitUiFrustum(aspect) {
+    const halfH = this._worldHeight / 2;
+    const halfW = halfH * aspect;
+    const cam = this._uiCamera;
+    cam.left = -halfW;
+    cam.right = halfW;
+    cam.top = halfH;
+    cam.bottom = -halfH;
+    cam.updateProjectionMatrix();
+  }
+
   resize(width, height) {
     this._viewWidth = width;
     this._viewHeight = height;
     this._camera.aspect = width / height;
     this._camera.updateProjectionMatrix();
-    this._uiCamera.aspect = width / height;
-    this._uiCamera.updateProjectionMatrix();
+    this._fitUiFrustum(width / height);
     this._renderer?.setSize?.(width, height);
     this._stage?.composeResize?.(width, height); // 后处理链 RT 跟随（如体积光 composer）
   }
@@ -167,7 +184,7 @@ export class StageManager {
           const prevAutoClear = r.autoClear;
           r.autoClear = false;
           r.clearDepth?.(); // 假 renderer（单测）无此方法，跳过即可
-          r.render(ui, this._uiCamera); // UI 用专用正直相机：卡牌/按钮永远正对观者
+          r.render(ui, this._uiCamera); // UI 用专用正交相机：卡牌/按钮永远正对观者、无透视畸变
           r.autoClear = prevAutoClear;
         }
       }

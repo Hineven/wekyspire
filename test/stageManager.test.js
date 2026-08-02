@@ -53,6 +53,29 @@ describe('StageManager', () => {
     expect(s.y).toBeCloseTo(200);
   });
 
+  it('UI 正交相机：布局坐标↔屏幕线性映射（无透视畸变），取景中心 -15', () => {
+    const { sm } = make();
+    sm.resize(1000, 1000); // aspect 1 → 视锥 ±50 × ±50（视图空间对称）
+    const cam = sm.uiCamera;
+    expect(cam.isOrthographicCamera).toBe(true);
+    // 取景中心（0,-15）→ 屏幕中心；可视范围恰为 y∈[-65, +35]（底部留手牌构图）
+    expect(sm.worldToScreen(0, -15, 0, cam).y).toBeCloseTo(500);
+    expect(sm.worldToScreen(0, 35, 0, cam).y).toBeCloseTo(0);
+    expect(sm.worldToScreen(0, -65, 0, cam).y).toBeCloseTo(1000);
+    // 线性：同 y 差 → 同像素差，与 z 无关（正交无近大远小——咏唱槽 z=4 与手牌 z=20+ 不错位）
+    const a = sm.worldToScreen(10, -40, 4, cam);
+    const b = sm.worldToScreen(10, -40, 33, cam);
+    expect(a.x).toBeCloseTo(b.x);
+    expect(a.y).toBeCloseTo(b.y);
+    const dy = sm.worldToScreen(0, -30, 0, cam).y - sm.worldToScreen(0, -40, 0, cam).y;
+    expect(dy).toBeCloseTo(-100); // 10 世界单位 = 100 像素（1000px / 100wu）
+    // 反投影互逆（UI 拖拽/拾取映射）
+    const w = sm.screenToWorld(800, 200, 4, cam);
+    const s = sm.worldToScreen(w.x, w.y, 4, cam);
+    expect(s.x).toBeCloseTo(800);
+    expect(s.y).toBeCloseTo(200);
+  });
+
   it('场景切换触发 onExit/onEnter 生命周期', () => {
     const { sm } = make();
     const calls = [];

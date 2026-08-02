@@ -283,7 +283,7 @@ export function buildDungeon3D() {
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
     const f = new THREE.Mesh(new THREE.ConeGeometry(0.65, 2.1, 5), candleMat);
-    f.position.set(Math.cos(a) * 7, 2.2, Math.sin(a) * 7);
+    f.position.set(Math.cos(a) * 7, 2.3, Math.sin(a) * 7);
     chandelier.add(f);
     candleFlames.push(f);
   }
@@ -363,9 +363,9 @@ export function buildDungeon3D() {
     bowl.position.set(spot.x, y + 0.2, spot.z + 1);
     group.add(bowl);
 
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(1.6, 4.4, 6),
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(1, 4.2, 6),
       new THREE.MeshBasicMaterial({ color: COL.flameOut, fog: false }));
-    flame.position.set(spot.x, y + 2.6, spot.z + 1);
+    flame.position.set(spot.x, y + 3.5, spot.z + 1);
     group.add(flame);
     const inner = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.6, 5),
       new THREE.MeshBasicMaterial({ color: COL.flameIn, fog: false }));

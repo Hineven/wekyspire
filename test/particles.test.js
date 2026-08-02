@@ -94,4 +94,36 @@ describe('ParticleSystem', () => {
     ps.update(1); // 生命尽头回收
     expect(rec.sprite.scale.x).toBeLessThanOrEqual(2 * 1.001);
   });
+
+  it('space 分流：ui 精灵入 spritesUI 池，死亡归还对应池位，两池互不占额', () => {
+    const fakeBake = () => ({ texture: new THREE.Texture(), width: 100, height: 20 });
+    const ps = new ParticleSystem({ maxSprites: 2, bakeText: fakeBake });
+    const uiRec = ps.spawnText(1, 2, '-6', { space: 'ui', ttl: 0.2 });
+    const worldRec = ps.spawnText(3, 4, '-8', { ttl: 10 });
+    expect(uiRec.space).toBe('ui');
+    expect(worldRec.space).toBe('world');
+    // 各入各的组
+    expect(ps.spritesUI.children.includes(uiRec.sprite)).toBe(true);
+    expect(ps.sprites.children.includes(worldRec.sprite)).toBe(true);
+    // ui 池独立：world 池仍有 1 个空位（world 用了 1/2），ui 池也还剩 1 个
+    expect(ps._spriteUIFree.length).toBe(1);
+    expect(ps._spriteFree.length).toBe(1);
+    // ui 精灵死亡归还 ui 池
+    ps.update(0.3);
+    expect(ps._spriteUIFree.length).toBe(2);
+    expect(ps._spriteFree.length).toBe(1); // world 精灵还活着
+    expect(ps.activeSpriteCount).toBe(1);
+  });
+
+  it('逐粒子尺寸：spawn 的 size 写入 aSize 属性，缺省跟随构造 pointSize', () => {
+    const ps = new ParticleSystem({ max: 8, pointSize: 2 });
+    ps.spawn(0, 0, { count: 2, size: 5, ttl: 10 });
+    ps.spawn(0, 0, { count: 1, ttl: 10 }); // 缺省 = pointSize
+    const sizes = ps.points.geometry.attributes.aSize.array;
+    const alive = ps._pool.map(p => sizes[p.i]).sort((a, b) => a - b);
+    expect(alive).toEqual([2, 5, 5]);
+    // 材质全局 size 留 1（实际尺寸全在属性里），且 shader 已打 aSize 补丁
+    expect(ps.points.material.size).toBe(1);
+    expect(typeof ps.points.material.onBeforeCompile).toBe('function');
+  });
 });

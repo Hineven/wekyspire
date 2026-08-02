@@ -5,11 +5,15 @@
 //   │   ├─ standee: 立牌子组（呼吸/受击等仿射只作用在这里）
 //   │   │   └─ body: PlaneGeometry，**底部锚定**（position.y = h/2），纹理=抠图 PNG，
 //   │   │            无图回退 side 配色色块
-//   │   ├─ hpBar:   底槽 + 填充条（左锚定）+ 数字文本（"20/60 盾5"）
+//   │   ├─ hpBar:   底槽 + 填充条（左锚定）+ 数字文本（"20/60"）
+//   │   │   └─ shieldGroup: 护盾层（shield>0 时可见）——蓝色保护框包裹血条
+//   │   │      + 左侧盾徽数值 chip（数值变更时放缩跳动，牌库脉冲同语言）
 //   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
 //   └─ ring:    目标标注金环（平贴地板）
 // 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动。
 // 文本签名不变不重烘。
+// 状态绘制（hpBar 全家 + 护盾层）一律 depthTest:false + 显式 renderOrder(60+)：
+// 场景可遮蔽立牌（合理）但不可遮蔽状态（用户定）；卡牌 UI 是独立 pass 天然在其上。
 
 import * as THREE from 'three';
 
@@ -26,6 +30,20 @@ const HP_FILL_COLORS = Object.freeze({
 
 const HP_BAR_WIDTH = 12;
 const HP_BAR_HEIGHT = 1.5;
+const SHIELD_FRAME_PAD = 0.45;  // 保护框相对血条的外扩
+const SHIELD_FRAME_COLOR = 0x5aa8ff;
+const SHIELD_POP_DUR = 0.28;    // 数值变更放缩跳动时长（牌库脉冲同语言）
+// 状态绘制（HP 条/护盾框/盾徽/数字）的 renderOrder 基值：场景(0)之上、粒子(70/71)之下；
+// 卡牌等 UI 是独立 uiScene pass（清深度后渲染），天然在其上方
+const STATUS_RENDER_ORDER = 60;
+// 状态件"浮在场景上方"：关深度测试（不被柱子/地板/立牌遮挡），不写深度
+// （不污染体积光 RT 深度），renderOrder 显式排层（depthTest 关闭后只能靠 painter 序）
+function statusify(mesh, order) {
+  mesh.renderOrder = STATUS_RENDER_ORDER + order;
+  mesh.material.depthTest = false;
+  mesh.material.depthWrite = false;
+  return mesh;
+}
 
 export class UnitObject extends THREE.Group {
   /**
@@ -44,6 +62,7 @@ export class UnitObject extends THREE.Group {
     this._ppw = pixelsPerWorld;
     this._standeeHeight = standeeHeight;
     this._hasArt = false;
+    this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
 
     // 地面阴影：压扁椭圆平贴地板（水平面），半透明涂鸦黑；仿射动效不打在它身上
     this._shadow = new THREE.Mesh(
@@ -88,21 +107,67 @@ export class UnitObject extends THREE.Group {
     this._hpBar.name = 'hpBar';
     this._hpBar.position.set(0, 3.4, 0.6);
     this._billboard.add(this._hpBar);
-    this._hpBg = new THREE.Mesh(
+    this._hpBg = statusify(new THREE.Mesh(
       new THREE.PlaneGeometry(HP_BAR_WIDTH, HP_BAR_HEIGHT),
       new THREE.MeshBasicMaterial({ color: 0x14161e, transparent: true, opacity: 0.85, fog: false }),
-    );
+    ), 1);
     this._hpBar.add(this._hpBg);
-    this._hpFill = new THREE.Mesh(
+    this._hpFill = statusify(new THREE.Mesh(
       new THREE.PlaneGeometry(HP_BAR_WIDTH, HP_BAR_HEIGHT - 0.4),
       new THREE.MeshBasicMaterial({ color: HP_FILL_COLORS[side] ?? 0x4ade80, fog: false }),
-    );
+    ), 2);
     this._hpFill.position.z = 0.05;
     this._hpBar.add(this._hpFill);
-    this._labelMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false }); // 同 body：二值 mask，不写假深度
-    this._label = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._labelMaterial);
+    this._labelMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false }); // 同 body：二值 mask
+    this._label = statusify(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._labelMaterial), 3);
     this._label.position.z = 0.05;
     this._hpBar.add(this._label);
+
+    // ---- 护盾层（shield>0 可见）----
+    // ① 蓝色保护框：微蓝背板 + 四细条边框包裹血条；② 左侧盾徽数值 chip
+    this._shieldGroup = new THREE.Group();
+    this._shieldGroup.name = 'shieldGroup';
+    this._shieldGroup.visible = false;
+    this._hpBar.add(this._shieldGroup);
+    const fw = HP_BAR_WIDTH + SHIELD_FRAME_PAD * 2;
+    const fh = HP_BAR_HEIGHT + SHIELD_FRAME_PAD * 2;
+    const ft = 0.32; // 边框厚度
+    this._shieldFrame = [];
+    const frameMat = () => new THREE.MeshBasicMaterial({
+      color: SHIELD_FRAME_COLOR, transparent: true, opacity: 0.95, depthWrite: false, fog: false,
+    });
+    const backfill = statusify(new THREE.Mesh(
+      new THREE.PlaneGeometry(fw, fh),
+      new THREE.MeshBasicMaterial({ color: SHIELD_FRAME_COLOR, transparent: true, opacity: 0.16, depthWrite: false, fog: false }),
+    ), 0);
+    backfill.position.z = -0.02;
+    this._shieldGroup.add(backfill);
+    this._shieldFrame.push(backfill);
+    const bars = [
+      { w: fw, h: ft, x: 0, y: fh / 2 - ft / 2 },   // 上
+      { w: fw, h: ft, x: 0, y: -(fh / 2 - ft / 2) }, // 下
+      { w: ft, h: fh, x: -(fw / 2 - ft / 2), y: 0 }, // 左
+      { w: ft, h: fh, x: fw / 2 - ft / 2, y: 0 },    // 右
+    ];
+    for (const b of bars) {
+      const bar = statusify(new THREE.Mesh(new THREE.PlaneGeometry(b.w, b.h), frameMat()), 2);
+      bar.position.set(b.x, b.y, 0.03);
+      this._shieldGroup.add(bar);
+      this._shieldFrame.push(bar);
+    }
+    // 盾徽数值 chip（放缩跳动作用于整 chip，与牌库脉冲同语言）
+    this._shieldChip = new THREE.Group();
+    this._shieldChip.name = 'shieldChip';
+    this._shieldChip.position.set(-(HP_BAR_WIDTH / 2 + 1.7), 0, 0.1);
+    this._shieldGroup.add(this._shieldChip);
+    this._shieldIconMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false });
+    this._shieldIconMaterial.map = shieldIconTexture();
+    const icon = statusify(new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.4), this._shieldIconMaterial), 3);
+    this._shieldChip.add(icon);
+    this._shieldLabelMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false });
+    this._shieldLabel = statusify(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._shieldLabelMaterial), 4);
+    this._shieldChip.add(this._shieldLabel);
+    this._shieldPopT = 0;
 
     // 效果图标锚点（overlay 后续批次）
     this.fxAnchor = new THREE.Object3D();
@@ -145,9 +210,9 @@ export class UnitObject extends THREE.Group {
     this._signature = sig;
     this._dead = projection.isDead;
 
-    // 数字文本：HP 比 + 盾；效果层数临时以文本附带（图标 overlay 后续批次）
+    // 数字文本：HP 比；效果层数临时以文本附带（图标 overlay 后续批次）。
+    // 护盾有独立视觉层（保护框+盾徽 chip），不再附"盾N"后缀
     let text = `${projection.hp}/${projection.maxHp}`;
-    if (projection.shield > 0) text += ` 盾${projection.shield}`;
     if (projection.effects?.length) {
       text += `\n${projection.effects.map(e => `${e.effectId}x${e.stacks}`).join(' ')}`;
     }
@@ -165,6 +230,19 @@ export class UnitObject extends THREE.Group {
       h / 2 - 3.1, // 钳住不沉进地板（hpBar 在脚底上方 3.4，标签底至少离地 0.3）
     );
 
+    // 护盾层：>0 可见；数值变更重烘 chip 文本 + 放缩跳动。
+    // 破碎碎粒不在此检测——自然消失（回合开始清零）与被打破（伤害吸收）在此无法区分，
+    // 碎粒由 BattleStage 的伤害节拍按 shieldAbsorbed 驱动；此处只负责随 sync 显隐
+    const prev = this._shield;
+    const sh = projection.shield ?? 0;
+    this._shield = sh;
+    this._shieldGroup.visible = sh > 0 && !projection.isDead;
+    if (prev !== undefined && sh !== prev && sh > 0) this._shieldPopT = SHIELD_POP_DUR;
+    if (sh > 0 && sh !== this._shieldBaked) {
+      this._rebakeShieldLabel(sh);
+      this._shieldBaked = sh; // 值不变不重烘（hp 变化也会过签名）
+    }
+
     // 填充条：左锚定按比例缩短
     const ratio = projection.maxHp > 0 ? Math.max(0, projection.hp / projection.maxHp) : 0;
     this._hpFill.scale.x = Math.max(ratio, 0.001);
@@ -178,19 +256,39 @@ export class UnitObject extends THREE.Group {
     return true;
   }
 
+  /** 盾徽数值重烘：文本变才动（setUnit 签名已过滤）；左锚定接在盾徽右侧。 */
+  _rebakeShieldLabel(sh) {
+    const { texture, width, height } = this._bakeLabel(`${sh}`);
+    const old = this._shieldLabelMaterial.map;
+    this._shieldLabelMaterial.map = texture;
+    this._shieldLabelMaterial.needsUpdate = true;
+    old?.dispose?.();
+    const w = width / this._ppw;
+    const h = height / this._ppw;
+    this._shieldLabel.geometry.dispose();
+    this._shieldLabel.geometry = new THREE.PlaneGeometry(w, h);
+    this._shieldLabel.position.set(1.1 + 0.35 + w / 2, 0, 0); // 盾徽右缘 + 间隙 + 半宽（左锚定）
+  }
+
   /**
    * 立牌形（圆柱）billboard：只转 yaw 让牌面水平朝向相机，立面保持与地面垂直
    * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃——用户定）。
    * 相机静止时每帧结果相同，代价可忽略；阴影/金环贴地不参与。
-   * @param {THREE.Vector3|{x,y,z}} camPos 相机世界坐标
+   * @param {THREE.Vector3|{x,y,z}} camDir 相机方向向量
    */
-  faceCamera(camPos) {
-    this._billboard.rotation.y = Math.atan2(camPos.x - this.position.x, camPos.z - this.position.z);
+  faceCamera(camDir) {
+    this._billboard.rotation.y = Math.atan2(camDir.x, camDir.z);
   }
 
-  /** 帧驱动：idle 呼吸（仅 scaleY 微振，死亡即停）+ 闪红窗口衰减。 */
+  /** 帧驱动：idle 呼吸（仅 scaleY 微振，死亡即停）+ 闪红窗口衰减 + 盾徽数值跳动衰减。 */
   update(dt) {
     if (this._flashT > 0) this._flashT -= dt;
+    if (this._shieldPopT > 0) {
+      this._shieldPopT -= dt;
+      const k = Math.max(this._shieldPopT, 0) / SHIELD_POP_DUR; // 1→0 线性衰减
+      const s = 1 + 0.45 * k;
+      this._shieldChip.scale.set(s, s, 1);
+    }
     if (this._dead) return;
     this._breathT += dt * 2.2;
     this._standee.scale.y = 1 + 0.02 * Math.sin(this._breathT);
@@ -253,7 +351,56 @@ export class UnitObject extends THREE.Group {
     this._label.geometry.dispose();
     this._labelMaterial.map?.dispose?.();
     this._labelMaterial.dispose();
+    for (const piece of this._shieldFrame) {
+      piece.geometry.dispose();
+      piece.material.dispose();
+    }
+    this._shieldIconMaterial.dispose(); // 图标纹理全局共享，不销毁
+    this._shieldLabel.geometry.dispose();
+    this._shieldLabelMaterial.map?.dispose?.();
+    this._shieldLabelMaterial.dispose();
   }
+}
+
+// 盾徽纹理：全局共享一份（多单位复用），canvas 程序化绘制——圆顶尖底盾形 +
+// 浅蓝描边 + 左上高光弧；非浏览器（单测）退化 1x1 占位
+let _shieldIconTexture = null;
+function shieldIconTexture() {
+  if (_shieldIconTexture) return _shieldIconTexture;
+  if (typeof document === 'undefined') {
+    _shieldIconTexture = new THREE.Texture({ width: 1, height: 1 });
+    _shieldIconTexture.needsUpdate = true;
+    return _shieldIconTexture;
+  }
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 70;
+  const ctx = c.getContext('2d');
+  // 盾形：圆顶 + 两侧弧收 + 尖底
+  ctx.beginPath();
+  ctx.moveTo(32, 5);
+  ctx.quadraticCurveTo(46, 9, 56, 14);
+  ctx.quadraticCurveTo(58, 44, 32, 66);
+  ctx.quadraticCurveTo(6, 44, 8, 14);
+  ctx.quadraticCurveTo(18, 9, 32, 5);
+  ctx.closePath();
+  ctx.fillStyle = '#3d7bd6';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#d6e8ff';
+  ctx.stroke();
+  // 左上高光弧（涂鸦感一笔）
+  ctx.beginPath();
+  ctx.moveTo(18, 16);
+  ctx.quadraticCurveTo(26, 11, 36, 11);
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = 'rgba(235,244,255,0.85)';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  _shieldIconTexture = new THREE.Texture(c);
+  _shieldIconTexture.needsUpdate = true;
+  _shieldIconTexture.colorSpace = THREE.SRGBColorSpace;
+  return _shieldIconTexture;
 }
 
 function defaultBakeLabel() {

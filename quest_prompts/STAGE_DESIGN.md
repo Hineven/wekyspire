@@ -19,7 +19,7 @@
 - 瑞米：白色猫形小精灵，大耳朵，尾巴比身体还大的蓬松尾，豆豆眉。
   画风要"粗糙幼稚"（接近概念稿的铅笔草稿感），忌精致萌系（AI 感）。
 
-## 1. 视觉模型：双相机——世界斜方向俯视 + UI 正直俯
+## 1. 视觉模型：双相机——世界透视斜视 + UI 独立正交
 
 - **世界相机：PerspectiveCamera fov=24°，azimuth=-14°（右侧斜视）、elevation=24°（俯角），
   lookAt (0,-15,0)，距离 ≈235**（2026-08-01 三轮：正方向俯视→斜方向+加大俯角，用户定）。
@@ -31,16 +31,19 @@
   （y<-30），同 pass 会被地板 z-test 裁掉；UI 本质是前景覆盖层，不与 3D 世界做深度交互。
   单位/粒子留在世界 pass（与地板正确深度交互）。Picker 拾取前两个场景都要
   updateMatrixWorld（卡牌在 uiScene，单测不渲染不会自动刷新）。
-- **UI 相机（uiCamera）**：牌桌 UI 必须正对观者，不吃世界相机的斜视——UI pass 用专用
-  正直俯相机渲染（position (0,30,235) → lookAt (0,-15,0)，即斜向化前的旧相机，
-  **全部 UI 布局坐标都在此约定下调好，勿动**）。渲染/拾取/拖拽映射三链路都按 space 分流：
+- **UI 相机（uiCamera）= OrthographicCamera 正视**（2026-08-02，用户定）：透视 UI 相机
+  让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs 手牌 z=20+ 错位、
+  卡牌飞行 z 变化忽大忽小）；正交下布局坐标↔屏幕**线性映射**，z 只定前后层。
+  相机 (0,-15,500) 正视 -z，可视范围 y∈[-65,+35]（底部留手牌构图）；
+  **视锥在视图空间必须对称 ±50——取景中心偏移只由相机位置承担，top/bottom 再偏移
+  等于算两遍**。渲染/拾取/拖拽映射三链路都按 space 分流：
   Picker 的 pickable 带 `space:'ui'`（UI 命中优先，与渲染覆盖次序一致）；
   拖拽出牌反投影（`screenToWorld(px,py,planeZ,cam)`）必须传 uiCamera。
 - `screenToWorld(px, py, planeZ, cam?)` = 射线与 z 平面求交（任意相机姿态通用）；
   `worldToScreen(..., cam?)` 为其逆（测试基建用它，**禁止线性近似**；测试 helper 须按
   对象所在 pass 选相机——battleStage.test.js 的 `toScreen`/`toScreenUI` 二分）。
 - **单位立牌形（圆柱）billboard**：standee/hpBar/fxAnchor 挂 billboard 子组，
-  `faceCamera(camPos)` 逐帧 yaw 转向相机（yaw=atan2(dx,dz)）——斜视下立牌不转正会被
+  `faceCamera(camDir)` 逐帧 yaw 转向相机——斜视下立牌不转正会被
   透视压斜；**立面保持垂直地面，不做 pitch**（球面 billboard 的后仰像纸片倒下，已弃，
   用户定）；阴影/目标金环平贴地板不参与。
 - **战线轴 battleLine**（3D，站水平地板）：near (-50, FLOOR_Y, +22) → far (70, FLOOR_Y, -34)。
@@ -121,6 +124,16 @@
   染色立牌材质（闪红窗口内不覆盖）。
 - **氛围粒子**：火焰粒子自幽火锚点上浮（重力>0，淡紫/蓝紫），浮尘稀疏漂移（深夜蓝）；
   走 ParticleSystem（spawn 带 z，深处粒子透视缩小免费）。
+- **粒子空间分流**（2026-08-01，用户定）：粒子按用途分两套空间，不是一刀切——
+  **点粒子（火花/碎屑/火焰/浮尘）= 真 3D**（世界 pass，吃雾/深度/透视，spawn 必须传
+  场景内实际 z——缺省 z=70 是旧 2D 特效层约定，斜相机下投影错位到屏幕下方）；
+  **读数文本粒子（伤害/治疗数字）= UI pass**（uiScene 前景层，恒定屏幕尺寸、不被场景
+  遮挡——伤害数字是读数 UI 不是世界物体，杀戮尖塔同理；相机固定故无"贴玻璃"违和）。
+  桥接：BattleStage `_unitToUI(unit, dx, dy)` = 世界相机投影到屏幕像素 → UI 相机反投影
+  到 z=70 平面（spawnText 缺省 z=70 恰落该平面）；ParticleSystem sprite 池按
+  `space: 'world'|'ui'` 分两套（sprites / spritesUI 两组互不占额），材质 fog:false。
+  另：**逐粒子尺寸**走 aSize 顶点属性（PointsMaterial.size 是材质级全局值，onBeforeCompile
+  把 gl_PointSize 改为 size × aSize），spawn 的 size 选项才生效。
 - **单位贴地件**：阴影/目标金环平贴地板（rotation.x=-π/2，微抬防 z-fight）；
   HP 条叠脚踝前方（hpBar y=+3.4、z=+0.6，标签钳底不沉进地板）——脚底=地板，
   旧稿"站台下方"会被地面裁掉。手牌扇 y=-40（压低给战场让位，防近景卡牌遮敌血条；
@@ -148,8 +161,29 @@ UnitObject
 ├─ shadow      引擎画椭圆，贴地，不动（仿射动效不打在它身上）
 ├─ standee     PlaneGeometry，底部锚定 shadow 中心；纹理=抠图 PNG，无图回退色块
 ├─ hpBar       立牌下方：底槽 + 填充条 + 数字文本（"20/60"，对齐手绘稿）
+│   └─ shieldGroup 护盾层（shield>0 可见）：蓝色保护框（微蓝背板+四细条）包裹血条
+│      + 左侧盾徽数值 chip（canvas 程序化盾形图标 + 数值文本）
 └─ fxAnchor    头侧效果图标列（effectId 图标 + stacks 角标，如 毒×5）
 ```
+
+**护盾层契约**（2026-08-02，用户定）：
+
+- 护盾与血条一体渲染：有盾时血条被蓝色保护框包裹，左侧出盾徽+数值 chip；
+  HP 主标签不再附"盾N"文本。
+- **数值变更**（增/减但未归零）：chip 放缩跳动（`_shieldPopT` 线性衰减 1.45→1，0.28s，
+  牌库脉冲同语言）；值不变不重烘。
+- **破碎 vs 自然消失的区分在因果不在状态**：`>0→0` 的状态检测无法区分"被打破"与
+  "回合开始清零"，因此**破碎碎粒只由伤害节拍驱动**（`_damageHit` 里
+  `shieldAbsorbed>0` 且 `显示盾量(上一 sync 快照) - absorbed ≤ 0` 时播放蓝白碎粒）；
+  自然消失只是保护框随 sync 静默隐去。UnitObject 不做 >0→0 回调。
+- **伤害节拍按落点分流**：生命值受伤（dealt>0）才闪红+红色火花+击退（节拍阻塞）；
+  全吸收只有蓝色火花+灰色吸收数字，**不翻红不击退**（用户定），短停一拍即收节拍。
+- **状态绘制浮于场景之上**（2026-08-02，用户定）：场景遮蔽立牌是合理的，但不可遮蔽
+  状态——hpBar 全家 + 护盾层一律 `depthTest:false + depthWrite:false +
+  renderOrder 60+`（`statusify(mesh, order)`，场景 0 < 状态 60~64 < 粒子 70/71；
+  depthTest 关闭后同层顺序靠显式 renderOrder painter 序；depthWrite 关闭防污染
+  体积光 RT 深度）。卡牌等 UI 是独立 uiScene pass（清深度后渲染），天然仍在状态之上。
+  立牌本体/阴影/金环仍是场景物，正常吃深度。
 
 **极简状态机**（idle / attack / hurt / dead）+ 整牌仿射动效：
 

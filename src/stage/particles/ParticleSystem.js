@@ -1,11 +1,15 @@
-// ParticleSystem（§4.8）：两套粒子池，由 StageManager.onTick 驱动（BattleStage 接线）。
+// ParticleSystem（§4.8）：两类粒子池，由 StageManager.onTick 驱动（BattleStage 接线）。
 //   ① Points 池：单 THREE.Points + 对象池的轻量点粒子（火花/碎屑爆发）。
-//      加色混合下黑色=不可见，死粒子颜色归零并归还池位。
+//      加色混合下黑色=不可见，死粒子颜色归零并归还池位。真 3D——z 必须传场景内
+//      实际深度（缺省 z=70 是旧 2D 特效层约定，斜相机下会投影错位）。
 //   ② Sprite 池：textured / text 粒子（伤害数字、图标、符咒碎片等）。
 //      每个精灵独立材质（各自纹理与透明度），物理与点粒子一致：
 //      初速度 + gravity（g，世界单位/秒²，y 向上故下坠为负）+ drag 阻力，
 //      透明度随寿命衰减（fadeIn 时为三角曲线），scalePop 出生弹跳。
 //      文本经注入的 bakeText 烘焙成纹理（RichTextEngine），随粒子死亡销毁。
+//      按 space 分流两套池：'world'（3D 场景内，吃雾/深度）与 'ui'（uiScene
+//      前景层，伤害/治疗读数专用——恒定屏幕尺寸、不被场景遮挡；发射前由
+//      BattleStage 做世界→UI 投影桥接，本类不感知相机）。
 
 import * as THREE from 'three';
 import { renderRichTextBlock } from '../richtext/texture.js';
@@ -29,6 +33,7 @@ const SPRITE_DEFAULTS = Object.freeze({
   fadeIn: false,    // true = 透明度先升后降（三角），false = 只降
   scalePop: 0,      // 出生弹跳：初始放大倍数增量，约 0.25s 内衰减回 1
   z: 70,
+  space: 'world',   // 'world' = 3D 场景池（吃雾/深度）；'ui' = uiScene 前景池（读数文本）
   disposeTexture: false, // 文本纹理一次性使用，死亡即销毁
 });
 
@@ -46,18 +51,29 @@ export class ParticleSystem {
     this._bakeText = bakeText || defaultBakeText;
 
     // ---- ① Points 池 ----
+    // 逐粒子尺寸：PointsMaterial.size 是材质级全局值，spawn 的 size 选项要生效
+    // 必须走顶点属性（aSize）——onBeforeCompile 把 gl_PointSize 改为 size * aSize
+    this._pointSize = pointSize; // spawn 未显式传 size 时的缺省
     this._positions = new Float32Array(max * 3);
     this._colors = new Float32Array(max * 3);
+    this._sizes = new Float32Array(max);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(this._positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(this._colors, 3));
+    geometry.setAttribute('aSize', new THREE.BufferAttribute(this._sizes, 1));
     const material = new THREE.PointsMaterial({
-      size: pointSize,
+      size: 1, // 全局乘子留 1，实际尺寸全在 aSize 属性里
       vertexColors: true,
       blending: THREE.AdditiveBlending,
       transparent: true,
       depthWrite: false,
     });
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aSize;')
+        .replace('gl_PointSize = size;', 'gl_PointSize = size * aSize;');
+    };
+    material.customProgramCacheKey = () => 'weky-particles-points-v1';
     this.points = new THREE.Points(geometry, material);
     this.points.frustumCulled = false;
     this.points.renderOrder = 70;
@@ -65,32 +81,42 @@ export class ParticleSystem {
     this._pool = [];               // 活点粒子 { i, x, y, vx, vy, life, ttl, gravity, r, g, b }
     this._free = Array.from({ length: max }, (_, i) => max - 1 - i);
 
-    // ---- ② Sprite 池 ----
-    this.sprites = new THREE.Group();
-    this.sprites.renderOrder = 71;   // 文本/贴图粒子在点粒子之上
-    this._spriteFree = [];
-    for (let i = 0; i < maxSprites; i++) {
-      const material = new THREE.SpriteMaterial({ transparent: true, depthWrite: false });
+    // ---- ② Sprite 池（world / ui 两套，空间分流）----
+    this.sprites = this._buildSpriteGroup(maxSprites);      // 世界池：3D 场景内
+    this._spriteFree = this.sprites.userData.free;
+    this.spritesUI = this._buildSpriteGroup(maxSprites);    // UI 池：挂 uiScene（读数文本）
+    this._spriteUIFree = this.spritesUI.userData.free;
+    this._spritePool = [];           // 活精灵 { sprite, space, vx, vy, gravity, drag, life, ttl, fadeIn, scalePop, w, h, disposeTexture }
+  }
+
+  _buildSpriteGroup(n) {
+    const group = new THREE.Group();
+    group.renderOrder = 71;   // 文本/贴图粒子在点粒子之上
+    group.userData.free = [];
+    for (let i = 0; i < n; i++) {
+      // fog:false——精灵是演出读数，不吃场景雾的压暗
+      const material = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, fog: false });
       const sprite = new THREE.Sprite(material);
       sprite.visible = false;
-      this.sprites.add(sprite);
-      this._spriteFree.push(sprite);
+      group.add(sprite);
+      group.userData.free.push(sprite);
     }
-    this._spritePool = [];           // 活精灵 { sprite, vx, vy, gravity, drag, life, ttl, fadeIn, scalePop, w, h, disposeTexture }
+    return group;
   }
 
   get activeCount() { return this._pool.length; }
   get activeSpriteCount() { return this._spritePool.length; }
 
-  /** 在 (x, y) 处爆发一团点粒子。options 见 DEFAULTS。 */
+  /** 在 (x, y) 处爆发一团点粒子。options 见 DEFAULTS（size 逐次覆盖缺省点径）。 */
   spawn(x, y, options = {}) {
-    const o = { ...DEFAULTS, ...options };
+    const o = { ...DEFAULTS, size: this._pointSize, ...options };
     const color = new THREE.Color(o.color);
     for (let n = 0; n < o.count; n++) {
       const i = this._free.pop();
       if (i == null) return; // 池满静默丢弃
       const angle = Math.random() * Math.PI * 2;
       const speed = o.speed * (0.5 + Math.random() * 0.8);
+      this._sizes[i] = o.size;
       this._pool.push({
         i, x, y,
         vx: Math.cos(angle) * speed,
@@ -102,24 +128,27 @@ export class ParticleSystem {
         z: o.z,
       });
     }
+    this.points.geometry.attributes.aSize.needsUpdate = true;
   }
 
   /**
    * 发射一个贴图粒子（textured particle）。
    * @param {object} options
    *   texture: THREE.Texture；width/height: 世界单位尺寸；
+   *   space: 'world'（3D 场景池）| 'ui'（uiScene 前景池）；
    *   其余物理/表现参数见 SPRITE_DEFAULTS
    */
   spawnSprite(x, y, { texture, width, height, ...rest }) {
-    const sprite = this._spriteFree.pop();
-    if (!sprite) { rest.disposeTexture && texture?.dispose?.(); return null; } // 池满静默丢弃
     const o = { ...SPRITE_DEFAULTS, ...rest };
+    const free = o.space === 'ui' ? this._spriteUIFree : this._spriteFree;
+    const sprite = free.pop();
+    if (!sprite) { o.disposeTexture && texture?.dispose?.(); return null; } // 池满静默丢弃
     sprite.material.map = texture;
     sprite.material.opacity = o.fadeIn ? 0 : 1;
     sprite.material.needsUpdate = true;
     sprite.visible = true;
     const rec = {
-      sprite, x, y,
+      sprite, space: o.space, x, y,
       vx: o.vx, vy: o.vy,
       gravity: o.gravity, drag: o.drag,
       life: 0, ttl: o.ttl,
@@ -193,7 +222,7 @@ export class ParticleSystem {
         p.sprite.visible = false;
         if (p.disposeTexture) p.sprite.material.map?.dispose?.();
         p.sprite.material.map = null;
-        this._spriteFree.push(p.sprite);
+        (p.space === 'ui' ? this._spriteUIFree : this._spriteFree).push(p.sprite);
         this._spritePool.splice(k, 1);
         continue;
       }

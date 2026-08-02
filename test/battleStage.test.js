@@ -312,7 +312,7 @@ describe('BattleStage 无头联调', () => {
     const before = stage._cards.get(mid.uniqueID).object.scale.x;
 
     const pos = stage._cards.get(mid.uniqueID).object.position;
-    const p = toScreen(stage, pos.x, pos.y, pos.z);
+    const p = toScreenUI(stage, pos.x, pos.y, pos.z); // 卡牌在 UI pass → uiCamera 投影
     stage.handlePointerMove(p.x, p.y);
 
     expect(stage._hoveredCardId).toBe(mid.uniqueID);
@@ -342,7 +342,7 @@ describe('BattleStage 无头联调', () => {
     expect(entry.zone).toBe('chant');
     const anchor = stage.layout.getAnchor(chant.uniqueID);
     expect(anchor.x).toBe(-74);          // 屏幕左侧固定列
-    expect(anchor.y).toBe(32);           // 列顶
+    expect(anchor.y).toBe(18);           // 列顶（受正交取景上限 y=35 约束）
     expect(anchor.z).toBeLessThan(10);   // z 区间低于手牌
 
     // 已激活 → 边缘流光开启，且随帧推进
@@ -413,14 +413,14 @@ describe('BattleStage 无头联调', () => {
     expect(bridge.getProjection().chant.slots).toHaveLength(1);
 
     // 按下在咏唱卡上、松手在别处 → 不触发
-    const down = toScreenUI(stage, -74, 32, 4); // 咏唱列 z≈4（UI 空间）
+    const down = toScreenUI(stage, -74, 18, 4); // 咏唱列 z≈4（UI 空间）
     const away = toScreenUI(stage, 0, -45);
     stage.handlePointerDown(down.x, down.y);
     stage.handlePointerUp(away.x, away.y);
     expect(bridge.getProjection().chant.slots).toHaveLength(1);
 
     // 同一卡上点按 → 停止咏唱，卡进坟墓
-    click(stage, [-74, 32, 4]);
+    click(stage, [-74, 18, 4]);
     expect(bridge.getProjection().chant.slots).toHaveLength(0);
     expect(bridge.getProjection().counts.discard).toBe(1);
   });
@@ -440,6 +440,50 @@ describe('BattleStage 无头联调', () => {
     expect(order).toEqual(['display', 'damage', 'flyOut']);
     expect(stage._cards.size).toBe(3);        // 打出的卡已销毁离场
     expect(stage._piles.discard.count).toBe(1); // 飞进坟堆后 sync 才 +1
+  });
+
+  it('伤害节拍分流：全吸收不翻红不击退；生命值受伤才闪红', () => {
+    const { bridge, stage } = make(['guard', 'punch', 'punch', 'punch']);
+    bridge.start();
+    const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
+    bridge.intents.playCard(guard.uniqueID); // 格挡 → 玩家 5 盾
+    expect(bridge.getProjection().player.shield).toBe(5);
+    const unit = stage._units.get(bridge.getProjection().player.uniqueID);
+    let flashed = 0;
+    const origFlash = unit.flash.bind(unit);
+    unit.flash = (c) => { flashed++; return origFlash(c); };
+
+    // 全吸收：节拍同步收（instantTween），但不闪红、无伤害文本
+    let finished = 0;
+    const spritesBefore = stage.particles.activeSpriteCount;
+    stage._damageHit(unit, { dealt: 0, shieldAbsorbed: 2 }, () => finished++);
+    expect(finished).toBe(1);
+    expect(flashed).toBe(0); // 未翻红
+    expect(stage.particles.activeSpriteCount - spritesBefore).toBe(1); // 只有吸收数字
+
+    // 生命值受伤：闪红 + 伤害数字（击退链同步播完，闪红窗口已被 restoreColor 关）
+    stage._damageHit(unit, { dealt: 3, shieldAbsorbed: 0 }, () => {});
+    expect(flashed).toBe(1);
+    expect(stage.particles.activeSpriteCount - spritesBefore).toBe(2);
+  });
+
+  it('护盾破碎碎粒只在"吸收击穿"时播放：部分吸收不出碎粒', () => {
+    const { bridge, stage } = make(['guard', 'punch', 'punch', 'punch']);
+    bridge.start();
+    const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
+    bridge.intents.playCard(guard.uniqueID); // 玩家 5 盾
+    expect(bridge.getProjection().player.shield).toBe(5);
+    const unit = stage._units.get(bridge.getProjection().player.uniqueID);
+
+    // 部分吸收（5 盾吸 2）：蓝色火花 12，无破碎碎粒
+    let before = stage.particles.activeCount;
+    stage._damageHit(unit, { dealt: 0, shieldAbsorbed: 2 }, () => {});
+    expect(stage.particles.activeCount - before).toBe(12);
+
+    // 吸穿最后一击（显示盾 5 吸 5）：火花 12 + 碎粒 34
+    before = stage.particles.activeCount;
+    stage._damageHit(unit, { dealt: 0, shieldAbsorbed: 5 }, () => {});
+    expect(stage.particles.activeCount - before).toBe(12 + 34);
   });
 
   it('结算期输入挂起时卡不离场；应答后打出卡与被弃卡依次离场', () => {

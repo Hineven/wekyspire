@@ -19,7 +19,7 @@
 // 不做：日志、tooltip 渲染（Shell/调试页消费 bus 事件）、rest 阶段。
 //
 // 布局（世界坐标，z=0 平面屏幕高≈100，y 向上，相机抬眼高斜视，16:9 世界宽≈177.8）：
-//   手牌 y=-40 居中扇形（压低给战场让位）；咏唱槽屏幕左侧纵列（x=-74，自 y=32 向下，z 低于手牌）；
+//   手牌 y=-40 居中扇形（压低给战场让位）；咏唱槽屏幕左侧纵列（x=-74，自 y=18 向下，z 低于手牌）；
 //   单位脚底锚定场景水平地板（scene.battleLine y=FLOOR_Y，slotTransform 换算）；
 //   按钮纵列（主/换卡）x=46 y=-8/-16；牌库图标 (76,-35)，坟墓图标 (76,-13)；出牌线 y=-20；
 //   背景 = 程序化 3D 场景（dungeon3D）。
@@ -51,12 +51,12 @@ const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（z≤33），
 const BUTTON_SIZE = { w: 15, h: 6 };
 // 按钮纵列：主按钮（结束回合/确认）在上，换卡按钮在下（右下自由区，避让人群与手牌扇）
 export const BUTTON_POSITIONS = {
-  main: { x: 52, y: -4 },
-  swap: { x: 52, y: -12 },
+  main: { x: 74, y: -4 },
+  swap: { x: 74, y: -12 },
 };
 const PILE_POSITIONS = {
-  deck: { x: 76, y: -35 },      // 牌库图标（手牌右侧下；手牌扇区最大 ±65，避让开）
-  discard: { x: 76, y: -13 },   // 坟墓图标（牌库上方）
+  deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；手牌扇区最大 ±65，避让开）
+  discard: { x: 80, y: -38 },   // 坟墓图标（牌库上方）
 };
 
 export class BattleStage {
@@ -105,9 +105,10 @@ export class BattleStage {
     this._tintScratch = new THREE.Color();
 
     this.layout = new LayoutEngine();
-    this.layout.registerContainer('hand', { centerX: 0, centerY: -40, width: 130, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT });
-    // 咏唱槽：屏幕左侧固定纵列，z 区间低于手牌（不遮挡、不抢层级）
-    this.layout.registerContainer('chant', { centerX: -74, topY: 32, cardHeight: CARD_HEIGHT, gap: 3, zBase: 4 });
+    this.layout.registerContainer('hand', { centerX: 0, centerY: -50, width: 130, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT });
+    // 咏唱槽：屏幕左侧固定纵列，z 区间低于手牌（不遮挡、不抢层级）。
+    // topY 受正交取景上限约束：可视顶 y=35，卡半高 13.5 → topY≤21.5 才不被上缘裁掉
+    this.layout.registerContainer('chant', { centerX: -74, topY: 18, cardHeight: CARD_HEIGHT, gap: 3, zBase: 4 });
     this.layout.setNamedAnchor('deck', PILE_POSITIONS.deck);
     this.layout.setNamedAnchor('discard', PILE_POSITIONS.discard);
 
@@ -137,14 +138,17 @@ export class BattleStage {
     // 粒子系统（受伤/治疗等演出）与卡牌持续特效（咏唱流光），由 StageManager 帧回调驱动
     this.particles = new ParticleSystem();
     this.scene.add(this.particles.points);
-    this.scene.add(this.particles.sprites); // 文本/贴图粒子层
+    this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
+    this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
     this._unsubTick = stageManager.onTick((dt) => {
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
       for (const entry of this._cards.values()) entry.object.updateGlow(dt);
       for (const unit of this._units.values()) {
         unit.update(dt);
-        unit.faceCamera(this._sm.camera.position); // 立牌形 billboard：斜视下立牌 yaw 朝向相机
+        let fwd = this._sm.camera.localToWorld(new THREE.Vector3(0, 0, 1));
+        fwd.sub(this._sm.camera.position).normalize();
+        unit.faceCamera(fwd); // 立牌形 billboard：斜视下立牌 yaw 朝向相机
         // 立牌光照交互：火把光衰+闪烁+纵深压暗的假采样染色（闪红窗口内不覆盖）
         if (this._scene3D) unit.applyLightTint(this._scene3D.sampleStandeeTint(unit.position, this._tintScratch));
       }
@@ -490,7 +494,7 @@ export class BattleStage {
     const target = this._findAnimTarget(payload);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
     if (type === EventNames.ANIM_UNIT_DEATH && target) {
-      this.particles.spawn(target.position.x, target.position.y, { count: 22, color: 0x999999, speed: 16, ttl: 0.8 });
+      this.particles.spawn(target.position.x, target.position.y, { count: 22, color: 0x999999, speed: 16, ttl: 0.8, z: target.position.z });
       this.animator.animate(target.uniqueID, { scale: 0.01 }, { durationMs: 300, onComplete: finish });
       return;
     }
@@ -501,16 +505,17 @@ export class BattleStage {
         [EventNames.ANIM_SHIELD]: { color: 0x66aaff, gravity: 0 },
         [EventNames.ANIM_EFFECT]: { color: 0xffd34c, gravity: 0 },
       }[type];
-      this.particles.spawn(target.position.x, target.position.y, { count: 10, speed: 10, ttl: 0.6, ...fx });
+      this.particles.spawn(target.position.x, target.position.y, { count: 10, speed: 10, ttl: 0.6, z: target.position.z ?? 0, ...fx });
       if (type === EventNames.ANIM_HEAL && (payload?.healed ?? 0) > 0) {
+        const p = this._unitToUI(target, (Math.random() - 0.5) * 3, 4);
         this.particles.spawnText(
-          target.position.x + (Math.random() - 0.5) * 3,
-          target.position.y + 4,
+          p.x, p.y,
           `+${payload.healed}`,
           {
             fontSize: Math.min(30 + payload.healed * 2, 72), color: '#4ade80',
             vx: (Math.random() - 0.5) * 6, vy: 14,
             gravity: 0, drag: 1.2, ttl: 1.0, scalePop: 0.4,
+            space: 'ui',
           },
         );
       }
@@ -571,54 +576,94 @@ export class BattleStage {
     });
   }
 
-  // 受伤演出：闪红 + 粒子爆发 + 伤害数字文本粒子迸射 + 短促击退震动
-  // （短暂停留由队列节拍保证；HP 数字的显示状态变化在本节拍后的 sync 才应用——先演后变）
+  // 单位世界坐标（含偏移）→ UI 世界坐标：伤害/治疗读数文本走 uiScene 前景层
+  // （恒定屏幕尺寸、不被场景遮挡）。桥接路径：世界相机投影到屏幕像素 →
+  // UI 相机反投影到 z=70 平面（spawnText 缺省 z=70，恰落在该平面上，无深度差）。
+  // 单测 StageManager 无视口尺寸（viewWidth=0）时退化为世界坐标直用，保数值有限。
+  _unitToUI(unit, dx = 0, dy = 0) {
+    const sm = this._sm;
+    const wx = unit.position.x + dx;
+    const wy = unit.position.y + dy;
+    if (!sm.viewSize.width) return { x: wx, y: wy };
+    const px = sm.worldToScreen(wx, wy, unit.position.z, sm.camera);
+    return sm.screenToWorld(px.x, px.y, 70, sm.uiCamera);
+  }
+
+  // 受伤演出：按伤害落点分流——
+  //   生命值受伤（dealt>0）：闪红 + 红色火花 + 伤害数字 + 短促击退（节拍阻塞）；
+  //   护盾吸收（absorbed>0）：蓝色火花 + 灰色吸收数字（较小、偏移开）；
+  //     吸穿护盾的最后一击（显示盾量 - 吸收 ≤ 0）追加破碎粒子——破碎只由伤害驱动，
+  //     自然消失（回合开始清零）只是保护框随 sync 静默隐去；
+  //   无生命值伤害不翻红不击退（用户定），节拍短停即收。
+  // HP/盾量数字的显示状态变化在本节拍后的 sync 才应用——先演后变
   _damageHit(unit, payload, finish) {
-    unit.flash?.(0xff2222);
-    this.particles.spawn(unit.position.x, unit.position.y + 2, { count: 16, color: 0xff5533, speed: 22 });
-    // 伤害数字：从受伤源向上迸射、受重力下坠（老版配方演进：字号随伤害缩放 + 出生弹跳）
     const dealt = payload?.dealt ?? 0;
-    if (dealt > 0) {
-      this.particles.spawnText(
-        unit.position.x + (Math.random() - 0.5) * 3,
-        unit.position.y + 4 + Math.random() * 1.5,
-        `-${dealt}`,
-        {
-          fontSize: Math.min(34 + dealt * 2.4, 96), color: '#ff4d4d',
-          vx: (Math.random() - 0.5) * 10, vy: 22 + Math.random() * 8,
-          gravity: -65, ttl: Math.min(0.85 + dealt * 0.02, 1.3), scalePop: 0.5,
-        },
-      );
-    }
-    // 护盾吸收：独立灰色数字（较小、偏移开），全挡时只有它
     const absorbed = payload?.shieldAbsorbed ?? 0;
+
     if (absorbed > 0) {
+      // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
+      this.particles.spawn(unit.position.x, unit.position.y + 2, {
+        count: 12, color: 0x7fb8ff, speed: 16, ttl: 0.6, z: unit.position.z,
+      });
+      const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
       this.particles.spawnText(
-        unit.position.x + 2.5 + (Math.random() - 0.5) * 2,
-        unit.position.y + 3,
+        p.x, p.y,
         `-${absorbed}`,
         {
           fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
           vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
           gravity: -50, ttl: 0.85, scalePop: 0.3,
+          space: 'ui',
         },
       );
+      if (this._displayShieldOf(unit.uniqueID) - absorbed <= 0) this._shieldBreakFx(unit);
     }
-    const id = unit.uniqueID;
-    const x0 = unit.position.x;
-    this.animator.animate(id, { x: x0 + 1.8 }, {
-      durationMs: 80,
-      ease: 'power1.in',
-      onComplete: () => {
-        this.animator.animate(id, { x: x0 }, {
-          durationMs: 220,
-          onComplete: () => {
-            unit.restoreColor?.();
-            finish();
-          },
-        });
-      },
-    });
+
+    if (dealt > 0) {
+      unit.flash?.(0xff2222);
+      this.particles.spawn(unit.position.x, unit.position.y + 2, {
+        count: 16, color: 0xff5533, speed: 22, z: unit.position.z,
+      });
+      // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
+      const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
+      this.particles.spawnText(
+        p.x, p.y,
+        `-${dealt}`,
+        {
+          fontSize: Math.min(34 + dealt * 2.4, 96), color: '#ff4d4d',
+          vx: (Math.random() - 0.5) * 10, vy: 22 + Math.random() * 8,
+          gravity: -65, ttl: Math.min(0.85 + dealt * 0.02, 1.3), scalePop: 0.5,
+          space: 'ui',
+        },
+      );
+      const id = unit.uniqueID;
+      const x0 = unit.position.x;
+      this.animator.animate(id, { x: x0 + 1.8 }, {
+        durationMs: 80,
+        ease: 'power1.in',
+        onComplete: () => {
+          this.animator.animate(id, { x: x0 }, {
+            durationMs: 220,
+            onComplete: () => {
+              unit.restoreColor?.();
+              finish();
+            },
+          });
+        },
+      });
+      return;
+    }
+    // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
+    this.animator.animate(unit.uniqueID, {}, { delayMs: 220, onComplete: finish });
+  }
+
+  // 显示状态（上一 sync 快照）里某单位的盾量——判断本击是否吸穿护盾的依据
+  _displayShieldOf(unitId) {
+    const p = this._snapshot;
+    if (!p) return 0;
+    if (p.player?.uniqueID === unitId) return p.player.shield ?? 0;
+    return [...(p.allies ?? []), ...(p.enemies ?? [])]
+      .find(u => u.uniqueID === unitId)?.shield ?? 0;
   }
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
@@ -633,6 +678,21 @@ export class BattleStage {
     overlay.userData.fxTween = this._tweenFactory(overlay, { scale: 1.0 }, {
       durationMs: 220,
       onComplete: () => { overlay.visible = false; },
+    });
+  }
+
+  // 护盾破碎演出：蓝白碎粒自血条处迸射——只在伤害节拍里被驱动（吸收击穿护盾的
+  // 最后一击），保护框本身随后续 sync 静默隐去；自然消失（回合清零）无碎粒。
+  // 碎粒是真 3D（传单位实际 z）
+  _shieldBreakFx(unit) {
+    const s = unit._baseScale ?? 1;
+    const y = unit.position.y + 3.4 * s; // hpBar 在脚底上方 3.4（local）
+    const z = unit.position.z;
+    this.particles.spawn(unit.position.x, y, {
+      count: 24, color: 0x7fb8ff, speed: 15, ttl: 0.75, gravity: -30, size: 1.0, z,
+    });
+    this.particles.spawn(unit.position.x, y, {
+      count: 10, color: 0xd8eaff, speed: 9, ttl: 0.55, gravity: -20, size: 0.7, z,
     });
   }
 
