@@ -81,7 +81,7 @@ describe('演出', () => {
     expect(display).toBeTruthy();
 
     tween.completeAll(); // 停留 → 衔接离场飞行 → 播完销毁
-    const flight = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 76 && r.to.y === -13);
+    const flight = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 80 && r.to.y === -38);
     expect(flight).toBeTruthy();
     expect(flight.obj).toBe(display.obj); // 全程同一视觉实体
     // 展示结束后不回手牌跟踪（无折返）：展示记录与离场飞行记录之间没有 hand 锚点记录

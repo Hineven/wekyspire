@@ -4,13 +4,17 @@ import { buildDungeon3D } from '../src/stage/scenes/dungeon3D.js';
 
 // 程序化地牢场景契约：纯几何/灯光（node 可建）、火把闪烁、氛围粒子发射、立牌染色采样
 describe('dungeon3D 程序化场景', () => {
-  it('构建：水平地板 + 背景墙 + 柱列 + 8 火把（各带点光）+ 基础灯光', () => {
+  it('构建：水平地板 + 背景墙 + 柱列 + 12 火源（各带点光）+ 基础灯光 + 月光浮尘云', () => {
     const { group, torches } = buildDungeon3D();
-    expect(torches).toHaveLength(8);
+    expect(torches).toHaveLength(12); // 10 壁灯 + 2 立地火盆
     const lights = [];
     group.traverse(o => { if (o.isPointLight) lights.push(o); });
-    expect(lights).toHaveLength(9); // 8 火把 + 1 吊灯
+    expect(lights).toHaveLength(16); // 12 火源 + 1 吊灯 + 2 月光落地反弹 + 1 战场主补光（假 GI）
     expect(group.getObjectByName('dungeon3D')).toBe(group);
+    // 月光浮尘云：常驻噪音浮尘（shadow map 未就绪前隐藏不渲染）
+    const dust = group.getObjectByName('moonDust');
+    expect(dust).toBeTruthy();
+    expect(dust.visible).toBe(false);
     // 每个火把都有火焰锥与点光
     for (const t of torches) {
       expect(t.light.isPointLight).toBe(true);
@@ -29,7 +33,7 @@ describe('dungeon3D 程序化场景', () => {
     expect(i2.some((i, k) => Math.abs(i - i1[k]) / base > 0.005)).toBe(true);
   });
 
-  it('氛围粒子：火焰粒子从火把锚点发射，浮尘稀疏', () => {
+  it('氛围粒子：火焰粒子从火把锚点发射（上浮）', () => {
     const { torches, update } = buildDungeon3D();
     const calls = [];
     const fakeParticles = { spawn: (x, y, o) => calls.push({ x, y, ...o }) };
@@ -43,9 +47,12 @@ describe('dungeon3D 程序化场景', () => {
 
   it('立牌染色采样：幽火旁更亮且蓝紫主导、远处保持冷蓝紫底；远端单位被纵深压暗', () => {
     const { torches, sampleStandeeTint } = buildDungeon3D();
-    const nearTorch = sampleStandeeTint({ x: torches[0].x, y: torches[0].y, z: 0 }, new THREE.Color());
-    // 采样只算 XY 距离：选一个离全部火把/吊灯都远的暗角（doorway 火把在房间中下区，(0,-20) 其实不"远"）
-    const farAway = sampleStandeeTint({ x: -20, y: -30, z: 0 }, new THREE.Color());
+    // 幽火衰减半径内的中厅点（柱列火把 XY 投影互相堆叠，正上方采样会顶满 1.12 clamp，
+    // 失去比较意义；这里取只被 doorway 火把/吊灯弱照射的未饱和区）
+    const nearTorch = sampleStandeeTint({ x: 0, y: -25, z: 0 }, new THREE.Color());
+    // 采样只算 XY 距离：选一个离全部火把/吊灯都远的真暗角（场景拉长后火源更多，
+    // (120,-60) 距最近火源 XY 也 >58 衰减半径）
+    const farAway = sampleStandeeTint({ x: 120, y: -60, z: 0 }, new THREE.Color());
     expect(nearTorch.b).toBeGreaterThan(farAway.b); // 幽火光衰
     // 冷调统一（蓝白紫）：任何处 b 主导（蓝紫），r 永不主导（不许转暖）
     expect(nearTorch.b).toBeGreaterThan(nearTorch.r);

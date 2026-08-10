@@ -84,8 +84,8 @@ describe('区域图标与卡流动动画', () => {
     const proj = bridge.getProjection();
     for (const c of proj.hand) {
       const obj = stage._cards.get(c.uniqueID).object;
-      expect(obj.position.x).toBe(76);  // 牌库图标位置
-      expect(obj.position.y).toBe(-35);
+      expect(obj.position.x).toBe(80);  // 牌库图标位置
+      expect(obj.position.y).toBe(-55);
     }
     tween.completeAll(); // 放行跟踪 → 飞入扇形
     const xs = proj.hand.map(c => stage._cards.get(c.uniqueID).object.position.x);
@@ -103,11 +103,11 @@ describe('区域图标与卡流动动画', () => {
     // 显示状态未推进（sync 排在节拍链之后）：卡仍在手牌对象集，未起飞，坟堆数字未提前+1
     expect(stage._cards.has(first.uniqueID)).toBe(true);
     expect(stage._piles.discard.count).toBe(0);
-    const flightBefore = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 76 && r.to.y === -13);
+    const flightBefore = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 80 && r.to.y === -38);
     expect(flightBefore).toBeUndefined();
 
     tween.completeAll(); // 发动展示 → 伤害 → 离场节拍飞行 → sync 应用
-    const flight = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 76 && r.to.y === -13);
+    const flight = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 80 && r.to.y === -38);
     expect(flight).toBeTruthy();
     expect(stage._cards.has(first.uniqueID)).toBe(false);
     expect(stage.animator.getObject(first.uniqueID)).toBeNull();
@@ -122,7 +122,7 @@ describe('区域图标与卡流动动画', () => {
     const deckCount = bridge.getProjection().counts.deck;
     expect(deckCount).toBeGreaterThan(0);
 
-    click(stage, [76, -35, 5]); // 牌库图标（z=5）
+    click(stage, [80, -55, 5]); // 牌库图标（z=5）
     expect(stage._viewer).toBeTruthy();
     expect(stage._viewer.zone).toBe('deck');
     // bg + 每张卡一个对象
@@ -136,7 +136,7 @@ describe('区域图标与卡流动动画', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
-    click(stage, [76, -35, 5]); // 开查看器
+    click(stage, [80, -55, 5]); // 开查看器
     const handBefore = bridge.getProjection().hand.length;
     const first = bridge.getProjection().hand[0];
     const obj = stage._cards.get(first.uniqueID).object;
@@ -150,7 +150,7 @@ describe('区域图标与卡流动动画', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
-    click(stage, [76, -35, 5]);
+    click(stage, [80, -55, 5]);
     expect(stage._viewer).toBeTruthy();
     bridge.intents.endTurn(); // 状态变更 → 节拍链 → sync 应用 → reconcile 关查看器
     tween.completeAll();

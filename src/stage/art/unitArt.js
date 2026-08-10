@@ -51,7 +51,16 @@ export class UnitArtCache {
    */
   get(defId, side) {
     const url = this.resolveUrl(defId, side);
-    if (!url) return null;
+    return url ? this._getByUrl(url) : null;
+  }
+
+  /** 按文件名直接取图（如 'unit_player_front.png' 头像正视图），加载语义同 get()。 */
+  getFile(file) {
+    const url = ART_URLS[file] ?? null;
+    return url ? this._getByUrl(url) : null;
+  }
+
+  _getByUrl(url) {
     const hit = this._cache.get(url);
     if (hit && hit !== 'loading' && hit !== 'error') return hit;
     if (hit === undefined) this._load(url);

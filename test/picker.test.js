@@ -98,4 +98,31 @@ describe('Picker', () => {
     expect(events[0].payload).toMatchObject({ kind: 'named', name: '瑞米' });
     expect(events[3].payload).toEqual({ uniqueID: 'c1' });
   });
+
+  it('单位效果行：hover 走 token tooltip 协议；kinds:[unit] 过滤时仍返回整单位', () => {
+    const { sm, picker, scene, events } = make();
+    // 单位组 + 效果行网格（userData.effectRow 与卡面 hitRegion 同构）
+    const unit = new THREE.Group();
+    const row = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshBasicMaterial());
+    row.userData.effectRow = { type: 'effect', payload: { name: '燃烧' } };
+    row.position.set(0, 6, 0.1);
+    unit.add(row);
+    unit.updateMatrixWorld(true);
+    scene.add(unit);
+    picker.addPickable('u1', unit, { kind: 'unit' });
+
+    // hover 效果行 → tooltip show（kind:'effect'）→ 行内移动 move → 离开 hide
+    const rowPos = toScreen(sm, 0, 6);
+    picker.hover(rowPos.x, rowPos.y);
+    picker.hover(rowPos.x + 3, rowPos.y);
+    picker.hover(...Object.values(toScreen(sm, 45, 45)));
+    expect(events.map(e => e.name)).toEqual([
+      EventNames.TOOLTIP_SHOW, EventNames.TOOLTIP_MOVE, EventNames.TOOLTIP_HIDE,
+    ]);
+    expect(events[0].payload).toMatchObject({ kind: 'effect', name: '燃烧' });
+
+    // 拖牌/瞄准路径（kinds:['unit']）：效果行区域仍算单位落点，不弹 token
+    const hit = picker.pick(rowPos.x, rowPos.y, { kinds: ['unit'] });
+    expect(hit).toEqual({ kind: 'unit', id: 'u1' });
+  });
 });

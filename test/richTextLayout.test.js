@@ -48,12 +48,21 @@ describe('richtext/layout', () => {
     expect(r.hitRegions.every(h => h.type === 'skill' && h.payload.powerDelta === 2)).toBe(true);
   });
 
-  it('effect token 图标也是热区', () => {
-    const r = layout('施加/effect{燃烧}吧');
-    const region = r.hitRegions.find(h => h.type === 'effect');
-    expect(region).toBeTruthy();
-    expect(region.payload).toEqual({ name: '燃烧' });
-    expect(region.rect.x).toBe(20); // 前两个字之后
+  it('effect token = 图标 + 特征色名称文本，两段都是热区', () => {
+    const r = layout('施加/effect{燃烧}吧', { resolveEffect: () => ({ color: 'red' }) });
+    const icon = r.placements.find(p => p.kind === 'icon');
+    expect(icon).toMatchObject({ iconType: 'effect', name: '燃烧', x: 20 });
+    // 名称文本作为 glyph 放置（特征色经颜色表解析）
+    const glyphs = r.placements.filter(p => p.kind === 'glyph');
+    expect(glyphs.map(g => g.char).join('')).toBe('施加燃烧吧');
+    const nameGlyph = glyphs.find(g => g.char === '燃');
+    expect(nameGlyph.style.color).toBe('#ff4444');
+    // 图标 + 名称文本各一个热区
+    const regions = r.hitRegions.filter(h => h.type === 'effect');
+    expect(regions.length).toBe(2);
+    expect(regions.every(h => h.payload.name === '燃烧')).toBe(true);
+    expect(regions[0].rect.x).toBe(20); // 图标（前两个字之后）
+    expect(regions[1].rect.x).toBe(40); // 名称文本（图标 18+gap 2 之后）
   });
 
   it('颜色 token 不改变布局只改样式', () => {

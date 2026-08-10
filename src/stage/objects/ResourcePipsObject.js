@@ -30,13 +30,16 @@ export class ResourcePipsObject extends THREE.Group {
    * @param {object} options
    *   name: 标签前缀（如 'AP' / '魏启'）
    *   color: 有点时的颜色（hex）
+   *   align: 'center'（文本+点排整体居中于原点，默认）| 'left'（左缘锚定原点——
+   *     状态栏等需要多行左对齐的场景）
    *   bakeLabel: (text) => { texture, width, height }   文本烘焙（缺省 1x1 占位）
    *   pixelsPerWorld: 烘焙像素 → 世界单位换算（默认 10，全局约定）
    */
-  constructor({ name, color, bakeLabel = null, pixelsPerWorld = 10 }) {
+  constructor({ name, color, bakeLabel = null, pixelsPerWorld = 10, align = 'center' }) {
     super();
     this._name = name;
     this._color = color;
+    this._align = align;
     this._bakeLabel = bakeLabel || defaultBakeLabel;
     this._ppw = pixelsPerWorld;
 
@@ -86,11 +89,11 @@ export class ResourcePipsObject extends THREE.Group {
       pip.material.dispose();
     }
 
-    // 整体（文本 + 点排）居中于 Group 原点
+    // 布局：'center' = 文本+点排整体居中于 Group 原点；'left' = 左缘锚定原点
     const step = PIP_RADIUS * 2 + PIP_GAP;
     const pipsWidth = max > 0 ? max * step - PIP_GAP : 0;
     const total = lw + 1.5 + pipsWidth;
-    let x = -total / 2;
+    let x = this._align === 'left' ? 0 : -total / 2;
     this._label.position.set(x + lw / 2, 0, 0);
     x += lw + 1.5;
     this._pips.forEach((pip, i) => {

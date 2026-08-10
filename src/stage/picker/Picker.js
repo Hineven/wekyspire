@@ -60,6 +60,13 @@ export class Picker {
       for (const hit of hits) {
         const owner = this._findPickable(hit.object);
         if (!owner) continue;
+        // 单位效果行二级查询（行网格 userData.effectRow 与卡面 hitRegion 同构）：
+        // 悬停（无 kinds 过滤）→ 返回 token 命中走 tooltip:* 协议；
+        // 拖牌/瞄准（kinds 指定 unit）→ 仍返回整单位，行区域也是合法出牌落点
+        if (owner.entry.kind === 'unit' && hit.object.userData?.effectRow
+          && (!kinds || kinds.includes('token'))) {
+          return { kind: 'token', id: owner.id, region: hit.object.userData.effectRow };
+        }
         // 整卡命中后做 hit map 二级查询（仅卡面面片）
         if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {
           const region = owner.entry.cardObject.hitTestUV({ u: hit.uv.x, v: hit.uv.y });

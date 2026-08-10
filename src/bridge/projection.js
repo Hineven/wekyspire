@@ -1,5 +1,6 @@
 import { swapCostOf } from '../core/state/battleState.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
+import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
 import { makeSkillCtx } from '../core/skills/helpers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
 
@@ -28,7 +29,19 @@ export function projectUnit(u) {
     maxHp: u.maxHp,
     shield: u.shield,
     isDead: u.isDead(),
-    effects: u.effects.map(e => ({ effectId: e.effectId, stacks: e.stacks })),
+    effects: u.effects.map(e => {
+      // 定义元数据压平进视图（Stage 渲染效果行用，不 import Core 注册表）；
+      // 未注册的效果（防御路径）按 id 兜底显示
+      const def = hasEffect(e.effectId) ? getEffectDefinition(e.effectId) : null;
+      return {
+        effectId: e.effectId,
+        stacks: e.stacks,
+        name: def?.name ?? e.effectId,
+        type: def?.type ?? 'buff', // 'buff'（层数绿）| 'debuff'（层数红）
+        color: def?.color ?? null, // 特征色（richtext 颜色名）
+        icon: def?.icon ?? null,
+      };
+    }),
     intention: u.intention ?? null,
   };
 }

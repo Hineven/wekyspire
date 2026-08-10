@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import '../src/core/content/index.js'; // 注册效果定义（燃烧等），emoji/特征色解析依赖注册表
 import { bakeCardFace, CARD_FACE_SIZE } from '../src/stage/richtext/cardFace.js';
 
 // 全吸收 mock ctx：记录 fillText / 画布尺寸
@@ -74,5 +75,20 @@ describe('cardFace', () => {
     });
     const region = r.hitRegions.find(h => h.type === 'effect');
     expect(region.rect.y).toBe(142); // ART_RECT 底(134) + 8
+  });
+
+  it('/effect{} 渲染：emoji 图标 + 特征色名称文本（热区两段）', () => {
+    const mock = createMockCanvas();
+    const r = bakeCardFace({ ...CARD, text: '施加/effect{燃烧}' }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    // emoji 图标（燃烧定义 icon=🔥）与名称文本都被绘制
+    expect(mock.texts).toContain('🔥');
+    expect(mock.texts).toContain('燃');
+    expect(mock.texts).toContain('烧');
+    // 图标 + 名称文本各一个热区
+    const regions = r.hitRegions.filter(h => h.type === 'effect');
+    expect(regions.length).toBe(2);
+    expect(regions.every(h => h.payload.name === '燃烧')).toBe(true);
   });
 });

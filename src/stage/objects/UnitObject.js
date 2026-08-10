@@ -6,8 +6,11 @@
 //   │   │   └─ body: PlaneGeometry，**底部锚定**（position.y = h/2），纹理=抠图 PNG，
 //   │   │            无图回退 side 配色色块
 //   │   ├─ hpBar:   底槽 + 填充条（左锚定）+ 数字文本（"20/60"）
-//   │   │   └─ shieldGroup: 护盾层（shield>0 时可见）——蓝色保护框包裹血条
-//   │   │      + 左侧盾徽数值 chip（数值变更时放缩跳动，牌库脉冲同语言）
+//   │   │   ├─ shieldGroup: 护盾层（shield>0 时可见）——蓝色保护框包裹血条
+//   │   │   │  + 左侧盾徽数值 chip（数值变更时放缩跳动，牌库脉冲同语言）
+//   │   │   └─ fxRows: 血条上方左对齐效果行（icon + 特征色名称 + 层数，
+//   │   │      buff 层数绿 / debuff 层数红；行网格带 userData.effectRow，
+//   │   │      Picker 二级查询返回 token 命中 → tooltip 协议与卡面热区同构）
 //   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
 //   └─ ring:    目标标注金环（平贴地板）
 // 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动。
@@ -33,6 +36,10 @@ const HP_BAR_HEIGHT = 1.5;
 const SHIELD_FRAME_PAD = 0.45;  // 保护框相对血条的外扩
 const SHIELD_FRAME_COLOR = 0x5aa8ff;
 const SHIELD_POP_DUR = 0.28;    // 数值变更放缩跳动时长（牌库脉冲同语言）
+// 效果行（血条上方）：行距、背板横向外扩、背板颜色
+const FX_ROW_GAP = 0.4;
+const FX_ROW_PAD = 0.55;
+const FX_ROW_BG = 0x0a0c14;
 // 状态绘制（HP 条/护盾框/盾徽/数字）的 renderOrder 基值：场景(0)之上、粒子(70/71)之下；
 // 卡牌等 UI 是独立 uiScene pass（清深度后渲染），天然在其上方
 const STATUS_RENDER_ORDER = 60;
@@ -118,7 +125,10 @@ export class UnitObject extends THREE.Group {
     ), 2);
     this._hpFill.position.z = 0.05;
     this._hpBar.add(this._hpFill);
-    this._labelMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false }); // 同 body：二值 mask
+    // 文本用真 alpha 混合而非 alphaTest 二值 mask：canvas 烘焙的 AA alpha 渐变被
+    // 二值化丢弃会产生阶梯锯齿；状态层本就 depthTest/Write 关闭 + 显式 renderOrder
+    // （painter 序确定），混合是安全的。standee 立牌在世界内吃深度，仍用 alphaTest
+    this._labelMaterial = new THREE.MeshBasicMaterial({ transparent: true, fog: false });
     this._label = statusify(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._labelMaterial), 3);
     this._label.position.z = 0.05;
     this._hpBar.add(this._label);
@@ -160,14 +170,18 @@ export class UnitObject extends THREE.Group {
     this._shieldChip.name = 'shieldChip';
     this._shieldChip.position.set(-(HP_BAR_WIDTH / 2 + 1.7), 0, 0.1);
     this._shieldGroup.add(this._shieldChip);
-    this._shieldIconMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false });
+    this._shieldIconMaterial = new THREE.MeshBasicMaterial({ transparent: true, fog: false });
     this._shieldIconMaterial.map = shieldIconTexture();
     const icon = statusify(new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.4), this._shieldIconMaterial), 3);
     this._shieldChip.add(icon);
-    this._shieldLabelMaterial = new THREE.MeshBasicMaterial({ alphaTest: 0.5, fog: false });
+    this._shieldLabelMaterial = new THREE.MeshBasicMaterial({ transparent: true, fog: false });
     this._shieldLabel = statusify(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._shieldLabelMaterial), 4);
     this._shieldChip.add(this._shieldLabel);
     this._shieldPopT = 0;
+
+    // 效果行（血条上方左对齐纵列）：投影 effects 签名驱动重建
+    this._fxRows = [];
+    this._fxSig = null;
 
     // 效果图标锚点（overlay 后续批次）
     this.fxAnchor = new THREE.Object3D();
@@ -210,12 +224,8 @@ export class UnitObject extends THREE.Group {
     this._signature = sig;
     this._dead = projection.isDead;
 
-    // 数字文本：HP 比；效果层数临时以文本附带（图标 overlay 后续批次）。
-    // 护盾有独立视觉层（保护框+盾徽 chip），不再附"盾N"后缀
-    let text = `${projection.hp}/${projection.maxHp}`;
-    if (projection.effects?.length) {
-      text += `\n${projection.effects.map(e => `${e.effectId}x${e.stacks}`).join(' ')}`;
-    }
+    // 数字文本：HP 比。效果有独立效果行（血条上方 fxRows），不再附文本后缀
+    const text = `${projection.hp}/${projection.maxHp}`;
     const { texture, width, height } = this._bakeLabel(text);
     const old = this._labelMaterial.map;
     this._labelMaterial.map = texture;
@@ -243,6 +253,9 @@ export class UnitObject extends THREE.Group {
       this._shieldBaked = sh; // 值不变不重烘（hp 变化也会过签名）
     }
 
+    // 效果行（血条上方左对齐纵列）：签名驱动整列重建
+    this._syncEffectRows(projection.effects ?? []);
+
     // 填充条：左锚定按比例缩短
     const ratio = projection.maxHp > 0 ? Math.max(0, projection.hp / projection.maxHp) : 0;
     this._hpFill.scale.x = Math.max(ratio, 0.001);
@@ -268,6 +281,59 @@ export class UnitObject extends THREE.Group {
     this._shieldLabel.geometry.dispose();
     this._shieldLabel.geometry = new THREE.PlaneGeometry(w, h);
     this._shieldLabel.position.set(1.1 + 0.35 + w / 2, 0, 0); // 盾徽右缘 + 间隙 + 半宽（左锚定）
+  }
+
+  /**
+   * 效果行重建（签名驱动）：血条上方左对齐纵列，每行 = 暗背板 + 烘焙文本
+   * （icon + 特征色名称 + 层数，buff 层数绿 / debuff 层数红）。
+   * 行网格带 userData.effectRow（{ type:'effect', payload:{ name } }，与卡面热区
+   * hitRegion 同构）——Picker 二级查询返回 token 命中，tooltip 走既有 tooltip:* 协议。
+   */
+  _syncEffectRows(effects) {
+    const sig = JSON.stringify(effects);
+    if (sig === this._fxSig) return;
+    this._fxSig = sig;
+    this._clearEffectRows();
+    let y = HP_BAR_HEIGHT / 2 + FX_ROW_GAP; // 第一行背板底缘
+    for (const e of effects) {
+      const { texture, width, height } = this._bakeLabel(effectRowMarkup(e));
+      const w = width / this._ppw;
+      const h = height / this._ppw;
+      const bw = w + FX_ROW_PAD * 2;
+      const bh = h + 0.5;
+      const row = new THREE.Group();
+      row.name = `fx:${e.effectId}`;
+      const pick = { type: 'effect', payload: { name: e.name } };
+      const bg = statusify(new THREE.Mesh(
+        new THREE.PlaneGeometry(bw, bh),
+        new THREE.MeshBasicMaterial({ color: FX_ROW_BG, transparent: true, opacity: 0.62, depthWrite: false, fog: false }),
+      ), 5);
+      bg.userData.effectRow = pick;
+      const textMesh = statusify(new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true, fog: false }), // 真 alpha 混合保 AA（同主标签）
+      ), 6);
+      textMesh.position.z = 0.02;
+      textMesh.userData.effectRow = pick;
+      row.add(bg, textMesh);
+      // 左对齐：背板左缘对齐血条左缘；行自下而上堆叠（第一个效果最贴近血条）
+      row.position.set(-HP_BAR_WIDTH / 2 + bw / 2, y + bh / 2, 0.1);
+      this._hpBar.add(row);
+      this._fxRows.push(row);
+      y += bh + FX_ROW_GAP;
+    }
+  }
+
+  _clearEffectRows() {
+    for (const row of this._fxRows) {
+      for (const mesh of row.children) {
+        mesh.geometry.dispose();
+        mesh.material.map?.dispose?.();
+        mesh.material.dispose();
+      }
+      this._hpBar.remove(row);
+    }
+    this._fxRows = [];
   }
 
   /**
@@ -339,6 +405,7 @@ export class UnitObject extends THREE.Group {
 
   dispose() {
     this.setHighlight(false);
+    this._clearEffectRows();
     this._shadow.geometry.dispose();
     this._shadow.material.dispose();
     this._body.geometry.dispose();
@@ -401,6 +468,15 @@ function shieldIconTexture() {
   _shieldIconTexture.needsUpdate = true;
   _shieldIconTexture.colorSpace = THREE.SRGBColorSpace;
   return _shieldIconTexture;
+}
+
+// 效果行 markup：icon（emoji 文本）+ 特征色名称 + 层数（buff 绿 / debuff 红）。
+// 颜色走 richtext 颜色名语法（/red{...}），效果定义的 color 字段即颜色名
+function effectRowMarkup(e) {
+  const icon = e.icon ? `${e.icon} ` : '';
+  const name = e.color ? `/${e.color}{${e.name}}` : `${e.name}`;
+  const stackColor = e.type === 'debuff' ? 'red' : 'green';
+  return `${icon}${name} /${stackColor}{ ${e.stacks}}`;
 }
 
 function defaultBakeLabel() {

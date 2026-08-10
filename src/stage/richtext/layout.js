@@ -15,7 +15,7 @@ export const DEFAULT_TEXT_STYLE = Object.freeze({
 });
 
 // token.type → 绘制时的样式来源，外观解析（颜色表、实体配色）由调用方注入。
-const DEFAULT_COLOR_TABLE = Object.freeze({
+export const DEFAULT_COLOR_TABLE = Object.freeze({
   red: '#ff4444',
   blue: '#4444ff',
   green: '#44ff44',
@@ -30,6 +30,7 @@ const DEFAULT_COLOR_TABLE = Object.freeze({
  *   style: 覆盖 DEFAULT_TEXT_STYLE 的子集
  *   colorTable: 颜色名 → css 颜色
  *   resolveNamed: (name) => ({ color? }) 命名实体外观
+ *   resolveEffect: (name) => ({ color? }) 效果外观（名称特征色；css 颜色或颜色表颜色名）
  * @returns {{ width:number, height:number, placements:Array, hitRegions:Array }}
  *   placement: { kind:'glyph', char, x, y, width, style:{fontSize,color} }
  *            | { kind:'icon', iconType:'effect'|'skill', name, x, y, size }
@@ -41,6 +42,7 @@ export function layoutRichText(tokens, options) {
     measure,
     colorTable = DEFAULT_COLOR_TABLE,
     resolveNamed = () => ({}),
+    resolveEffect = () => ({}),
   } = options;
   if (typeof measure !== 'function') throw new Error('layoutRichText: measure(text, style) is required');
 
@@ -95,8 +97,14 @@ export function layoutRichText(tokens, options) {
         placeText(token.content, { color: colorTable[token.color] || st.color });
         break;
       case 'effect': {
-        const run = placeIcon('effect', token.effectName);
-        hitRegions.push({ type: 'effect', payload: { name: token.effectName }, rect: { x: run.x, y: run.y, w: run.w, h: st.lineHeight } });
+        // 图标 + 特征色名称文本（与 skill token 同构），两段都是热区
+        const look = resolveEffect(token.effectName) || {};
+        const iconRun = placeIcon('effect', token.effectName);
+        hitRegions.push({ type: 'effect', payload: { name: token.effectName }, rect: { x: iconRun.x, y: iconRun.y, w: iconRun.w, h: st.lineHeight } });
+        const runs = placeText(token.effectName, { color: colorTable[look.color] || look.color || st.color });
+        for (const run of runs) {
+          if (run.w > 0) hitRegions.push({ type: 'effect', payload: { name: token.effectName }, rect: { x: run.x, y: run.y, w: run.w, h: st.lineHeight } });
+        }
         break;
       }
       case 'named': {

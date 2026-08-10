@@ -184,6 +184,21 @@ describe('Bridge：状态投影', () => {
     expect(p1.hand).toHaveLength(3);
     expect(p1.player.actionPoints).toBe(2);
   });
+
+  it('单位效果压平定义元数据（name/type/color/icon），Stage 无需 import Core 注册表', () => {
+    const bridge = makeBridge({ deck: ['inflame', 'punch', 'punch', 'punch'] });
+    autoFinish(bridge);
+    bridge.start();
+    const card = bridge.getProjection().hand.find(c => c.defId === 'inflame');
+    bridge.intents.playCard(card.uniqueID, bridge.getProjection().enemies[0].uniqueID);
+    const fx = bridge.getProjection().enemies[0].effects;
+    expect(fx).toHaveLength(1);
+    expect(fx[0]).toMatchObject({
+      effectId: 'burn', stacks: 2, name: '燃烧', type: 'debuff', color: 'red', icon: '🔥',
+    });
+    // 可序列化约束：定义引用不外泄，只有压平后的纯数据
+    expect(Object.values(fx[0]).every(v => v == null || typeof v !== 'object')).toBe(true);
+  });
 });
 
 describe('Bridge：意图层与可用性', () => {

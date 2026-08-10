@@ -21,7 +21,7 @@
 // 布局（世界坐标，z=0 平面屏幕高≈100，y 向上，相机抬眼高斜视，16:9 世界宽≈177.8）：
 //   手牌 y=-40 居中扇形（压低给战场让位）；咏唱槽屏幕左侧纵列（x=-74，自 y=18 向下，z 低于手牌）；
 //   单位脚底锚定场景水平地板（scene.battleLine y=FLOOR_Y，slotTransform 换算）；
-//   按钮纵列（主/换卡）x=46 y=-8/-16；牌库图标 (76,-35)，坟墓图标 (76,-13)；出牌线 y=-20；
+//   按钮纵列（主/换卡）x=74 y=-4/-12；牌库图标 (80,-55)，坟墓图标 (80,-38)；出牌线 y=-20；
 //   背景 = 程序化 3D 场景（dungeon3D）。
 
 import * as THREE from 'three';
@@ -29,7 +29,7 @@ import { EventNames } from '../../bridge/events.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
-import { ResourcePipsObject } from '../objects/ResourcePipsObject.js';
+import { PlayerStatusObject } from '../objects/PlayerStatusObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
 import { LayoutEngine } from '../layout/LayoutEngine.js';
@@ -58,6 +58,10 @@ const PILE_POSITIONS = {
   deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；手牌扇区最大 ±65，避让开）
   discard: { x: 80, y: -38 },   // 坟墓图标（牌库上方）
 };
+// 玩家状态栏（左下角）：UI 可视底缘 -65、手牌底缘 -53.5（hover 放大 -55.5）之间贴底；
+// 面板 36x10.5 → 顶 -54.05 底 -64.55；z=6 低于手牌（10+），左侧手牌 hover 盖住面板
+// 右上一角可接受（交互元素在上层）
+export const PLAYER_STATUS_POS = { x: -70, y: -59.3, z: 6 };
 
 export class BattleStage {
   /**
@@ -84,14 +88,21 @@ export class BattleStage {
       ? new UnitArtCache({ onLoad: () => this._applyUnitArt() })
       : null;
     this._bakeFace = bakeFace || ((card) => bakeCardFace(card, { scale: 2, art: this._artCache?.get(card) ?? null }));
-    this._bakeLabel = bakeLabel || ((text) => renderRichTextBlock(text, { maxWidth: 220, style: { fontSize: 16, lineHeight: 20 } }));
+    // 小字号文本（HP/效果行/资源点）：烘焙 scale 3 供更干净的 mipmap 链，
+    // 并开各向异性过滤（效果行随 billboard 与俯视相机成斜角，aniso 防斜向模糊/闪烁）
+    this._bakeLabel = bakeLabel || ((text) => {
+      const out = renderRichTextBlock(text, { maxWidth: 220, scale: 3, style: { fontSize: 16, lineHeight: 20 } });
+      out.texture.anisotropy = Math.min(8, this._smMaxAnisotropy());
+      return out;
+    });
 
     // 程序化 3D 场景（低多边形 + 灯光 + 氛围粒子锚点），node 单测同样可建
     this._scene3D = this._sceneDef.build3D ? this._sceneDef.build3D() : null;
     if (this._scene3D) {
       this.scene.add(this._scene3D.group);
-      // 雾：远景没入永夜蓝黑但保留墙/窗剪影（相机 (0,30,235) 斜视；立牌材质 fog:false 不受影响）
-      this.scene.fog = new THREE.Fog(0x060a14, 215, 320);
+      // 雾：远景没入永夜蓝黑但保留墙/窗剪影（相机 (0,30,235) 斜视；立牌材质 fog:false 不受影响）。
+      // 前后排布局后场景纵深拉长（敌排 z≈-50、远墙 z=-80），雾距拉近让远排沉进暗部强化纵深
+      this.scene.fog = new THREE.Fog(0x060a14, 165, 310);
     }
     // 体积月光 composer（ray marching，场景带投影月光且 renderer 支持 RT 时接管世界 pass；
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）
@@ -188,15 +199,13 @@ export class BattleStage {
     this._arrow.position.z = ARROW_Z;
     this.uiScene.add(this._arrow);
 
-    // 玩家资源显示（手牌栏上方）：AP 黄点 / 魏启 蓝点，耗尽点变灰常驻
-    this._resources = {
-      ap: new ResourcePipsObject({ name: 'AP', color: 0xf0c040, bakeLabel: this._bakeLabel }),
-      mana: new ResourcePipsObject({ name: '魏启', color: 0x4a8fe8, bakeLabel: this._bakeLabel }),
-    };
-    this._resources.ap.position.set(0, -14.5, 6);
-    this._resources.mana.position.set(0, -18, 6);
-    this.uiScene.add(this._resources.ap);
-    this.uiScene.add(this._resources.mana);
+    // 玩家状态栏（左下角）：头像 + AP 黄点 / 魏启蓝点两排（左对齐），耗尽点变灰常驻；
+    // _resources 引用不变（reconcile/tick/测试均照旧），只是父级从 uiScene 换成状态栏
+    this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel });
+    this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
+    this.uiScene.add(this._statusBar);
+    this._resources = { ap: this._statusBar.apPips, mana: this._statusBar.manaPips };
+    this._applyAvatar(); // 立绘缓存可能已就绪（异步未就绪则 onLoad 时 _applyUnitArt 补挂）
 
     this._unsubs = [
       bridge.frontendBus.on('*', (type, payload) => this._direct(type, payload)),
@@ -418,6 +427,13 @@ export class BattleStage {
 
   _applyUnitArt() {
     for (const obj of this._units.values()) this._applyUnitArtTo(obj);
+    this._applyAvatar();
+  }
+
+  // 状态栏头像补挂（unit_player_front.png 正视图；缓存未命中等 onLoad 统一补）
+  _applyAvatar() {
+    const img = this._unitArt?.getFile('unit_player_front.png');
+    if (img) this._statusBar.setAvatar(img);
   }
 
   _layoutAndTrack() {
@@ -975,6 +991,11 @@ export class BattleStage {
     }
   }
 
+  // 渲染端支持的最大各向异性（假 renderer/无 WebGL 环境回退 1）
+  _smMaxAnisotropy() {
+    return this._sm?._renderer?.capabilities?.getMaxAnisotropy?.() ?? 1;
+  }
+
   dispose() {
     this._closeViewer();
     this._composer?.dispose();
@@ -985,7 +1006,6 @@ export class BattleStage {
     this._unsubs.forEach(off => off?.());
     this._unsubs = [];
     this._arrow.dispose();
-    this._resources.ap.dispose();
-    this._resources.mana.dispose();
+    this._statusBar.dispose(); // 含两排资源点（apPips/manaPips 随父级销毁）
   }
 }

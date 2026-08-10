@@ -12,8 +12,8 @@ import * as THREE from 'three';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
-export const CAMERA_AZIMUTH = -14;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
-export const CAMERA_ELEVATION = 24;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
+export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
+export const CAMERA_ELEVATION = 20;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
 export const CAMERA_LOOK_AT = Object.freeze({ x: 0, y: -15, z: 0 }); // 视轴锚在牌桌上方，底部留给手牌构图
 // UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角（用户定）。
 // 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs

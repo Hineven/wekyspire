@@ -1,7 +1,8 @@
 // RichTextEngine 解析器：markup 文本 → token 流。
 // 语法与旧 ColoredText.vue 完全等价：
 //   /颜色{文本}     颜色名（red/blue/green/purple 等，排除保留字 effect/named/skill）
-//   /effect{效果名}  行内效果图标
+//   /effect{效果名}  行内效果引用：图标（定义 emoji，无图标回落徽章）+ 特征色名称文本，
+//                    两段都是热区（tooltip 由 Shell 消费）；外观经 resolveEffect/drawIcon 注入
 //   /named{实体名}   命名实体（可交互热区，tooltip 由 Shell 消费）
 //   /skill{卡名}     行内卡牌引用，支持末尾 +N/-N 威力差值
 // 解析器是纯函数，不依赖任何渲染环境；icon/color 等外观解析是 layout/texture 的职责。

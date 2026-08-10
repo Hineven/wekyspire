@@ -8,13 +8,39 @@
 
 import * as THREE from 'three';
 import { parseRichText } from './parser.js';
-import { layoutRichText } from './layout.js';
-import { drawPlacements, createCanvasMeasurer } from './texture.js';
+import { layoutRichText, DEFAULT_COLOR_TABLE } from './layout.js';
+import { drawPlacements, createCanvasMeasurer, defaultDrawIcon } from './texture.js';
+import { allEffects } from '../../core/effects/registry.js';
+
+// 效果外观解析（markup 里是效果显示名，按 name 反查定义；Stage→Core 查表是允许方向）。
+// 特征色：def.color 是 richtext 颜色名，经颜色表转 css；未注册/无色 → null（回落正文色）
+function effectLook(name) {
+  const def = allEffects().find(d => d.name === name);
+  const color = def?.color ? (DEFAULT_COLOR_TABLE[def.color] ?? def.color) : null;
+  return { color, icon: def?.icon ?? null };
+}
+
+// 牌面图标绘制器：effect 有 emoji 图标画 emoji（与效果行/tooltip 同一视觉语言），
+// 无图标或非 effect 回落通用徽章
+function drawCardIcon(ctx, { iconType, name, x, y, size }) {
+  if (iconType === 'effect') {
+    const { icon } = effectLook(name);
+    if (icon) {
+      ctx.font = `${Math.round(size * 0.85)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(icon, x + size / 2, y + size / 2 + size * 0.05);
+      ctx.textAlign = 'left';
+      return;
+    }
+  }
+  defaultDrawIcon(ctx, { iconType, name, x, y, size });
+}
 
 export const CARD_FACE_SIZE = Object.freeze({ width: 200, height: 270 });
 
 const TIER_COLORS = Object.freeze({
-  D: '#8a8f9d', C: '#5aa2e8', B: '#a06ee8', A: '#e8b34c', S: '#e85a5a',
+  D: '#8a8f9d', C: '#5aa2e8', B: '#a06ee8', A: '#e8b34c', S: '#e85a5a', Z: '#4a3a5a',
 });
 // 系列主题色（体修=灰，火=红，木=绿…）；未知系列回落体修灰
 const TYPE_COLORS = Object.freeze({
@@ -34,6 +60,7 @@ const TIER_FRAME = Object.freeze({
   B: { width: 4.5, inner: true },
   A: { width: 5.5, inner: true },
   S: { width: 6.5, inner: true },
+  Z: { width: 3.5, inner: false },
 });
 
 const BODY_FONT = { fontSize: 17, lineHeight: 23, iconSize: 18, iconGap: 2, color: '#dde1ec' };
@@ -79,7 +106,7 @@ export function bakeCardFace(card, options = {}) {
       return c;
     },
     measure = createCanvasMeasurer(BODY_FONT),
-    drawIcon,
+    drawIcon = drawCardIcon,
     art = null,
   } = options;
 
@@ -91,12 +118,17 @@ export function bakeCardFace(card, options = {}) {
   drawHeader(ctx, card);
   if (art) drawArt(ctx, art);
 
-  // 正文：富文本排版 + 绘制（热区加偏移）；有卡图时正文区下移
+  // 正文：富文本排版 + 绘制（热区加偏移）；有卡图时正文区下移。
+  // resolveEffect 给 /effect{名} 供特征色（图标 emoji 由 drawCardIcon 负责）
   const bodyTop = art ? BODY_TOP_WITH_ART : BODY_TOP_PLAIN;
   const layout = layoutRichText(parseRichText(card.text ?? ''), {
     maxWidth: BODY_MAX_WIDTH,
     measure,
     style: BODY_FONT,
+    resolveEffect: options.resolveEffect ?? ((name) => {
+      const { color } = effectLook(name);
+      return color ? { color } : {};
+    }),
   });
   drawPlacements(ctx, layout.placements, { style: BODY_FONT, drawIcon, offsetX: 12, offsetY: bodyTop });
   const hitRegions = layout.hitRegions.map(r => ({

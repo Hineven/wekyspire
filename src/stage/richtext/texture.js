@@ -89,7 +89,7 @@ export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawI
 }
 
 // 默认图标：圆形徽章（effect 橙 / skill 蓝），比白框占位耐看
-function defaultDrawIcon(ctx, { iconType, x, y, size }) {
+export function defaultDrawIcon(ctx, { iconType, x, y, size }) {
   const cx = x + size / 2;
   const cy = y + size / 2;
   ctx.beginPath();
