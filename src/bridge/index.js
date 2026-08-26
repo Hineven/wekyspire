@@ -1,6 +1,6 @@
 import mitt from 'mitt';
 import { createBattle, startBattle, isBattleFinished } from '../core/flow/battle.js';
-import AnimationSequencer from './sequencer.js';
+import AnimationSequencer from '../core/anim/sequencer.js';
 import { createBridgePresenter } from './presenter.js';
 import { projectBattle } from './projection.js';
 import { createIntents } from './intents.js';
@@ -14,10 +14,16 @@ import { EventNames } from './events.js';
 //   bridge.start();
 // 组成：两条总线 + 动画队列 + presenter 翻译层 + 状态投影（标脏+拉取）
 //      + 意图层 + 结算期输入仲裁。
-export function createBridge({ runState, enemies = [], allies = [], seed = 1, config = {} }) {
+// frontendBus/sequencer 可注入（S2）：Shell 传入 run 级共享实例后，战斗指令与
+// cutscene/房间/塔楼指令在同一队列定序（跨层演出链）；缺省自建（headless/测试）。
+export function createBridge({
+  runState, enemies = [], allies = [], seed = 1, config = {},
+  frontendBus: injectedFrontendBus = null, sequencer: injectedSequencer = null,
+} = {}) {
   const backendBus = mitt();
-  const frontendBus = mitt();
-  const sequencer = new AnimationSequencer({ bus: frontendBus });
+  const frontendBus = injectedFrontendBus ?? mitt();
+  const sequencer = injectedSequencer
+    ?? new AnimationSequencer({ bus: frontendBus, finishedEvent: EventNames.ANIMATION_INSTRUCTION_FINISHED });
 
   let dirty = true;
   let cachedProjection = null;

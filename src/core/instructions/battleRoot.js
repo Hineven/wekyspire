@@ -2,6 +2,7 @@ import BattleInstruction from '../kernel/BattleInstruction.js';
 import { cloneSkillRuntime } from '../state/skillRuntime.js';
 import { enterBattle } from '../skills/helpers.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
+import { getRelicDefinition } from '../relics/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
 
@@ -17,10 +18,9 @@ export class PreBattleInstruction extends BattleInstruction {
     if (this._stage === 0) {
       const { player, battleState, runState } = ctx;
 
-      // 玩家战斗字段重置（hp/money/deck 等 run 级不动）
+      // 玩家战斗字段重置（hp/money/deck/mana 等 run 级不动；魏启跨战斗持久无自然恢复）
       player.shield = 0;
       player.clearEffects();
-      player.mana = player.maxMana;
       player.actionPoints = player.maxActionPoints;
 
       // 构筑牌组：克隆 runtime 进牌库，洗牌后逐卡走"进入战斗"元语（充能初始化 + 常驻订阅）
@@ -33,6 +33,14 @@ export class PreBattleInstruction extends BattleInstruction {
         def.onBattleStart?.(ctx);
         for (const sub of def.subscriptions?.(ctx) ?? []) {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `ability:${abilityId}` });
+        }
+      }
+      // 遗物：仅挂载装备中的（§6.3），钩子机制同能力
+      for (const relicId of player.equippedRelics ?? []) {
+        const def = getRelicDefinition(relicId);
+        def.onBattleStart?.(ctx);
+        for (const sub of def.subscriptions?.(ctx) ?? []) {
+          ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
       }
 

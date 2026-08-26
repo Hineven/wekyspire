@@ -56,7 +56,7 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.battleState.turn.count += 1;
         resetTurnHistory(ctx.battleState);
         ctx.player.shield = 0;    // 护盾在自己回合开始清零（持续整个敌方回合）
-        ctx.player.mana = ctx.player.maxMana;
+        // 魏启无自然恢复：跨战斗持久存量资源，回合开始不回满
         ctx.player.actionPoints = ctx.player.maxActionPoints;
         ctx.kernel.submitInstruction(new PlayerTurnStartInstruction(), this);
         return false;

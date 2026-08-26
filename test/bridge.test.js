@@ -10,7 +10,7 @@ import AwaitPlayerInputInstruction from '../src/core/instructions/input.js';
 import { DiscardCardInstruction } from '../src/core/instructions/cards.js';
 import { createBridge, EventNames } from '../src/bridge/index.js';
 import { ANIM_TIMING } from '../src/bridge/events.js';
-import AnimationSequencer from '../src/bridge/sequencer.js';
+import AnimationSequencer from '../src/core/anim/sequencer.js';
 
 // ---- Bridge 层测试：事件翻译 / 动画队列 / 投影 / 意图 / 输入仲裁 ----
 

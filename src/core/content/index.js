@@ -6,3 +6,4 @@ import './skills.js';
 import './enemies.js';
 import './allies.js';
 import './abilities.js';
+import './relics.js';

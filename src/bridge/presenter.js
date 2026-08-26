@@ -13,7 +13,8 @@ import { EventNames, ANIM_TIMING } from './events.js';
 //                效果类（伤害/治疗/…）→ anim 先，sync 后（演完再变数字）
 //                入场类（抽牌/造牌/…）→ sync 先，anim 后（先转移再播动画）
 //                离场类（弃/焚/迁移）  → anim 先，sync 后（飞进坟堆数字才+1）
-//   生命周期 → backendBus 直接事件（不等动画）；battleStart 额外发一次 sync 建初始场景；
+//   生命周期 → battleStart 直接事件（不等动画，另发一次 sync 建初始场景）；
+//              battleEnd 走队列尾闸——前置动画全部完成后才发 BATTLE_END（S0）。
 //   requestInput → sync（玩家决策前显示状态必须最新）+ 回调给 interactionHandler。
 // 每次调用都 markDirty：状态投影统一在这里标脏（替代旧仓库的 Vue watch）。
 // 兜底：markDirty 后若没有任何显式 sync 覆盖（Core 存在不经 presenter 的迁移），
@@ -64,7 +65,17 @@ export function createBridgePresenter({
     battleEnd: ({ result }) => {
       markDirty();
       syncState(); // 终局状态（死亡/结果）同步给显示层
-      backendBus.emit(EventNames.BATTLE_END, { result });
+      // BATTLE_END 排队尾（S0）：死亡动画与终局 sync 全部完成后才发射，
+      // run 层的幕间转场/切舞台不再打断尚未播完的终局演出。
+      // 自完结指令：发射即 finish（同步泵起后续——如 endBattle 入队的幕间黑幕）
+      sequencer.enqueueInstruction({
+        meta: { event: 'battle:end-gate' },
+        durationMs: 0,
+        start: ({ id }) => {
+          backendBus.emit(EventNames.BATTLE_END, { result });
+          sequencer.finish(id);
+        },
+      });
     },
 
     // ---- 效果类：先动画，后 sync（演完再变数字） ----

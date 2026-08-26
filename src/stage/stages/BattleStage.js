@@ -29,7 +29,7 @@ import { EventNames } from '../../bridge/events.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
-import { PlayerStatusObject } from '../objects/PlayerStatusObject.js';
+import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
 import { LayoutEngine } from '../layout/LayoutEngine.js';
@@ -58,10 +58,8 @@ const PILE_POSITIONS = {
   deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；手牌扇区最大 ±65，避让开）
   discard: { x: 80, y: -38 },   // 坟墓图标（牌库上方）
 };
-// 玩家状态栏（左下角）：UI 可视底缘 -65、手牌底缘 -53.5（hover 放大 -55.5）之间贴底；
-// 面板 36x10.5 → 顶 -54.05 底 -64.55；z=6 低于手牌（10+），左侧手牌 hover 盖住面板
-// 右上一角可接受（交互元素在上层）
-export const PLAYER_STATUS_POS = { x: -70, y: -59.3, z: 6 };
+// 玩家状态栏摆放位：与地图舞台共享的契约，定义见 PlayerStatusObject.js
+export { PLAYER_STATUS_POS };
 
 export class BattleStage {
   /**
@@ -435,6 +433,9 @@ export class BattleStage {
     const img = this._unitArt?.getFile('unit_player_front.png');
     if (img) this._statusBar.setAvatar(img);
   }
+
+  /** 状态栏对外入口（run 编排器同步金币/瑞米；AP/魏启走 reconcile） */
+  get statusBar() { return this._statusBar; }
 
   _layoutAndTrack() {
     // 保持显示状态快照中的手牌顺序（_cards 插入序≠手牌序）

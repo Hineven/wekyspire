@@ -1,19 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { PlayerStatusObject, PLAYER_STATUS_LAYOUT } from '../src/stage/objects/PlayerStatusObject.js';
 
-// 左下角玩家状态栏契约：底板/头像/资源点两排结构、左对齐布局、头像纹理裁切、销毁
+// 左下角玩家状态栏契约：底板/头像/四行信息结构、左对齐布局、头像纹理裁切、销毁
 describe('PlayerStatusObject 玩家状态栏', () => {
-  it('结构：底板 + 头像 + 描边环 + AP/魏启两排（左对齐）+ 能力留位', () => {
+  it('结构：底板 + 头像 + 描边环 + AP/魏启两排 + 金币/瑞米行（左对齐）+ 能力留位', () => {
     const bar = new PlayerStatusObject();
     expect(bar.getObjectByName('plate')).toBeTruthy();
     expect(bar.getObjectByName('avatar')).toBeTruthy();
     expect(bar.getObjectByName('avatarRing')).toBeTruthy();
+    expect(bar.getObjectByName('moneyLabel')).toBeTruthy();
+    expect(bar.getObjectByName('remiLabel')).toBeTruthy();
     expect(bar.getObjectByName('abilities')).toBeTruthy(); // 能力/灵脉留位挂载点
     expect(bar.apPips.parent).toBe(bar);
     expect(bar.manaPips.parent).toBe(bar);
-    // 两排左锚定在同一 x、AP 在上
+    // 四行左锚定在同一 x，自上而下 AP > 魏启 > 金币 > 瑞米
     expect(bar.apPips.position.x).toBe(bar.manaPips.position.x);
     expect(bar.apPips.position.y).toBeGreaterThan(bar.manaPips.position.y);
+    expect(bar.manaPips.position.y).toBeGreaterThan(bar.getObjectByName('moneyLabel').position.y);
+    expect(bar.getObjectByName('moneyLabel').position.y).toBeGreaterThan(bar.getObjectByName('remiLabel').position.y);
     // node 无 document：底板退化纯色半透明
     expect(bar._plateMaterial.map).toBe(null);
     expect(bar._plateMaterial.opacity).toBeLessThan(1);
@@ -51,15 +55,41 @@ describe('PlayerStatusObject 玩家状态栏', () => {
     expect(bar._avatarMaterial.map).toBeTruthy();
   });
 
-  it('布局常量自洽：面板能容纳头像与资源点排，且在 UI 底缘可视区内', () => {
+  it('布局常量自洽：面板能容纳头像与四行信息，且在 UI 底缘可视区内', () => {
     const L = PLAYER_STATUS_LAYOUT;
     // 头像（含环）在面板左半内
     expect(L.AVATAR_X - L.RING_R).toBeGreaterThan(-L.PANEL_W / 2);
-    // 资源点排左锚点在头像右侧
+    // 信息行左锚点在头像右侧
     expect(L.ROW_X).toBeGreaterThan(L.AVATAR_X + L.RING_R - 1);
-    // 两排在面板高度内
-    expect(Math.abs(L.ROW_AP_Y)).toBeLessThan(L.PANEL_H / 2);
-    expect(Math.abs(L.ROW_MANA_Y)).toBeLessThan(L.PANEL_H / 2);
+    // 四行均在面板高度内
+    for (const y of [L.ROW_AP_Y, L.ROW_MANA_Y, L.ROW_MONEY_Y, L.ROW_REMI_Y]) {
+      expect(Math.abs(y)).toBeLessThan(L.PANEL_H / 2);
+    }
+  });
+
+  it('金币行/瑞米行：签名驱动重烘，左缘锚定，被打跑红色警示', () => {
+    const baked = [];
+    const bar = new PlayerStatusObject({
+      bakeLabel: (text) => {
+        baked.push(text);
+        return { texture: {}, width: text.length * 10, height: 20 };
+      },
+    });
+    bar.setMoney(30);
+    expect(baked).toContain('金币 30');
+    // 左缘锚定 ROW_X：中心 = ROW_X + lw/2（30wu? "金币 30" 5字符 → 50px → 5wu）
+    const money = bar.getObjectByName('moneyLabel');
+    expect(money.position.x).toBeCloseTo(PLAYER_STATUS_LAYOUT.ROW_X + 2.5, 5);
+    // 签名不变不重烘
+    bar.setMoney(30);
+    expect(baked.filter(t => t === '金币 30')).toHaveLength(1);
+
+    bar.setRemi({ level: 2, fruits: 3 });
+    expect(baked).toContain('remi Lv.2 · 果 3');
+    expect(bar.getObjectByName('remiLabel').material.color.getHex()).toBe(0xb7eb8f);
+    bar.setRemi({ level: 2, fruits: 3, drivenOff: true });
+    expect(baked).toContain('remi 被打跑');
+    expect(bar.getObjectByName('remiLabel').material.color.getHex()).toBe(0xff7875);
   });
 
   it('dispose：资源点随父级销毁', () => {

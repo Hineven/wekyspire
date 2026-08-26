@@ -1,12 +1,16 @@
-import { EventNames } from './events.js';
-
-// 动画队列/执行器（自旧仓库 animationSequencer.js 迁入，语义零改动）：
+// 通用动画指令队列（自 bridge/sequencer.js 抽出，S1 去战斗化）：
 // - 指令 { id, status, tags, waitTags, durationMs, start, meta }
 // - 可执行判定：位于 X 之前且与 X.waitTags 有交集的指令全部 finished，X 才能 start
-//   （默认 waitTags=['all'] = 等待所有前序；tags/waitTags 都自动含 'all'…
+//   （默认 waitTags=['all'] = 等待所有前序；tags/waitTags 都自动含 'all'，
 //    注意：'all' 标签使默认情况下指令严格串行；要并行需显式 waitTags: []）
-// - 结束：总线收到 ANIMATION_INSTRUCTION_FINISHED { id }，或 durationMs 超时强杀
-// 与旧版唯一差异：事件总线改为构造注入（不再 import 全局单例），可 headless 测试。
+// - 结束：总线收到完成事件（finishedEvent，缺省 animation-instruction-finished）
+//   携带 { id }，或 durationMs 超时强杀
+// - start 回调可同步自完结（sequencer.finish(id) / emit 完成事件）：重入安全，
+//   完成会立即泵起后续指令（cutscene 尾闸/dialogue 闸门依赖此语义）
+// - cancelAll：全部指令瞬间清空（不执行未启动的 start）——离局/读档恢复用
+// 跨层编排：battle（bridge presenter）/ room / tower / cutscene 共用同一实例时，
+// 指令按入队顺序 + tags 依赖定序，即"终局动画 → 幕间黑幕 → 塔楼抵达"这类
+// 跨层演出链的统一时钟。fire-and-forget 微特效（粒子/hover）不进队列。
 function genId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
 function hasIntersection(a, b) {
@@ -15,11 +19,17 @@ function hasIntersection(a, b) {
 }
 
 export default class AnimationSequencer {
-  constructor({ bus }) {
+  /**
+   * @param {object} options
+   *   bus: mitt 总线（完成事件的来源；start 的 emit 即此总线）
+   *   finishedEvent: 完成回执事件名（各层协议统一，缺省同 bridge）
+   */
+  constructor({ bus, finishedEvent = 'animation-instruction-finished' }) {
     this._instructions = [];
     this._idToTimer = new Map();
     this._bus = bus;
-    bus.on(EventNames.ANIMATION_INSTRUCTION_FINISHED, (payload = {}) => {
+    this._finishedEvent = finishedEvent;
+    bus.on(finishedEvent, (payload = {}) => {
       if (payload?.id) this.finish(payload.id, 'frontend');
     });
   }
@@ -55,6 +65,14 @@ export default class AnimationSequencer {
     return true;
   }
 
+  // 瞬落：清空全部指令（含 running 的定时器），未启动的 start 不再执行。
+  // 动画不可序列化——读档恢复/中途退出时演出直接落到稳态
+  cancelAll() {
+    for (const t of this._idToTimer.values()) clearTimeout(t);
+    this._idToTimer.clear();
+    this._instructions = [];
+  }
+
   // 当前未完成指令数（测试/调试）
   get pendingCount() {
     return this._instructions.length;
@@ -67,15 +85,12 @@ export default class AnimationSequencer {
   }
 
   _pump() {
-    let startedAny = false;
     for (let i = 0; i < this._instructions.length; i++) {
       const ins = this._instructions[i];
       if (!ins || ins.status !== 'pending') continue;
       if (!this._canExecute(i)) continue;
       this._startInstruction(ins);
-      startedAny = true;
     }
-    return startedAny;
   }
 
   _canExecute(index) {
@@ -107,3 +122,5 @@ export default class AnimationSequencer {
     }
   }
 }
+
+export { AnimationSequencer };

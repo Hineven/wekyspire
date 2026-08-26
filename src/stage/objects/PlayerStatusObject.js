@@ -1,30 +1,40 @@
-// PlayerStatusObject：左下角玩家状态栏——头像 + AP/魏启资源点两排，
-// 后续扩展位（精英能力/大师能力灵脉图标等）挂在 abilities 区（见 LAYOUT 注释）。
+// PlayerStatusObject：左下角玩家状态栏（战斗/地图共享）——头像 + 四行信息：
+// AP/魏启资源点两排 + 金币行 + 瑞米状态行；后续扩展位（精英能力/大师能力
+// 灵脉图标等）挂在 abilities 区（见 LAYOUT 注释）。
 // 结构：Group（原点 = 面板中心）
 //   ├─ plate:  圆角深色底板（canvas 烘焙；node 无 document 退化为纯色 plane）
 //   ├─ avatar: 圆形头像（CircleGeometry + 立绘纹理 setAvatar 注入，
 //   │          用 texture repeat/offset 裁出头顶部区域，无需 canvas 合成）
 //   │          + 金属描边环
 //   ├─ apPips / manaPips: ResourcePipsObject（align:'left' 两排，update 需外部
-//   │          tick 透传——BattleStage 帧循环已逐行 update）
-//   └─ abilities: 留位 Group（能力/灵脉图标行的未来挂载点，位于资源点下方）
+//   │          tick 透传——两舞台帧循环已逐行 update）
+//   ├─ moneyLabel: 金币行（setMoney 重烘文本）
+//   ├─ remiLabel:  瑞米状态行（setRemi 重烘；被打跑时红色警示）
+//   └─ abilities: 留位 Group（能力/灵脉图标行的未来挂载点，位于瑞米行下方）
 //
-// 布局常量和面板尺寸集中在本文件 LAYOUT，BattleStage 只摆面板位置。
+// 布局常量和面板尺寸集中在本文件 LAYOUT，舞台只摆面板位置。
 
 import * as THREE from 'three';
 import { ResourcePipsObject } from './ResourcePipsObject.js';
 
 export const PLAYER_STATUS_LAYOUT = Object.freeze({
   PANEL_W: 36,
-  PANEL_H: 10.5,
+  PANEL_H: 14.4,
   AVATAR_R: 4.2,
   AVATAR_X: -11.6,  // 头像中心（局部坐标）
   RING_R: 4.9,      // 描边环外径
-  ROW_X: -5.4,      // 资源点两排的左锚点（局部坐标）
-  ROW_AP_Y: 2.7,
-  ROW_MANA_Y: -2.7,
-  // 能力/灵脉图标行留位：未来在 (ROW_X, -6.2) 起横向排布，面板随内容加高
+  ROW_X: -5.4,      // 四行信息的左锚点（局部坐标）
+  ROW_AP_Y: 5.4,
+  ROW_MANA_Y: 1.8,
+  ROW_MONEY_Y: -1.8,
+  ROW_REMI_Y: -5.4,
+  // 能力/灵脉图标行留位：未来在 (ROW_X, -8.8) 起横向排布，面板随内容加高
 });
+
+// 左下角摆放位（UI 空间世界坐标）：战斗/地图两舞台共享同位同尺寸。
+// 面板底缘固定贴 UI 可视底缘 -65（PANEL_H 14.4 → 中心 -57.35、顶 -50.15）；
+// z=6 低于手牌（10+），面板顶部与左侧手牌 hover 区重叠可接受（交互元素在上层）
+export const PLAYER_STATUS_POS = Object.freeze({ x: -70, y: -57.35, z: 6 });
 
 export class PlayerStatusObject extends THREE.Group {
   /**
@@ -64,11 +74,64 @@ export class PlayerStatusObject extends THREE.Group {
     this.manaPips.position.set(L.ROW_X, L.ROW_MANA_Y, 1);
     this.add(this.apPips, this.manaPips);
 
+    // ---- 金币行 / 瑞米状态行（纯文本，左对齐同一锚点）----
+    this._bake = bakeLabel || defaultInfoBake();
+    this._ppw = 10; // 烘焙像素 → 世界单位（与 ResourcePipsObject 同全局约定）
+    this._moneyLabel = this._makeInfoRow('moneyLabel', L.ROW_MONEY_Y);
+    this._remiLabel = this._makeInfoRow('remiLabel', L.ROW_REMI_Y);
+    this._moneySig = null;
+    this._remiSig = null;
+
     // ---- 能力/灵脉图标行留位（未来扩展挂载点）----
     this.abilities = new THREE.Group();
     this.abilities.name = 'abilities';
-    this.abilities.position.set(L.ROW_X, -6.2, 1);
+    this.abilities.position.set(L.ROW_X, -8.8, 1);
     this.add(this.abilities);
+  }
+
+  // 纯文本行工厂：与资源点 label 同材质语言（透明 plane + 烘焙纹理）
+  _makeInfoRow(name, y) {
+    const material = new THREE.MeshBasicMaterial({ transparent: true });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+    mesh.name = name;
+    mesh.position.set(PLAYER_STATUS_LAYOUT.ROW_X, y, 1);
+    this.add(mesh);
+    return mesh;
+  }
+
+  /** 金币行：签名不变不重烘。 */
+  setMoney(amount) {
+    const sig = `money:${amount}`;
+    if (sig === this._moneySig) return;
+    this._moneySig = sig;
+    this._bakeInfoRow(this._moneyLabel, `金币 ${amount}`, 0xffffff);
+  }
+
+  /**
+   * 瑞米状态行：{ level, fruits, drivenOff }。
+   * 正常："remi Lv.N · 果 M"；被打跑："remi 被打跑"红色警示。
+   */
+  setRemi({ level = 1, fruits = 0, drivenOff = false } = {}) {
+    const sig = `remi:${level}:${fruits}:${drivenOff}`;
+    if (sig === this._remiSig) return;
+    this._remiSig = sig;
+    if (drivenOff) this._bakeInfoRow(this._remiLabel, 'remi 被打跑', 0xff7875);
+    else this._bakeInfoRow(this._remiLabel, `remi Lv.${level} · 果 ${fruits}`, 0xb7eb8f);
+  }
+
+  // 重烘一行文本：左缘锚定 ROW_X（与资源点 'left' 对齐同语义），tint 乘色
+  _bakeInfoRow(mesh, text, tint) {
+    const { texture, width, height } = this._bake(text);
+    const old = mesh.material.map;
+    mesh.material.map = texture;
+    mesh.material.color.set(tint);
+    mesh.material.needsUpdate = true;
+    old?.dispose?.();
+    const lw = width / this._ppw;
+    const lh = height / this._ppw;
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.PlaneGeometry(lw, lh);
+    mesh.position.x = PLAYER_STATUS_LAYOUT.ROW_X + lw / 2;
   }
 
   /**
@@ -116,7 +179,22 @@ export class PlayerStatusObject extends THREE.Group {
     this._avatarMaterial.dispose();
     this.apPips.dispose();
     this.manaPips.dispose();
+    for (const mesh of [this._moneyLabel, this._remiLabel]) {
+      mesh.geometry.dispose();
+      mesh.material.map?.dispose?.();
+      mesh.material.dispose();
+    }
   }
+}
+
+// 金币/瑞米行的缺省烘焙：1x1 占位（与 ResourcePipsObject 缺省一致；
+// 浏览器下两舞台均注入真 bakeLabel，此退化只保 node 单测可建）
+function defaultInfoBake() {
+  return () => {
+    const texture = new THREE.Texture({ width: 1, height: 1 });
+    texture.needsUpdate = true;
+    return { texture, width: 1, height: 1 };
+  };
 }
 
 // 底板烘焙：圆角暗板 + 顶部一丝冷光渐变 + 细描边（与 buttonFace 同语言）；
