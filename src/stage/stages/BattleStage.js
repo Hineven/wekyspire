@@ -26,27 +26,32 @@
 
 import * as THREE from 'three';
 import { EventNames } from '../../bridge/events.js';
+import { DisplayModel } from '../../bridge/displayModel.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
+import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
+import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
-import { LayoutEngine } from '../layout/LayoutEngine.js';
-import { StageAnimator, ANIMATOR_STATES, gsapTween } from '../animator/StageAnimator.js';
+import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
+import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
+import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
+import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeCardFace } from '../richtext/cardFace.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
-import { CardArtCache } from '../art/cardArtCache.js';
-import { UnitArtCache, unitHeightFactor, STANDEE_BASE_HEIGHT } from '../art/unitArt.js';
+import { sharedCardArtCache } from '../art/cardArtCache.js';
+import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 
-export const CARD_WIDTH = 20;
-export const CARD_HEIGHT = 27;
+export const CARD_WIDTH = 26;   // 20 × 1.3：2026-08 手牌观感迭代整体放大卡面
+export const CARD_HEIGHT = 35.1;
 export const PLAY_LINE_Y = -20;
-const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（z≤33），viewer（z=80）打开时 aiming 不可达
+const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（静息 z≤15，悬浮抬升后 ≤36），viewer（z=80）打开时 aiming 不可达
 
 const BUTTON_SIZE = { w: 15, h: 6 };
 // 按钮纵列：主按钮（结束回合/确认）在上，换卡按钮在下（右下自由区，避让人群与手牌扇）
@@ -55,9 +60,15 @@ export const BUTTON_POSITIONS = {
   swap: { x: 74, y: -12 },
 };
 const PILE_POSITIONS = {
-  deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；手牌扇区最大 ±65，避让开）
+  deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；扇形手牌卡中心右界 64，避让开）
   discard: { x: 80, y: -38 },   // 坟墓图标（牌库上方）
 };
+// 手牌悬浮/瞄准提拉目标：整牌（含 liftScale 放大）拉入屏内 + 2 单位余量。
+// 由卡高与放大系数推导（旧固定值 -46.5 是 27 高卡时代遗留，卡面 ×1.3 后下缘重新出屏）
+const HAND_LIFT_Y = UI_CAMERA_LOOK_AT_Y - WORLD_HEIGHT / 2
+  + (CARD_HEIGHT * HAND_FAN_MECHANICS.liftScale) / 2 + 2;
+// 焚毁燃烧总时长（ms）：离场节拍阻塞至此——发动 → 效果 → 燃烧殆尽 → 状态同步
+const CARD_BURN_MS = 750;
 // 玩家状态栏摆放位：与地图舞台共享的契约，定义见 PlayerStatusObject.js
 export { PLAYER_STATUS_POS };
 
@@ -70,22 +81,27 @@ export class BattleStage {
    *   bakeFace(cardProjection) / bakeLabel(text)：烘焙函数，缺省浏览器 canvas 实现（可注入 fake）
    *   tween: StageAnimator 的 tween 工厂（缺省 gsap，测试注入手动版）
    */
-  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon' }) {
+  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', displayModel = null }) {
     this.bridge = bridge;
     this.name = 'battle';
     this.scene = new THREE.Scene();   // 3D 世界 pass：场景/单位/粒子（与地板正确深度交互）
     this.uiScene = new THREE.Scene(); // UI pass：卡牌/按钮/图标/资源点（清深度后渲染，不被地板 z-test 裁掉）
     this._bus = bus || bridge.frontendBus;
     this._sceneDef = getScene(scene);
-    // 卡图缓存仅浏览器端创建（node 单测注入 fake bakeFace，不走卡图链路）
+    // 素材缓存 = 应用级共享单例（跨场/跨舞台复用已解码图，预取也进同一份）：
+    // node 单测注入 fake bakeFace 时不走卡图链路，缓存保持 null
     this._artCache = (!bakeFace && typeof document !== 'undefined')
-      ? new CardArtCache({ onLoad: () => this._rebakeCardFaces() })
+      ? sharedCardArtCache
       : null;
-    // 立牌缓存同理：异步到图后补挂纹理
+    // 立牌缓存同理：异步到图后补挂纹理（订阅挂在构造尾部的 _unsubs）
     this._unitArt = (typeof document !== 'undefined')
-      ? new UnitArtCache({ onLoad: () => this._applyUnitArt() })
+      ? sharedUnitArtCache
       : null;
-    this._bakeFace = bakeFace || ((card) => bakeCardFace(card, { scale: 2, art: this._artCache?.get(card) ?? null }));
+    this._bakeFace = bakeFace || ((card) => bakeCardFace(card, {
+      scale: 3, // 卡面烘焙超采样：卡牌 26×35.1wu 在 1080p 已近 380px 高，scale 2 会糊
+      art: this._artCache?.get(card) ?? null,
+      decor: this._artCache?.getDecor?.(card) ?? null, // 系列装饰图层（素材未就位为 null，走程序化占位）
+    }));
     // 小字号文本（HP/效果行/资源点）：烘焙 scale 3 供更干净的 mipmap 链，
     // 并开各向异性过滤（效果行随 billboard 与俯视相机成斜角，aniso 防斜向模糊/闪烁）
     this._bakeLabel = bakeLabel || ((text) => {
@@ -114,35 +130,59 @@ export class BattleStage {
     this._tintScratch = new THREE.Color();
 
     this.layout = new LayoutEngine();
-    this.layout.registerContainer('hand', { centerX: 0, centerY: -50, width: 130, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT });
+    // 手牌扇形几何：minX/maxX 为卡中心硬区间——左让状态栏面板（UI 底板右缘 ≈ -44.9），
+    // 右让牌库/坟墓图标（x ∈ [75,85]）；baseY 压低让下缘可越出屏底（-65），与重叠、
+    // 外倾共同压缩满 10 张所需空间。机制参数（挤开/提拉放大/z 抬升）见 LayoutEngine。
+    this.layout.registerContainer('hand', {
+      minX: -46, maxX: 64,            // 横界不变：避让左下状态栏 / 右侧牌库坟墓
+      baseY: -51.3,                   // 随卡高放大（保持已验收的下潜比例 ≈9% 卡高）
+      minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3：重叠率与旧版一致（≈52% 可见）
+      radius: 95,
+      // 总弧角（度）：≤4 张恒 5°（近乎放平），第 4 张起线性增至满手 52°
+      arcDegMin: 5, arcGrowFrom: 4, arcDegFull: 52,
+      liftY: HAND_LIFT_Y,              // 悬浮提拉：整牌入屏（见常量推导，随卡高自适应）
+    });
     // 咏唱槽：屏幕左侧固定纵列，z 区间低于手牌（不遮挡、不抢层级）。
-    // topY 受正交取景上限约束：可视顶 y=35，卡半高 13.5 → topY≤21.5 才不被上缘裁掉
-    this.layout.registerContainer('chant', { centerX: -74, topY: 18, cardHeight: CARD_HEIGHT, gap: 3, zBase: 4 });
+    // topY 受正交取景上限约束：可视顶 y=35，卡半高 17.55 → topY≤17.4 才不被上缘裁掉
+    this.layout.registerContainer('chant', { centerX: -74, topY: 16, cardHeight: CARD_HEIGHT, gap: 3, zBase: 4 });
     this.layout.setNamedAnchor('deck', PILE_POSITIONS.deck);
     this.layout.setNamedAnchor('discard', PILE_POSITIONS.discard);
 
     this.animator = new StageAnimator({ layoutEngine: this.layout, tween });
+    // 手牌/咏唱静息姿态的弹簧跟随层：布局锚点只当目标，逐帧软收敛（见 HandSprings）
+    this.springs = new HandSprings({ animator: this.animator });
     // FX tween（overlay 脉冲等不进注册表、不阻塞队列的小动画）：与 animator 同源可注入
     this._tweenFactory = tween ?? gsapTween;
     this.picker = new Picker({ stageManager, bus: this._bus });
     this._sm = stageManager;
 
-    this._cards = new Map();   // uniqueID -> { object, zone: 'hand'|'chant', signature }
+    // 显示状态权威 = run 级 DisplayModel（与共享 sequencer 对等，跨场景存活）；
+    // BattleStage 只是它的战斗视图。此处未注入则自建（单场测试/headless 用）。
+    this.model = displayModel ?? new DisplayModel();
+    this.model.beginBattle(); // 战斗边界：卡牌面按场清空（模型本身跨场存活）
+    this._views = new Map();  // uniqueID -> CardObject（模型卡条目的 three 视图）
     this._units = new Map();   // uniqueID -> UnitObject
     this._snapshot = null;     // 显示状态快照：只在 ANIM_STATE_SYNC 节拍推进（两套状态设计——
                                // 后端状态即时变，显示状态随队列节拍变，时序由 sync 指令位置表达）
+    this._snapshotSeq = 0;     // 已应用快照的显示时刻序号（bridge 投影 seq）：显示状态只进不退
     this._displayCard = null;          // 正在做发动展示的卡 { id }（全局唯一卡牌：展示用本体，无替身）
-    // 展示完毕、已有离场节拍在排队的卡：停留在展示位等节拍来收（不回手牌跟踪，
-    // 否则会出现"飞回手牌→又被离场节拍拉进坟堆"的折返跑）；节拍到达时取出清除
-    this._heldCards = new Set();
-    this._inFlight = new Map();        // 离场飞行中的卡 uniqueID -> object（同 id 重生时清尸）
+    this._burning = new Set();         // 焚烧中的卡视图（onTick 驱动 updateBurn 至燃尽；已出注册表）
+    this._disposed = false;            // 幽灵守卫：dispose 后本舞台不再处理任何总线事件
+    this._entering = new Set();        // 入场飞行中的卡（sync 建档，_layoutAndTrack 起飞后清除）
     this._hoveredCardId = null;
+    this._overCardId = null;    // 指针当前压着的卡（整卡或卡面 token 皆算；Shift 详情触发面）
+    this._altObj = null;        // 当前处于 Shift 详情态的卡视图（至多一张）
+    this._shiftDown = false;    // Shift 键盘态（window 监听驱动；单测直接调 setShiftDown）
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
     this._aiming = null;       // 选目标卡（targetMode 'enemy'）瞄准中 { id }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
     this._pressChant = null;   // 咏唱卡点按候选 { id }（up 在同卡 = 停止咏唱）
     this._inputSelection = [];
-    this._viewer = null;       // { zone, group, bg } 区域查看器
+    // 区域查看器（点牌库/坟墓图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
+    this._viewer = new CardGalleryObject({
+      cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
+      bakeFace: this._bakeFace, picker: this.picker,
+    });
 
     // 粒子系统（受伤/治疗等演出）与卡牌持续特效（咏唱流光），由 StageManager 帧回调驱动
     this.particles = new ParticleSystem();
@@ -150,9 +190,11 @@ export class BattleStage {
     this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
     this._unsubTick = stageManager.onTick((dt) => {
+      this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
-      for (const entry of this._cards.values()) entry.object.updateGlow(dt);
+      this._updateBurning(dt);
+      for (const view of this._views.values()) view.updateGlow(dt);
       for (const unit of this._units.values()) {
         unit.update(dt);
         let fwd = this._sm.camera.localToWorld(new THREE.Vector3(0, 0, 1));
@@ -161,8 +203,8 @@ export class BattleStage {
         // 立牌光照交互：火把光衰+闪烁+纵深压暗的假采样染色（闪红窗口内不覆盖）
         if (this._scene3D) unit.applyLightTint(this._scene3D.sampleStandeeTint(unit.position, this._tintScratch));
       }
-      this._resources.ap.update(dt);
-      this._resources.mana.update(dt);
+      this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
+      this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
     });
 
     // 区域图标（牌库/坟墓）：点击开查看器，计数经 reconcile 同步
@@ -197,29 +239,63 @@ export class BattleStage {
     this._arrow.position.z = ARROW_Z;
     this.uiScene.add(this._arrow);
 
-    // 玩家状态栏（左下角）：头像 + AP 黄点 / 魏启蓝点两排（左对齐），耗尽点变灰常驻；
+    // 玩家状态栏（左下角，概念图语言）：骑士徽章 + 魏启晶粒 + AP 金币；
     // _resources 引用不变（reconcile/tick/测试均照旧），只是父级从 uiScene 换成状态栏
-    this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel });
+    this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
-    this._resources = { ap: this._statusBar.apPips, mana: this._statusBar.manaPips };
-    this._applyAvatar(); // 立绘缓存可能已就绪（异步未就绪则 onLoad 时 _applyUnitArt 补挂）
+    // 顶端居中资源行（金币数值 + 遗物槽；与地图层同物同位，runController 喂值）
+    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
+    this.uiScene.add(this._topBar);
+    this._resources = { ap: this._statusBar.apCoin, mana: this._statusBar.manaCrystal };
+    this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）
 
+    // mitt 的 on() 不返回退订函数——必须自持 handler 引用走 off()。
+    // （旧写法把 on() 返回值当 off 用，实际是 undefined：'*' 监听跨场泄漏，
+    //   幽灵舞台继续处理节拍并污染共享 DisplayModel → 下一场"白卡"）
+    const onBus = (bus, type, handler) => {
+      bus.on(type, handler);
+      return () => bus.off(type, handler);
+    };
     this._unsubs = [
-      bridge.frontendBus.on('*', (type, payload) => this._direct(type, payload)),
-      this._bus.on(EventNames.CARD_HOVER, ({ uniqueID }) => this._setHoveredCard(uniqueID)),
-      this._bus.on(EventNames.CARD_LEAVE, () => this._setHoveredCard(null)),
+      onBus(bridge.frontendBus, '*', (type, payload) => this._direct(type, payload)),
+      onBus(this._bus, EventNames.CARD_HOVER, ({ uniqueID }) => this._setHoveredCard(uniqueID)),
+      onBus(this._bus, EventNames.CARD_LEAVE, () => this._setHoveredCard(null)),
+      // 共享素材缓存的加载完成订阅（到图补挂/重烘）：与总线退订同律，dispose 一并摘除
+      this._artCache?.addOnLoad(() => this._rebakeCardFaces()),
+      this._unitArt?.addOnLoad(() => this._applyUnitArt()),
     ];
+
+    // Shift 键盘态（详情卡面切换）：window 级监听，dispose 摘除；node 无 window 由单测直调
+    if (typeof window !== 'undefined') {
+      this._onShiftKeyDown = (e) => { if (e.key === 'Shift') this.setShiftDown(true); };
+      this._onShiftKeyUp = (e) => { if (e.key === 'Shift') this.setShiftDown(false); };
+      this._onWinBlur = () => this.setShiftDown(false); // 失焦复位（防 Shift 卡在按下态）
+      window.addEventListener('keydown', this._onShiftKeyDown);
+      window.addEventListener('keyup', this._onShiftKeyUp);
+      window.addEventListener('blur', this._onWinBlur);
+    }
   }
 
   // ========== reconcile：显示状态快照 → 场景对象 ==========
 
-  // 显示状态只在两处推进：ANIM_STATE_SYNC 节拍（队列编排的正常路径）。
-  // 快照是投影的引用——投影不可变（每次重算生成新对象），存引用即可
+  // 显示状态只在 ANIM_STATE_SYNC 节拍推进：应用快照 + reconcile，立即 finish。
+  // 快照带显示时刻序号（bridge 投影重算序号），应用记录单调推进——
+  // 早于已应用时刻的历史快照直接丢弃（见 applyProjection 的说明）
   _applySnapshot(snapshot) {
     if (!snapshot) return;
+    if (snapshot.seq != null && snapshot.seq < this._snapshotSeq) return;
+    if (snapshot.seq != null) this._snapshotSeq = snapshot.seq;
     this._snapshot = snapshot;
     this.reconcile();
+  }
+
+  /** 直接应用投影快照（不经动画队列）：幕间黑幕预载用——黑幕后即建好单位/卡牌
+   *  视图（预取已热的素材同步命中），揭幕所见即成品。预载把显示状态推到"现在"，
+   *  此后队列重放的更早 sync 节拍（如 battleStart 在起手抽牌前捕获的空手牌快照）
+   *  被单调守卫丢弃；同刻/更新的快照重放幂等无副作用。 */
+  applyProjection(snapshot) {
+    this._applySnapshot(snapshot);
   }
 
   reconcile() {
@@ -227,16 +303,22 @@ export class BattleStage {
     if (!proj) return;
     this._closeViewer(); // 状态已变，查看器内容失效
     this._syncUnits(proj);
-    this._syncCardZone('hand', proj.hand.map(c => c.uniqueID));
-    this._syncCardZone('chant', proj.chant.slots.map(c => c.uniqueID));
+    this._syncCardZones(proj);
     this._syncCardContents(proj);
     this._syncButtons(proj);
     this._resources.ap.setValue(proj.player.actionPoints, proj.player.maxActionPoints);
     this._resources.mana.setValue(proj.player.mana, proj.player.maxMana);
+    // 状态栏血量：角色取投影玩家；瑞米区取投影盟友（当前内容只有 remi；血量走
+    // 盟友实时值，攻/盾横幅暂走状态栏展示常量——行为定义未暴露面板数值）
+    this._statusBar.setPlayerHp(proj.player.hp, proj.player.maxHp);
+    this._statusBar.setPlayerShield(proj.player.shield);
+    const remi = proj.allies.find(a => a.defId === 'remi');
+    this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
     this._piles.discard.setCount(proj.counts.discard);
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
+    this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
   }
 
   _syncUnits(proj) {
@@ -279,101 +361,270 @@ export class BattleStage {
     }
   }
 
-  _syncCardZone(zone, ids) {
-    for (const id of ids) {
-      if (!this._cards.has(id)) {
-        // 同 uniqueID 的离场飞行还没播完就重生了（如从弃牌堆捞回）：清掉旧尸体，防泄漏
-        const stale = this._inFlight.get(id);
-        if (stale) {
-          this._inFlight.delete(id);
-          this.uiScene.remove(stale);
-          stale.dispose();
-        }
-        const object = new CardObject({ uniqueID: id, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace });
-        const deck = this.layout.getNamedAnchor('deck');
-        object.position.set(deck.x, deck.y, 0);
-        object.scale.set(0.5, 0.5, 1); // 从牌库图标大小长开（跟踪补间到锚点 scale 1），不凭空全尺寸出现
-        this._cards.set(id, { object, zone });
-        this.uiScene.add(object);
-        this.animator.register(id, object);
-        this.picker.addPickable(id, object, { kind: 'card', cardObject: object, space: 'ui' });
+  // 全 zone 对账（持久模型）：新卡建条目+建视图（各一次），zone 按快照刷新。
+  // burnt zone 不参与——焚毁节拍销毁视图/出册后不再重生（未来"焚毁区捞回"机制
+  // 到来时由其专属节拍重建）。快照四 zone 都没有的注册卡 = 上游丢节拍的绊线
+  // （warn + 收尸），正常流程不应触达。
+  _syncCardZones(proj) {
+    const lists = {
+      hand: proj.hand.map(c => c.uniqueID),
+      chant: proj.chant.slots.map(c => c.uniqueID),
+      deck: proj.zones.deck.map(c => c.uniqueID),
+      discard: proj.zones.discard.map(c => c.uniqueID),
+    };
+    const present = new Set();
+    for (const [zone, ids] of Object.entries(lists)) {
+      for (const id of ids) {
+        present.add(id);
+        this._setCardZone(id, zone);
       }
-      this._cards.get(id).zone = zone;
+    }
+    for (const id of this.model.cards.keys()) {
+      if (present.has(id) || this.model.getZone(id) === 'held') continue;
+      console.warn('[stage] 注册卡不在任何显示 zone（上游丢节拍？）', id, this.model.getZone(id));
+      this._destroyView(id);
+      this.model.removeCard(id);
     }
   }
 
-  _syncCardContents(proj) {
-    const full = new Map();
-    for (const c of proj.hand) full.set(c.uniqueID, c);
-    for (const c of proj.chant.slots) full.set(c.uniqueID, c);
-
-    // 离开 hand/chant 显示状态的卡：正常路径已被自己的离场节拍取走销毁（sync 排在
-    // 离场节拍之后，队列串行保证），走到这里 = 无节拍覆盖的防御路径——直接收尸
-    for (const [id, entry] of this._cards) {
-      if (!full.has(id)) {
-        this._cards.delete(id);
-        this._heldCards.delete(id);
-        this.picker.removePickable(id);
-        this.animator.unregister(id);
-        this.uiScene.remove(entry.object);
-        entry.object.dispose();
-      }
+  // zone 迁移：模型推进（状态权威）+ 视图随动。进牌库/坟堆 = 隐形停车 +
+  // 摘除拾取；进手牌/咏唱的显形与烘面在 _syncCardContents（惰性）。
+  _setCardZone(id, zone) {
+    // 'held'（展示毕待离场）是 hand 的显示位精化：sync 对账不得解除停留，
+    // 解除只属于离场节拍（届时写入真正的去向 zone）——否则折返跟踪复活
+    if (this.model.getZone(id) === 'held' && zone === 'hand') return;
+    const change = this.model.setZone(id, zone);
+    const view = this._ensureView(id);
+    if (!change) return;
+    if (zone !== 'hand' && zone !== 'chant') {
+      // 离场停车（节拍路径的飞行完成时已隐形；此处兜底 sync 驱动的迁移）
+      view.visible = false;
+      this.picker.removePickable(id);
+    } else if (change.from !== 'held') {
+      // 入场（牌库/坟堆 → 手牌/咏唱）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
+      this._entering.add(id);
     }
+  }
 
-    for (const [id, cardProj] of full) {
-      const entry = this._cards.get(id);
-      const sig = JSON.stringify([cardProj.defId, cardProj.name, cardProj.power, cardProj.text, cardProj.isActivated, cardProj.cost]);
-      if (entry.signature !== sig) {
-        entry.signature = sig;
-        entry.object.setCard(cardProj);
+  // 视图惰性建：停在来源 pile 锚点（scale 0.5、隐形）——抽牌"从牌库长开飞入"
+  // 的入场视觉由其后的跟踪补间天然给出；牌库/坟堆中的卡永不烘面（省 canvas）。
+  _ensureView(id) {
+    let view = this._views.get(id);
+    if (view) return view;
+    view = new CardObject({ uniqueID: id, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace });
+    const zone = this.model.getZone(id) ?? 'deck';
+    const anchor = this.layout.getNamedAnchor(zone === 'discard' ? 'discard' : 'deck');
+    view.position.set(anchor.x, anchor.y, 0);
+    view.scale.set(0.5, 0.5, 1);
+    view.visible = false;
+    this._views.set(id, view);
+    this.uiScene.add(view);
+    this.animator.register(id, view);
+    return view;
+  }
+
+  // 视图终结（焚毁 / 绊线收尸）：出视图表 + 摘拾取 + 注销 + 销毁
+  _destroyView(id) {
+    const view = this._views.get(id);
+    if (!view) return;
+    this._views.delete(id);
+    this.picker.removePickable(id);
+    this.animator.unregister(id);
+    this.uiScene.remove(view);
+    view.dispose();
+  }
+
+  // 在场卡（手牌/咏唱）内容同步：显形 + 惰性烘面 + 拾取注册 + 激活流光 + 威力脉冲
+  _syncCardContents(proj) {
+    const present = new Map();
+    for (const c of proj.hand) present.set(c.uniqueID, { card: c, zone: 'hand' });
+    for (const c of proj.chant.slots) present.set(c.uniqueID, { card: c, zone: 'chant' });
+
+    for (const [id, { card, zone }] of present) {
+      const entry = this.model.get(id);
+      if (!entry) continue; // _syncCardZones 先行保证了存在；缺席即绊线已 warn
+      const view = this._views.get(id);
+      view.visible = true;
+      this.picker.addPickable(id, view, { kind: 'card', cardObject: view, space: 'ui' });
+      const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
+      if (entry.faceSig !== sig) {
+        entry.faceSig = sig;
+        view.setCard(card);
         // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
-        if (entry.prevPower != null && (cardProj.power ?? 0) > entry.prevPower) {
+        if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
           this._pulseCard(id, 0xffd34c);
         }
       }
-      entry.prevPower = cardProj.power ?? 0;
+      entry.prevPower = card.power ?? 0;
       // 咏唱已激活 → 边缘流光（幂等）
-      entry.object.setActiveGlow(entry.zone === 'chant' && !!cardProj.isActivated);
+      view.setActiveGlow(zone === 'chant' && !!card.isActivated);
     }
   }
 
-  // 离场节拍：播放该卡的离场飞行并**阻塞本节拍**（onDone 才回 finish）——
-  // "发动 → 效果 → 离场"的次序由 sequencer 队列编排（sync 节拍在离场之后，
-  // 坟堆数字因此飞进才+1），Stage 不做任何额外计时。
-  // 落点取自节拍载荷（toZone /  burnt），不读投影——显示状态此时尚未同步，投影里卡还在原地
+  // 离场节拍：播放该卡的离场演出（弃/回库=飞行停车；焚毁=原地燃烧殆尽）并
+  // **阻塞本节拍**（onDone 才回 finish）——"发动 → 效果 → 离场"的次序由
+  // sequencer 队列编排（sync 节拍在离场之后，坟堆数字因此飞进才+1）。
+  // zone 在节拍时点即推进（显示状态由节拍权威）；落点取自节拍载荷（toZone），
+  // 不读投影——显示状态此时尚未同步，投影里卡还在原地。
   _departureBeat(id, type, payload, finish) {
-    const entry = id != null ? this._cards.get(id) : null;
-    if (!entry) { // 无载体（未来机制/异常）：脉冲落点图标打节拍
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) { // 无载体（未来机制/异常）：脉冲落点图标打节拍
       if (type === EventNames.ANIM_CARD_BURNT) return finish();
       const zone = payload?.toZone === 'deck' ? 'deck' : 'discard';
       return this._pulsePile(zone, finish);
     }
-    this._cards.delete(id);
-    this._heldCards.delete(id); // 停留展示位的卡由本节拍取走
     this.picker.removePickable(id);
-    let to;
     if (type === EventNames.ANIM_CARD_BURNT) {
-      to = { scale: 0.01 }; // 焚毁：原地溶解占位（shader 版后补）
-    } else if (payload?.toZone === 'deck') {
-      to = { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 };
-    } else {
-      to = { ...PILE_POSITIONS.discard, z: 40, scale: 0.5 };
+      return this._burnOut(id, view, finish);
     }
-    this._flyOut(id, entry.object, to, { onDone: finish });
+    const toZone = payload?.toZone === 'deck' ? 'deck' : 'discard';
+    this.model.setZone(id, toZone); // 状态在节拍时点推进（模型权威）
+    this._flyOut(id, view, { ...PILE_POSITIONS[toZone], z: 40, scale: 0.5 }, finish);
   }
 
-  // 离场飞行本体：飞往落点（弃/回库/焚毁溶解），播完销毁注销并回 finish
-  _flyOut(id, object, to, { onDone = null } = {}) {
-    this._inFlight.set(id, object);
-    this.animator.animate(id, to, {
-      durationMs: 300,
-      onComplete: () => {
-        this._inFlight.delete(id);
+  // 焚毁离场：原地燃烧殆尽（着色器自底向上吞蚀 + 前沿余烬 + 火起颤动），
+  // 燃尽后牌面已全 discard（不可见）——瞬移落位坟墓即销毁收尾，无飞行动画。
+  // 焚毁 = 对象终结（唯一销毁路径）：模型出册 + 视图销毁（burnt 不回流，id 不会
+  // 重生；未来"焚毁区捞回"机制须自行重建）。
+  // 节拍阻塞至燃尽完成，sequencer 队列次序因此是：发动 → 效果 → 燃烧殆尽 → 状态同步。
+  _burnOut(id, view, finish) {
+    this.model.removeCard(id);
+    this._views.delete(id);
+    this._burning.add(view);
+    view.startBurn({
+      durationMs: CARD_BURN_MS,
+      onBurnt: () => {
+        this._burning.delete(view);
+        view.position.set(PILE_POSITIONS.discard.x, PILE_POSITIONS.discard.y, 40); // 不可见瞬移
         this.animator.unregister(id);
-        this.uiScene.remove(object);
-        object.dispose();
-        onDone?.();
+        this.uiScene.remove(view);
+        view.dispose();
+        finish?.();
       },
+    });
+  }
+
+  // 焚烧帧驱动（onTick / 测试手动泵）：推进所有燃烧中的卡至燃尽
+  _updateBurning(dt) {
+    for (const object of this._burning) object.updateBurn(dt);
+  }
+
+  // 造牌入库演出：卡面在屏幕中心附近生成（放缩长开）→ 弧线飞入牌库 → 落位销毁；
+  // 牌库计数由紧随其后的 sync 节拍跳增（离场类次序：anim → sync）。
+  // 造出的卡不在任何显示区（deck 无视觉对象），牌面由 presenter 附带的 cardView 提供。
+  // 非入库造牌（toZone 'hand' 等）视觉走状态差分（既有入场类次序），只脉冲图标打节拍。
+  _addCardBeat(payload, finish) {
+    const view = payload?.cardView;
+    if (!view || payload?.toZone !== 'deck') return this._pulsePile('deck', finish);
+    const object = new CardObject({
+      uniqueID: `spawn:${payload.card.uniqueID}`,
+      cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
+    });
+    object.setCard(view);
+    // 高 z 起始（70 > 展示位 60 > 手牌扇 10~40 > 区域图标 5）：生成卡永远盖在
+    // 结算中的发动卡（held 于展示位）之上——否则看不到蓄力向牌库加了什么卡；
+    // 飞行途中线性降回 40 落位，符合"从高处递进牌库"的空间感
+    object.position.set(0, -12, 70);
+    object.scale.set(0.05, 0.05, 1);
+    object.faceMesh.material.opacity = 0;
+    this.uiScene.add(object);
+    this._tweenFactory(object, { scale: 1 }, {
+      durationMs: 200,
+      ease: 'back.out(2)',
+      onComplete: () => {
+        this._pulsePile('deck');
+        // 瞬态对象不在 animator 注册表：直接驱动飞行（同一 _cardFlight 语言）
+        const proxyId = `spawn:${payload.card.uniqueID}`;
+        this._views.set(proxyId, object); // 借注册表项驱动 _cardFlight，飞完即摘除
+        this._cardFlight(proxyId, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, {
+          fade: 'out',
+          tilt: 0.14,
+          ease: 'power1.in',
+          durationMs: 340,
+          onDone: () => {
+            this._views.delete(proxyId);
+            this.uiScene.remove(object);
+            object.dispose();
+            finish();
+          },
+        });
+      },
+    });
+    // 生成淡入与弹性放缩并行（材质不透明度 0→1）
+    this._tweenFactory(object.faceMesh.material, { opacity: 1 }, { durationMs: 200 });
+  }
+
+  // 卡牌飞行（区域间移动的统一演出语言）：
+  //   * 轨迹 = 二次贝塞尔弧线（控制点在航线中点上方，弧高随距离自适应钳制）
+  //   * 姿态 = rotation.z 沿 sin(πt) 倾转（中段峰值、两端归零）+ 落地转正
+  //   * 淡入/淡出 = 材质不透明度前/后半程渐变（fade: 'in' | 'out' | null）
+  //   * 落地硬化：onComplete 显式写终态——同步注入式 tween（无 onUpdate 采样）
+  //     也能正确落位，测试因此确定
+  // 注册表内的卡走 animator.animateCustom（状态机感知：飞行中布局跟踪让位）；
+  // 瞬态对象（造牌 spawn）未注册则直接用 tween 工厂驱动同一 onUpdate 协议。
+  _cardFlight(id, to, { arc = null, tilt = 0, fade = null, durationMs = 340, ease, delayMs = 0, onDone } = {}) {
+    const view = this._views.get(id);
+    if (!view) { onDone?.(); return; }
+    const from = {
+      x: view.position.x, y: view.position.y, z: view.position.z,
+      scale: view.scale.x, rot: view.rotation.z,
+    };
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const arcH = arc ?? THREE.MathUtils.clamp(dist * 0.25, 6, 18);
+    const ctrl = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + arcH };
+    const toScale = to.scale ?? from.scale;
+    const toRot = to.rotation ?? 0;
+    const toZ = to.z ?? from.z;
+    const mat = view.faceMesh.material;
+    const sample = (t) => {
+      const u = 1 - t;
+      view.position.set(
+        u * u * from.x + 2 * u * t * ctrl.x + t * t * to.x,
+        u * u * from.y + 2 * u * t * ctrl.y + t * t * to.y,
+        from.z + (toZ - from.z) * t,
+      );
+      const s = from.scale + (toScale - from.scale) * t;
+      view.scale.set(s, s, 1);
+      view.rotation.z = from.rot + (toRot - from.rot) * t + Math.sin(Math.PI * t) * tilt;
+      if (fade === 'in') mat.opacity = Math.min(t / 0.6, 1);
+      else if (fade === 'out') mat.opacity = Math.min((1 - t) / 0.5, 1);
+    };
+    const settle = () => {
+      view.position.set(to.x, to.y, toZ);
+      view.scale.set(toScale, toScale, 1);
+      view.rotation.z = toRot;
+      mat.opacity = 1;
+      if (fade === 'out') view.visible = false;
+      onDone?.();
+    };
+    const opts = {
+      durationMs, ease, delayMs,
+      onUpdate: sample,
+      onComplete: settle,
+    };
+    if (this.animator.has(id)) {
+      this.animator.animateCustom(id, opts);
+    } else {
+      this._tweenFactory({ t: 0 }, { t: 1 }, opts);
+    }
+    if (fade === 'in') {
+      view.visible = true;
+      mat.opacity = 0; // 起步即零透明：级联延迟期间不闪现
+      sample(0);
+    }
+  }
+
+  // 离场飞行本体：弧线飞往落点（弃/回库）+ 后半程淡出 + 轻微逆旋 → 停车（隐形）→ finish。
+  // 持久对象模型下没有销毁、没有 inFlight 交接：sequencer 串行保证后续 sync
+  // 应用时飞行必已落地；卡再被抽回时同一视图从停车状态直接显形归位（对象身份
+  // 跨 zone 稳定，"入手消失"类 id 跟踪问题在结构上不再可能）。
+  _flyOut(id, view, to, finish) {
+    this._cardFlight(id, to, {
+      fade: 'out',
+      tilt: -0.10,
+      ease: 'power1.in',
+      durationMs: 340,
+      onDone: finish,
     });
   }
 
@@ -417,7 +668,7 @@ export class BattleStage {
     this._layoutAndTrack();            // 手牌高亮态
   }
 
-  // 立牌纹理补挂：缓存命中才设置，未命中等 onLoad 回调统一补
+  // 立牌纹理补挂：缓存命中才设置，未命中等共享缓存订阅回调统一补
   _applyUnitArtTo(obj) {
     const img = this._unitArt?.get(obj._defId, obj.side);
     if (img && !obj.hasArt) obj.setArt(img);
@@ -428,55 +679,114 @@ export class BattleStage {
     this._applyAvatar();
   }
 
-  // 状态栏头像补挂（unit_player_front.png 正视图；缓存未命中等 onLoad 统一补）
+  // 状态栏头像补挂：骑士用专用徽章头像（knight_avatar.png，概念图圆形肖像）；
+  // 瑞米用专用圆像（remi_avatar.png，素材已预翻转）。缓存未命中等 onLoad 统一补
   _applyAvatar() {
-    const img = this._unitArt?.getFile('unit_player_front.png');
-    if (img) this._statusBar.setAvatar(img);
+    const knight = this._unitArt?.getFile('knight_avatar.png');
+    if (knight) this._statusBar.setAvatar(knight, { crop: 'full', mirror: true }); // 近方肖像整图入圆，朝向对齐概念图
+    const remi = this._unitArt?.getFile('remi_avatar.png');
+    if (remi) this._statusBar.setRemiAvatar(remi);
   }
 
   /** 状态栏对外入口（run 编排器同步金币/瑞米；AP/魏启走 reconcile） */
   get statusBar() { return this._statusBar; }
+  get topBar() { return this._topBar; }
+
+  /**
+   * 战场就绪信号（幕间黑幕预载用）：共享缓存在途加载（含预取尚未落定的）全部
+   * 落定 + 至少渲染两帧（首帧渲染触发着色器编译与纹理上传——揭幕后不再有编译
+   * 卡顿），带超时兜底。前提：调用前已 applyProjection 建好视图（否则缓存无在途
+   * 加载，本信号空转立即兑现）。node/假 renderer 环境（无 document/rAF）立即兑现。
+   * @param {object} options  timeoutMs: 超时兜底（默认 2500）
+   */
+  whenReady({ timeoutMs = 2500 } = {}) {
+    const arts = Promise.all([
+      this._unitArt?.whenIdle() ?? Promise.resolve(),
+      this._artCache?.whenIdle() ?? Promise.resolve(),
+    ]);
+    const frames = (typeof requestAnimationFrame === 'function')
+      ? new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      : Promise.resolve();
+    return Promise.race([
+      Promise.all([arts, frames]),
+      new Promise(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+  }
 
   _layoutAndTrack() {
-    // 保持显示状态快照中的手牌顺序（_cards 插入序≠手牌序）
+    // 保持显示状态快照中的手牌顺序（视图表插入序≠手牌序）
     const proj = this._snapshot;
     if (!proj) return;
-    const orderedHand = proj.hand.map(c => c.uniqueID).filter(id => this._cards.has(id));
-    const orderedChant = proj.chant.slots.map(c => c.uniqueID).filter(id => this._cards.has(id));
+    const orderedHand = proj.hand.map(c => c.uniqueID).filter(id => this._views.has(id));
+    const orderedChant = proj.chant.slots.map(c => c.uniqueID).filter(id => this._views.has(id));
+    const onStage = new Set([...orderedHand, ...orderedChant]);
     // 瞄准中的卡视作"被撑开"对象：位置不变但抬升放大、两侧排开（瞄准时不响应 hover 切换）
     const spreadId = this._aiming?.id ?? this._hoveredCardId;
     this.layout.layoutHand('hand', orderedHand, spreadId);
     this.layout.layoutColumn('chant', orderedChant);
-    for (const [id, entry] of this._cards) {
-      // 停留展示位等离场节拍的卡不回跟踪（防"飞回手牌→再被拉进坟堆"的折返）
-      const st = this.animator.getState(id);
-      if (st === ANIMATOR_STATES.IDLE && !this._heldCards.has(id)) this.animator.enterTracking(id);
+    // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）
+    const targets = new Map();
+    for (const id of onStage) {
+      const a = this.layout.getAnchor(id);
+      if (a && this.model.getZone(id) !== 'held') targets.set(id, a);
+    }
+    this.springs.setTargets(targets);
+    for (const [id, view] of this._views) {
+      const zone = this.model.getZone(id);
+      // 入场飞行（牌库/坟堆 → 手牌/咏唱）：弧线飞入 + 淡入 + 倾转落座；
+      // 起手多张按手牌序级联（delayMs 递增）。飞行中状态为 ANIMATING（弹簧让位），
+      // 落定后弹簧从落点零速收养，自然滑入扇形锚点
+      if (this._entering.has(id) && onStage.has(id)) {
+        this._entering.delete(id);
+        const anchor = this.layout.getAnchor(id);
+        if (anchor) {
+          const idx = orderedHand.includes(id) ? orderedHand.indexOf(id) : orderedChant.indexOf(id);
+          this._cardFlight(id, anchor, {
+            fade: 'in',
+            tilt: (idx % 2 === 0 ? 1 : -1) * 0.12,
+            durationMs: 420,
+            ease: 'power2.out',
+            delayMs: Math.min(idx, 5) * 45,
+          });
+          continue; // 飞行期间不做视觉态管理（淡入中的卡不该被压灰）
+        }
+      }
+      if (!onStage.has(id)) continue; // 牌库/坟堆/停留位：无视觉态管理
       // 视觉态优先级：瞄准中（高亮）> 结算期选卡（候选高亮/其余压灰）> 换卡模式（可换手牌高亮）
       // > 手牌可发动性（不可发动淡灰白）> normal
       const pending = proj.pendingInput?.request;
       if (this._aiming?.id === id) {
-        entry.object.setVisualState('highlighted');
+        view.setVisualState('highlighted');
       } else if (pending?.candidates) {
-        entry.object.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
-      } else if (this._swapMode && entry.zone === 'hand') {
-        entry.object.setVisualState(this.bridge.intents.canSwapCard(id) ? 'highlighted' : 'disabled');
-      } else if (entry.zone === 'hand' && !pending) {
-        entry.object.setVisualState(this.bridge.intents.canPlayCard(id) ? 'normal' : 'disabled');
+        view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
+      } else if (this._swapMode && zone === 'hand') {
+        view.setVisualState(this.bridge.intents.canSwapCard(id) ? 'highlighted' : 'disabled');
+      } else if (zone === 'hand' && !pending) {
+        view.setVisualState(this.bridge.intents.canPlayCard(id) ? 'normal' : 'disabled');
       } else {
-        entry.object.setVisualState('normal');
+        view.setVisualState('normal');
       }
     }
-    this.animator.syncTracking();
   }
 
   // ========== 视觉导演：ANIM_* → 补间 → finish ==========
+  // 节拍卫生：任何分支抛异常都强制 finish（一个坏节拍不得冻结显示链——
+  // 否则后续 sync 停摆，症状就是"卡牌消失/幽灵动画"类 glich）
 
   _direct(type, payload) {
-    if (!type.startsWith('anim:')) return;
+    if (this._disposed || !type.startsWith('anim:')) return; // 幽灵守卫：dispose 后不再处理任何节拍
     const finish = () => {
       this.bridge.frontendBus.emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id: payload?._animId });
     };
+    try {
+      this._dispatchAnim(type, payload, finish);
+    } catch (err) {
+      console.error(`[stage] 动画节拍 '${type}' 执行异常，强制 finish 保队列`, err);
+      finish();
+    }
+  }
 
+  _dispatchAnim(type, payload, finish) {
     // 状态同步节拍：显示状态在此推进（应用快照 + reconcile），立即 finish
     if (type === EventNames.ANIM_STATE_SYNC) {
       this._applySnapshot(payload?.snapshot);
@@ -490,9 +800,13 @@ export class BattleStage {
       const id = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID ?? null;
       return this._departureBeat(id, type, payload, finish);
     }
-    // 入手/造牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍
-    if (type === EventNames.ANIM_CARD_DRAWN || type === EventNames.ANIM_CARD_ADDED) {
+    // 入手抽牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍；
+    // 造牌入库（toZone 'deck'）则走 _addCardBeat：卡面生成 → 飞入牌库 → 计数随其后 sync 跳增
+    if (type === EventNames.ANIM_CARD_DRAWN) {
       return this._pulsePile('deck', finish);
+    }
+    if (type === EventNames.ANIM_CARD_ADDED) {
+      return this._addCardBeat(payload, finish);
     }
     if (type === EventNames.ANIM_CARD_SWAPPED) {
       return this._pulsePile('discard', finish);
@@ -544,14 +858,14 @@ export class BattleStage {
     const bs = target._baseScale ?? 1;
     this.animator.animate(targetId, { scale: bs * 1.15 }, {
       durationMs: 150,
-      onComplete: () => {
-        if (this._cards.has(targetId)) {
-          this.animator.enterTracking(targetId);
-          finish();
-        } else {
-          this.animator.animate(targetId, { scale: bs }, { durationMs: 120, onComplete: finish });
-        }
-      },
+        onComplete: () => {
+          const zone = this.model.getZone(targetId);
+          if (zone === 'hand' || zone === 'chant') {
+            finish(); // 弹簧层自动收养（动画已落定回 idle），从脉冲位滑回锚点
+          } else {
+            this.animator.animate(targetId, { scale: bs }, { durationMs: 120, onComplete: finish });
+          }
+        },
     });
   }
 
@@ -561,9 +875,8 @@ export class BattleStage {
   // 否则（咏唱入槽 / 结算期输入挂起，离场节拍尚未产生）→ 回锚点跟踪
   _skillDisplay(payload, finish) {
     const id = payload?.skill?.uniqueID;
-    const entry = id != null ? this._cards.get(id) : null;
-    if (!entry) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
-    const object = entry.object;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
     this._displayCard = { id };
     this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
       durationMs: 180,
@@ -573,9 +886,9 @@ export class BattleStage {
           onComplete: () => {
             this._displayCard = null;
             finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
-            if (!this._cards.has(id)) return;
-            if (this._hasDepartureBeatQueued(id)) this._heldCards.add(id);
-            else this.animator.enterTracking(id);
+            if (!this._views.has(id)) return;
+            if (this._hasDepartureBeatQueued(id)) this.model.setZone(id, 'held'); // 停留位等收
+            // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
           },
         });
       },
@@ -685,7 +998,7 @@ export class BattleStage {
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
   _pulseCard(id, color) {
-    const obj = this._cards.get(id)?.object;
+    const obj = this._views.get(id);
     if (!obj) return;
     const overlay = obj.ensureOverlay();
     overlay.material.color.set(color);
@@ -732,67 +1045,57 @@ export class BattleStage {
     const id = payload.target?.uniqueID ?? payload.unit?.uniqueID
       ?? payload.skill?.uniqueID ?? payload.card?.uniqueID
       ?? payload.cards?.[0]?.uniqueID ?? payload.uniqueID ?? null;
-    return this._units.get(id) ?? this._cards.get(id)?.object ?? null;
+    return this._units.get(id) ?? this._views.get(id) ?? null;
   }
 
-  // ========== 区域查看器（点牌库/坟墓图标开，任意点击关） ==========
+  // ========== 区域查看器（点牌库/坟墓图标开）：战斗同栈的卡牌画廊 ==========
+  // 渲染（CardObject 同烘焙）、拾取（token→tooltip / 整卡→hover）与手牌同协议；
+  // 点卡（或卡面 token）保持打开读卡，点其余任意处关闭。
 
   _openViewer(zone) {
     this._closeViewer();
     const proj = this._snapshot;
     if (!proj) return;
     const list = proj.zones[zone] ?? [];
-    const group = new THREE.Group();
-
-    const bg = new THREE.Mesh(
-      new THREE.PlaneGeometry(this._sm.worldWidth || 178, 100),
-      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.85 }),
-    );
-    bg.position.z = 80;
-    group.add(bg);
-
-    const scale = 0.6;
-    const cols = 6;
-    const gapX = CARD_WIDTH * scale + 2;
-    const gapY = CARD_HEIGHT * scale + 3;
-    list.forEach((cardProj, i) => {
-      const obj = new CardObject({ uniqueID: `viewer:${cardProj.uniqueID}`, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace });
-      obj.setCard(cardProj);
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const rowCount = Math.min(cols, list.length - row * cols);
-      obj.position.set((col - (rowCount - 1) / 2) * gapX, 28 - row * gapY, 81);
-      obj.scale.set(scale, scale, 1);
-      group.add(obj);
+    const names = { deck: '牌库', discard: '坟墓' };
+    // 顺序语义：牌库顶 = 数组首（展示最左）；弃牌堆尾 = 最新弃置（展示最右）
+    const subtitle = list.length === 0 ? '空空如也'
+      : zone === 'deck' ? '最左为牌库顶'
+        : '最右为最新弃置';
+    this._viewer.open(list, {
+      zone,
+      title: `${names[zone] ?? zone} · ${list.length} 张`,
+      subtitle,
     });
-
-    this.uiScene.add(group);
-    this.picker.addPickable('viewer:bg', bg, { kind: 'viewer', space: 'ui' });
-    this._viewer = { zone, group, bg };
+    this.uiScene.add(this._viewer);
   }
 
   _closeViewer() {
-    if (!this._viewer) return;
-    const { group, bg } = this._viewer;
-    this.picker.removePickable('viewer:bg');
-    for (const child of [...group.children]) {
-      if (child !== bg) child.dispose?.();
-    }
-    bg.geometry.dispose();
-    bg.material.dispose();
-    this.uiScene.remove(group);
-    this._viewer = null;
+    if (!this._viewer.opened) return;
+    this._overCardId = null; // 画廊卡不再可达：详情态随模态层一并还原
+    this._refreshShiftFace();
+    this._viewer.close();
+    this.uiScene.remove(this._viewer);
+    this._setHoveredCard(null); // 悬浮态随模态层一并清零（画廊卡 id 不进 _hoveredCardId，此处兜底）
   }
 
   // ========== 指针输入（调用方传屏幕像素坐标） ==========
 
   handlePointerMove(x, y) {
-    if (this._viewer) return;
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
+    // 查看器模态：悬浮照常走 Picker（卡面 token → tooltip:*、整卡 → hover 抬升，
+    // 与手牌同链路），但屏蔽瞄准/拖拽等战斗交互
+    if (this._viewer.opened) {
+      const hit = this.picker.hover(x, y);
+      // 卡面 token（富文本/S 标）视作仍在悬浮所属卡：画廊抬升不中断（与手牌同语义）
+      this._viewer.setHovered(this._viewer.ownsHit(hit) ? hit.id : null);
+      this._setOverCard(hit);
+      return;
+    }
     // 瞄准模式：卡留手牌不动，箭头从卡牌延伸到指针；掠过存活敌人 → 高亮 + 箭头变色
     if (this._aiming) {
-      const obj = this._cards.get(this._aiming.id)?.object;
+      const obj = this._views.get(this._aiming.id);
       if (!obj) { this._cancelAiming(); return; } // 卡在瞄准中离场（异常路径）：收尾
       const world = this._worldAt(x, y, ARROW_Z);
       this._arrow.update(obj.position, world);
@@ -804,7 +1107,7 @@ export class BattleStage {
     }
     if (this._dragging) {
       const world = this._worldAt(x, y, 30); // 与拖拽卡同深（z=30），防透视视差
-      const obj = this._cards.get(this._dragging.id)?.object;
+      const obj = this._views.get(this._dragging.id);
       if (obj) obj.position.set(world.x, world.y, 30);
       this._dragging.moved = true;
       // 拖牌掠过存活敌人 → 目标标注高亮（排除拖拽中的卡自身遮挡）
@@ -812,30 +1115,34 @@ export class BattleStage {
       this._setDragTarget(this._targetableEnemyId(hit));
       return;
     }
-    this.picker.hover(x, y);
+    const hit = this.picker.hover(x, y);
+    this._setOverCard(hit);
   }
 
   handlePointerDown(x, y) {
-    if (this._viewer) return;
+    if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
     const hit = this.picker.pick(x, y);
     const proj = this._snapshot;
     // 换卡模式下点手牌是"点按换出"，不进入拖拽
     if (hit.kind === 'card' && !proj?.pendingInput && !this._swapMode) {
-      if (this.bridge.intents.canPlayCard(hit.id)) {
+      // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后
+      // 于后端（动画积压期）时，玩家看到什么就是什么，不可能"抢先"后端出牌
+      const displayPlayable = this._views.get(hit.id)?.visualState !== 'disabled';
+      if (displayPlayable && this.bridge.intents.canPlayCard(hit.id)) {
         // 按投影 targetMode 分流：选目标卡进瞄准（卡留手牌），免目标卡旧式拖拽（卡随指针）
         const targetMode = proj?.hand.find(c => c.uniqueID === hit.id)?.targetMode ?? 'none';
         if (targetMode === 'enemy') {
           this._aiming = { id: hit.id };
-          this._arrow.show(this._cards.get(hit.id).object.position);
+          this._arrow.show(this._views.get(hit.id).position);
           this._arrow.setTargetValid(false);
           this._layoutAndTrack(); // 瞄准卡高亮 + 撑开两侧
         } else {
           this._dragging = { id: hit.id, moved: false };
           this.animator.enterDragging(hit.id);
         }
-      } else if (this._cards.get(hit.id)?.zone === 'chant' && this.bridge.intents.canStopChant(hit.id)) {
+      } else if (this.model.getZone(hit.id) === 'chant' && this.bridge.intents.canStopChant(hit.id)) {
         this._pressChant = { id: hit.id }; // 咏唱卡点按候选（up 在同一卡上 = 停止咏唱）
       }
     }
@@ -844,20 +1151,24 @@ export class BattleStage {
   handlePointerUp(x, y) {
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
-    if (this._viewer) {
-      this._closeViewer();
+    if (this._viewer.opened) {
+      // 点卡（或卡面 token）= 读卡，保持打开；点背板/其余任意处关闭
+      if (!this._viewer.ownsHit(this.picker.pick(x, y))) this._closeViewer();
       return;
     }
     const proj = this._snapshot;
     const pending = proj?.pendingInput?.request ?? null;
 
-    // 瞄准松手：指针在存活敌人身上 → 指定目标打出；否则取消（卡本就在锚点，只清状态）
+    // 瞄准松手：指针在存活敌人身上 → 指定目标打出；否则取消（卡本就在锚点，只清状态）。
+    // 提交前再验显示态：瞄准中途节拍推进可能已把卡压灰（如结算期），灰卡不打
     if (this._aiming) {
       const { id } = this._aiming;
       const hit = this.picker.pick(x, y, { kinds: ['unit'] });
       const targetId = this._targetableEnemyId(hit);
       this._cancelAiming();
-      if (targetId) this.bridge.intents.playCard(id, targetId);
+      if (targetId && this._views.get(id)?.visualState !== 'disabled') {
+        this.bridge.intents.playCard(id, targetId);
+      }
       return;
     }
 
@@ -866,11 +1177,14 @@ export class BattleStage {
       this._dragging = null;
       this._setDragTarget(null);
       const world = this._worldAt(x, y, 30); // 出牌线判定与拖拽同深
-      // 松手点在存活敌人身上 → 指定目标打出；否则过出牌线 → 默认目标打出
+      // 松手点在存活敌人身上 → 指定目标打出；否则过出牌线 → 默认目标打出。
+      // 显示态门：拖拽中途被节拍压灰的卡不提交（回原位），防"认知先于动画节拍"的误操作
       const hit = this.picker.pick(x, y, { kinds: ['unit'], excludeIds: [id] });
       const targetId = this._targetableEnemyId(hit);
-      const played = (targetId || world.y > PLAY_LINE_Y) && this.bridge.intents.playCard(id, targetId);
-      if (!played) this.animator.enterTracking(id); // 回原位
+      const displayPlayable = this._views.get(id)?.visualState !== 'disabled';
+      const played = displayPlayable && (targetId || world.y > PLAY_LINE_Y)
+        && this.bridge.intents.playCard(id, targetId);
+      if (!played) this.animator.enterIdle(id); // 弹簧收养：从松手位平滑滑回锚点
       return;
     }
 
@@ -897,14 +1211,17 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'card' && this._swapMode) {
-      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（咏唱/费用不足）保持模式
-      if (this.bridge.intents.canSwapCard(hit.id)) {
+      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（显示灰/咏唱/费用不足）保持模式
+      if (this._views.get(hit.id)?.visualState !== 'disabled' && this.bridge.intents.canSwapCard(hit.id)) {
         this.bridge.intents.swapCard(hit.id);
         this._setSwapMode(false);
       }
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:main') {
+      // 显示态门：按钮面为灰（非等待输入/结算期未就绪）时不分发任何意图——
+      // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
+      if (!this._buttons.main.cardData?.enabled) return;
       if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
       else this.bridge.intents.endTurn();
@@ -958,18 +1275,54 @@ export class BattleStage {
     // 浏览器：圆角风格化按钮（10px/wu ↔ 15x6 世界，与牌面同约定）；
     // 单测注入的 fake bakeLabel 直接透传
     if (typeof document === 'undefined') return this._bakeLabel(data.label);
-    return bakeButtonFace(data, { width: BUTTON_SIZE.w * 10, height: BUTTON_SIZE.h * 10, scale: 2 });
+    return bakeButtonFace(data, { width: BUTTON_SIZE.w * 10, height: BUTTON_SIZE.h * 10, scale: 3 });
   }
 
   _setHoveredCard(uniqueID) {
+    if (this._viewer.hasCard(uniqueID)) return; // 查看器卡悬浮由画廊自管，不进手牌撑开/资源点链路
     if (this._hoveredCardId === uniqueID) return;
     this._hoveredCardId = uniqueID;
-    this._layoutAndTrack();
+    this._layoutAndTrack(); // 弹簧层软收敛到新目标，无 kill/重启的顿挫
     this._updatePendingPips();
   }
 
-  // 悬浮/瞄准手牌 → 按其 cost 高亮"即将消耗"的资源点（脉动）；咏唱卡费用已付，不高亮。
-  // 拖拽/瞄准中 hover 保持（picker 不重算），出牌/离场后由 reconcile 清除
+  // ========== Shift 详情卡面（应用描述 ↔ 未应用描述临时切换） ==========
+
+  /** Shift 键态入口（window 监听 / 单测直调）：驱动压着卡的详情面切换。 */
+  setShiftDown(on) {
+    on = !!on;
+    if (on === this._shiftDown) return;
+    this._shiftDown = on;
+    this._refreshShiftFace();
+  }
+
+  // 指针压卡跟踪：整卡或卡面 token 都算"压着"——详情态悬到 S 方标（token）上也不得闪切回
+  _setOverCard(hit) {
+    const id = (hit?.kind === 'card' || hit?.kind === 'token') ? hit.id : null;
+    if (this._overCardId === id) return;
+    this._overCardId = id;
+    this._refreshShiftFace();
+  }
+
+  // 差分应用：按住 Shift 时指针压着的卡（手牌/咏唱/查看器画廊）切未应用描述渲染，
+  // 松开或移开即还原。至多一张卡处于详情态，切换即差分（无全量重烘）。
+  _refreshShiftFace() {
+    let obj = null;
+    if (this._shiftDown && this._overCardId != null) {
+      obj = this._views.get(this._overCardId)
+        ?? (this._viewer.opened ? this._viewer.cardObj(this._overCardId) : null)
+        ?? null;
+    }
+    if (this._altObj === obj) return;
+    this._altObj?.setAltMode(false);
+    this._altObj = obj;
+    this._altObj?.setAltMode(true);
+  }
+
+  // 悬浮/瞄准手牌 → 按其 cost 驱动资源徽章交互态：可负担 = highlighted
+  // （呼吸 glow + 升腾粒子），不满足 = insufficient（数值暗红，覆盖高亮）；
+  // 咏唱卡费用已付，零开销 = normal。拖拽/瞄准中 hover 保持（picker 不重算），
+  // 出牌/离场后由 reconcile 清除。
   _updatePendingPips() {
     let ap = 0;
     let mana = 0;
@@ -981,15 +1334,16 @@ export class BattleStage {
         mana = card.cost.mana ?? 0;
       }
     }
-    this._resources.ap.setPending(ap);
-    this._resources.mana.setPending(mana);
+    this._resources.ap.setHoverCost(ap, this._resources.ap.current);
+    this._resources.mana.setHoverCost(mana, this._resources.mana.current);
   }
 
   // 卡图异步加载完成后：重烘全部在场景牌面（纹理与 hit map 成对替换）
   _rebakeCardFaces() {
-    for (const entry of this._cards.values()) {
-      if (entry.object.cardData) entry.object.setCard(entry.object.cardData);
+    for (const view of this._views.values()) {
+      if (view.cardData) view.setCard(view.cardData);
     }
+    this._viewer.rebake(); // 查看器内的卡同享到图重烘（关闭态为空操作）
   }
 
   // 渲染端支持的最大各向异性（假 renderer/无 WebGL 环境回退 1）
@@ -998,6 +1352,12 @@ export class BattleStage {
   }
 
   dispose() {
+    this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', this._onShiftKeyDown);
+      window.removeEventListener('keyup', this._onShiftKeyUp);
+      window.removeEventListener('blur', this._onWinBlur);
+    }
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;
@@ -1006,7 +1366,20 @@ export class BattleStage {
     this._unsubTick?.();
     this._unsubs.forEach(off => off?.());
     this._unsubs = [];
+    this.springs.clear();
     this._arrow.dispose();
-    this._statusBar.dispose(); // 含两排资源点（apPips/manaPips 随父级销毁）
+    this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
+    this._topBar.dispose();
+    // 视图全销毁；模型跨场存活（下一场 beginBattle 重置），不在此清理
+    for (const view of this._views.values()) {
+      this.uiScene.remove(view);
+      view.dispose();
+    }
+    this._views.clear();
+    for (const view of this._burning) {
+      this.uiScene.remove(view);
+      view.dispose();
+    }
+    this._burning.clear();
   }
 }

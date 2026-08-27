@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { StageAnimator, ANIMATOR_STATES } from '../src/stage/animator/StageAnimator.js';
+import { StageAnimator, ANIMATOR_STATES, gsapTween } from '../src/stage/animator/StageAnimator.js';
 import { LayoutEngine } from '../src/stage/layout/LayoutEngine.js';
 
 // 同步假 tween：立即应用到位的值并同步回调，返回可 kill 句柄
@@ -20,7 +20,13 @@ fakeTween.handles = [];
 function make() {
   fakeTween.handles = [];
   const layout = new LayoutEngine();
-  layout.registerContainer('hand', { centerX: 0, centerY: -35, width: 120, cardWidth: 20, cardHeight: 27 });
+  // 手牌扇容器（扇形契约，几何参数见 BattleStage 注册处）
+  layout.registerContainer('hand', {
+    minX: -46, maxX: 64, baseY: -51.3,
+    minStep: 13.5, maxStep: 27.3, radius: 95,
+    arcDegMin: 5, arcGrowFrom: 4, arcDegFull: 52,
+    liftY: -46.5,
+  });
   const animator = new StageAnimator({ layoutEngine: layout, tween: fakeTween });
   return { layout, animator };
 }
@@ -41,8 +47,10 @@ describe('StageAnimator 状态机', () => {
     layout.layoutHand('hand', ['c1', 'c2']);
     animator.enterTracking('c1');
     expect(animator.getState('c1')).toBe(ANIMATOR_STATES.TRACKING);
-    expect(obj.position.x).toBeCloseTo(-10.75); // 左牌中心
-    expect(obj.position.y).toBe(-35);
+    const anchor = layout.getAnchor('c1'); // 双卡对称分居扇心两侧
+    expect(obj.position.x).toBeCloseTo(anchor.x);
+    expect(obj.position.y).toBeCloseTo(anchor.y);
+    expect(anchor.x).toBeLessThan(0); // 首卡在左半区
   });
 
   it('布局变化后 syncTracking 重新归位所有 tracking 元素', () => {
@@ -51,9 +59,9 @@ describe('StageAnimator 状态机', () => {
     animator.register('c1', obj);
     layout.layoutHand('hand', ['c1', 'c2']);
     animator.enterTracking('c1');
-    layout.layoutHand('hand', ['c1']); // 抽走一张，c1 应回中
+    layout.layoutHand('hand', ['c1']); // 抽走一张，c1 滑向新锚点
     animator.syncTracking();
-    expect(obj.position.x).toBeCloseTo(0);
+    expect(obj.position.x).toBeCloseTo(layout.getAnchor('c1').x);
   });
 
   it('animate 进入 animating，完成回调后回落 idle', () => {
@@ -89,5 +97,30 @@ describe('StageAnimator 状态机', () => {
       animator.enterTracking('ghost');
       animator.animate('ghost', { x: 1 });
     }).not.toThrow();
+  });
+});
+
+describe('gsapTween 进度代理契约（真 gsap）', () => {
+  it('通用键补间的 onUpdate 回传补间进度（gsap 原生 onUpdate 无实参）', async () => {
+    // 回归：曾直接透传 onUpdate，真实 gsap 调用不带实参 → sample(undefined) →
+    // NaN 变换 → 卡牌飞行全程不可见（"弃牌直接消失"的根因）
+    const proxy = { t: 0 };
+    const ticks = [];
+    gsapTween(proxy, { t: 1 }, { durationMs: 30, onUpdate: (t) => ticks.push(t) });
+    await new Promise(r => setTimeout(r, 150));
+    expect(proxy.t).toBe(1);
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const t of ticks) expect(Number.isFinite(t)).toBe(true);
+    expect(ticks[0]).toBeLessThanOrEqual(ticks.at(-1)); // 单调推进
+    expect(ticks.at(-1)).toBeCloseTo(1, 5);
+  });
+
+  it('属性型补间（position/scale）不受 onUpdate 包装影响', async () => {
+    const obj = new THREE.Group();
+    await new Promise((resolve) => {
+      gsapTween(obj, { x: 5, scale: 2 }, { durationMs: 20, onComplete: resolve });
+    });
+    expect(obj.position.x).toBe(5);
+    expect(obj.scale.x).toBe(2);
   });
 });

@@ -55,6 +55,11 @@ export default class AnimationSequencer {
     if (!instr) return false;
     if (instr.status === 'finished') return true;
     instr.status = 'finished';
+    // 保险丝强杀必须可见：静默跳拍会让后续节拍提前衔接，症状是各种"动画 glich"，
+    // 无警告则无法定位（本表是节拍卫生的第一绊线）
+    if (reason === 'timeout') {
+      console.warn('[sequencer] 节拍超时被保险丝强杀（动画未正常回 finish）：', instr.meta);
+    }
     const t = this._idToTimer.get(id);
     if (t) {
       clearTimeout(t);

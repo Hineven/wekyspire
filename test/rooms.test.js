@@ -9,7 +9,6 @@ import { chooseSkillReward } from '../src/core/run/rewards.js';
 import { CAMP_PLACEHOLDER, campOptions, campRest, campRecoverRemi, campUpgrade } from '../src/core/run/rooms/camp.js';
 import { SLOT_PLACEHOLDER, spinSlot } from '../src/core/run/rooms/slotMachine.js';
 import { EVENT_SCRIPTS, playEvent } from '../src/core/run/rooms/event.js';
-import { RunDriver } from '../src/core/run/runDriver.js';
 
 // 测试用晋升链（本文件独立模块注册表）
 const noop = { use: () => true, describe: () => '测试卡' };
@@ -132,11 +131,5 @@ describe('瑞米状态机（§3）', () => {
     enterBattle(run);
     const next = createRunBattle(run);
     expect(next.battleState.allies.length).toBe(0); // 被打跑后不出战
-  });
-
-  it('RunDriver 整局冒烟：瑞米状态不阻塞流程', () => {
-    const d = new RunDriver({ seed: 7, totalFloors: 11 }).start();
-    d.runToEnd();
-    expect(['victory', 'defeat']).toContain(d.result);
   });
 });

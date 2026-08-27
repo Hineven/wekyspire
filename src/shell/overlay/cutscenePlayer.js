@@ -11,8 +11,10 @@ import { AnimationSequencer } from '../../core/anim/sequencer.js';
 //
 // step 词汇表（可组合，可继续扩展新类型；每类 = 一种指令编译方式）：
 //   { type:'fade', to:0|1, ms }        全屏颜色层渐变（to=1 渐黑 / to=0 渐亮）——定时指令
-//   { type:'wipe', coverMs, revealMs,
-//     direction?, atCover? }           幕间转场：黑幕扫过，全黑中点执行 atCover 回调——定时指令
+//   { type:'wipe', coverMs, revealMs, holdMs?,
+//     direction?, atCover? }           幕间转场：黑幕扫过，全黑中点执行 atCover——
+//                                      atCover 可返回 Promise（战场预载）：黑幕保持到
+//                                      兑现才 reveal；holdMs = 揭幕前的额外黑幕停留
 //   { type:'image', src, fadeInMs?,
 //     holdMs?, fadeOutMs? }            CG/插图：淡入 → 停留 → 淡出——定时指令
 //   { type:'dialogue', pages }         对话：人工闸门指令（点击翻页，末页回执开闸）
@@ -20,8 +22,8 @@ import { AnimationSequencer } from '../../core/anim/sequencer.js';
 //
 // 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；
 // 阻塞流程 = 流程侧 await play()/sceneTransition() 后再发下一个 run intent。
-// CutsceneOverlay.vue 的 CSS 过渡时长必须与各 step 时长参数一致（wipe 缺省见 SCENE_TRANSITION_MS）。
-export const SCENE_TRANSITION_MS = Object.freeze({ cover: 600, reveal: 800 });
+// CutsceneOverlay.vue 的 wipe 过渡时长由 step 参数驱动（缺省见 SCENE_TRANSITION_MS）。
+export const SCENE_TRANSITION_MS = Object.freeze({ cover: 750, reveal: 950 });
 
 // 完成回执协议：与 bridge 层同事件名（sequencer 构造注入的 run 级实例已用同名）
 const FINISH_EVENT = 'animation-instruction-finished';
@@ -74,15 +76,20 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       case 'wipe': {
         const coverMs = step.coverMs ?? SCENE_TRANSITION_MS.cover;
         const revealMs = step.revealMs ?? SCENE_TRANSITION_MS.reveal;
+        const holdMs = step.holdMs ?? 0;
         return {
-          durationMs: coverMs + revealMs + 2000,
+          // 保险丝覆盖预载等待（atCover Promise 最长约 6s 兜底）+ 揭幕
+          durationMs: coverMs + revealMs + holdMs + 8000,
           async start({ id, emit }) {
             beginStep(script, step);
             state.phase = 'enter';  // 黑幕屏外待命（无过渡，先落位）
             await wait(16);         // 让初始 transform 渲染一帧，再起过渡
             state.phase = 'cover';
             await wait(coverMs);
-            step.atCover?.();       // 全黑中点：换舞台等副作用
+            // 全黑中点：换景/预载。atCover 可返回 Promise（战场预载就绪信号）——
+            // 黑幕保持到兑现才揭幕，避免单位"加载后才显示"的突兀感
+            await step.atCover?.();
+            if (holdMs > 0) await wait(holdMs); // 揭幕前的额外黑幕停留
             state.phase = 'reveal';
             await wait(revealMs);
             emit(FINISH_EVENT, { id });
@@ -181,12 +188,12 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
   let transitionBusy = false;
   /** 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
    *  转场重叠时退化为直切（不卡流程、不排二次黑幕）。 */
-  function sceneTransition(swap = null) {
+  function sceneTransition(swap = null, { coverMs, revealMs, holdMs } = {}) {
     if (transitionBusy) { swap?.(); return Promise.resolve(); }
     transitionBusy = true;
     return play({
       id: '__transition__', // 内联剧本，不入触发规则；played flag 不拦匿名转场
-      steps: [{ type: 'wipe', atCover: swap ?? undefined }],
+      steps: [{ type: 'wipe', atCover: swap ?? undefined, ...(coverMs != null ? { coverMs } : {}), ...(revealMs != null ? { revealMs } : {}), ...(holdMs != null ? { holdMs } : {}) }],
     }).finally(() => { transitionBusy = false; });
   }
 

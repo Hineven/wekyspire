@@ -20,7 +20,7 @@ import { EventNames, ANIM_TIMING } from './events.js';
 // 兜底：markDirty 后若没有任何显式 sync 覆盖（Core 存在不经 presenter 的迁移），
 // bridge 在 tick 末补一次 syncState——显示状态永远不会长期滞留。
 export function createBridgePresenter({
-  sequencer, frontendBus, backendBus, markDirty, getSnapshot, onRequestInput = null,
+  sequencer, frontendBus, backendBus, markDirty, getSnapshot, onRequestInput = null, projectCard = null,
 }) {
   const anim = (event, payload) => {
     sequencer.enqueueInstruction({
@@ -109,7 +109,18 @@ export function createBridgePresenter({
     chantStopFailed: (p) => { syncState(); anim(EventNames.ANIM_CHANT_STOP_FAILED, p); },
 
     cardDrawn: (p) => { syncState(); anim(EventNames.ANIM_CARD_DRAWN, p); },
-    cardAdded: (p) => { syncState(); anim(EventNames.ANIM_CARD_ADDED, p); },
+    // 造牌按落区分流：入库（toZone 'deck'）= 离场次序（先演出后 sync）——
+    // 卡牌生成→飞入牌库→计数才跳增；且载荷附带 cardView（造出的卡不在显示区，
+    // Stage 无法从投影反查牌面，需此处代为投影）。入手等其他落区维持入场类次序。
+    cardAdded: (p) => {
+      if (p.toZone === 'deck') {
+        anim(EventNames.ANIM_CARD_ADDED, { ...p, cardView: projectCard?.(p.card) ?? null });
+        syncState();
+      } else {
+        syncState();
+        anim(EventNames.ANIM_CARD_ADDED, p);
+      }
+    },
     cardTransformed: (p) => { syncState(); anim(EventNames.ANIM_CARD_TRANSFORMED, p); },
 
     // ---- 离场类：先离场飞行动画，后 sync（飞进坟堆数字才+1） ----

@@ -115,3 +115,14 @@ export class GainShieldInstruction extends BattleInstruction {
     return true;
   }
 }
+
+// 伤害预估（卡面"应用后"描述用）：走真实 PRE 管线的干跑探针。
+// 返回 { dodged, damage }——damage 为 PRE 修正后的伤害（斩灭翻倍、格挡减半、
+// 闪避归零、易受加深等都吃进去），不含防御/护盾吸收（那是结算期对 HP 的影响，
+// 非伤害本身）。只在等待玩家输入（泵静止）时调用；探针的子反应被丢弃，
+// 真实状态不变（契约见 BattleKernel.preview）。
+export function previewDamage(ctx, { source, target, amount, pierce = false, tags = [] }) {
+  const probe = ctx.kernel.preview(
+    new DealDamageInstruction({ source, target, amount, pierce, tags }), ctx);
+  return { dodged: probe.cancelled, damage: probe.payload.damage };
+}

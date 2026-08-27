@@ -2,7 +2,7 @@ import mitt from 'mitt';
 import { createBattle, startBattle, isBattleFinished } from '../core/flow/battle.js';
 import AnimationSequencer from '../core/anim/sequencer.js';
 import { createBridgePresenter } from './presenter.js';
-import { projectBattle } from './projection.js';
+import { projectBattle, projectCardFull } from './projection.js';
 import { createIntents } from './intents.js';
 import { createInteractionHandler } from './interactionHandler.js';
 import { EventNames } from './events.js';
@@ -54,11 +54,16 @@ export function createBridge({
   // 队列每完成一条指令都检查一次：排空即追上显示状态
   frontendBus.on(EventNames.ANIMATION_INSTRUCTION_FINISHED, () => syncIfIdle());
 
-  // 状态投影：标脏后重算，否则走缓存（前端按需拉取，不订阅 Core）
+  // 状态投影：标脏后重算，否则走缓存（前端按需拉取，不订阅 Core）。
+  // seq = 显示时刻序号：投影每次重算都是一个新时刻（单调递增）。消费端
+  // （BattleStage）据此丢弃"早于已应用时刻"的历史快照——幕间预载已把显示
+  // 状态推到现在时，队列随后重放的更早 sync 节拍不得把显示状态倒回去。
+  let snapshotSeq = 0;
   const getProjection = () => {
     interaction.sync();
     if (dirty) {
       cachedProjection = projectBattle(battle);
+      cachedProjection.seq = ++snapshotSeq;
       dirty = false;
     }
     return cachedProjection;
@@ -74,6 +79,9 @@ export function createBridge({
       return getProjection();
     },
     onRequestInput: (request) => interactionRef.current?.handleRequest(request),
+    // 造牌入库演出的牌面视图：造出的卡尚不在任何显示区，Stage 无法经投影反查，
+    // 由 presenter 代为投影（battle 为同作用域 const，调用时已初始化）
+    projectCard: (rt) => projectCardFull(battle, rt),
   });
 
   const battle = createBattle({ runState, enemies, allies, seed, config, presenter });

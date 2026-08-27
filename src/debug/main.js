@@ -9,17 +9,17 @@ import { createSkillRuntime } from '../core/state/skillRuntime.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
 import { getAllyDefinition } from '../core/allies/registry.js';
 import { createBridge, EventNames } from '../bridge/index.js';
-import { allEffects } from '../core/effects/registry.js';
-import { allSkills } from '../core/skills/registry.js';
+import { tooltipHtml } from '../shell/tooltip.js';
 import { StageManager } from '../stage/StageManager.js';
 import { BattleStage } from '../stage/stages/BattleStage.js';
 
-// ---- Bridge：一场测试战斗（多敌人 + 瑞米 + 混合牌组） ----
+// ---- Bridge：一场测试战斗（多敌人 + 瑞米 + 体修牌组展示） ----
 const runState = createRunState({
   player: new Player({ maxHp: 40, maxMana: 3, maxActionPoints: 3 }),
 });
 runState.player.deck = [
-  'punch', 'punch', 'punch', 'guard', 'guard', 'inflame', 'focusChant', 'punch',
+  'punch', 'punch', 'punch', 'punch', 'duckHead', 'duckHead', 'guard', 'guard',
+  'slash', 'flyingDagger', 'agileCombo', 'breakStance',
 ].map(id => createSkillRuntime(id));
 
 const bridge = createBridge({
@@ -90,25 +90,9 @@ bridge.backendBus.on(EventNames.BATTLE_END, ({ result }) => {
   endEl.style.display = 'block';
 });
 
-// tooltip（Stage Picker → Shell 协议事件的调试呈现）
-// effect/skill 经注册表反查定义补信息（markup 里是显示名，按 name 匹配）
-function tooltipContent({ kind, name, powerDelta }) {
-  if (kind === 'effect') {
-    const def = allEffects().find(d => d.name === name);
-    return def ? `<b>${def.icon ?? ''}${def.name}</b><br>${def.description ?? ''}` : `[effect] ${name}`;
-  }
-  if (kind === 'skill') {
-    const def = allSkills().find(d => d.name === name);
-    const delta = powerDelta ? `（威力 ${powerDelta > 0 ? '+' : ''}${powerDelta}）` : '';
-    if (!def) return `[skill] ${name}${delta}`;
-    const cost = def.cost ? `费${def.cost.mana} AP${def.cost.actionPoint}` : '';
-    return `<b>${def.name}</b>${delta}<br><span style="color:#8af">${cost}</span>`;
-  }
-  return `[${kind}] ${name}`;
-}
-
+// tooltip（Stage Picker → Shell 协议事件的调试呈现）——内容函数与 BattleHud 共享
 bridge.frontendBus.on(EventNames.TOOLTIP_SHOW, (payload) => {
-  tooltipEl.innerHTML = tooltipContent(payload);
+  tooltipEl.innerHTML = tooltipHtml(payload);
   tooltipEl.style.display = 'block';
   tooltipEl.style.left = `${payload.x + 12}px`;
   tooltipEl.style.top = `${payload.y + 12}px`;

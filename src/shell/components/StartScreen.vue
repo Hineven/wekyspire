@@ -45,6 +45,7 @@
 import { ref, computed, watch, inject, onMounted, onBeforeUnmount } from 'vue';
 import ChangeLog from './ChangeLog.vue';
 import { settings, persistSettings } from '../settings';
+import { showMenuDialog } from '../menuDialog';
 import { fadeInTitleMusic, fadeOutTitleMusic } from '../audio';
 import startBg from '../../assets/images/start-screen.png';
 import titleMusicUrl from '../../assets/sounds/story-mode-intro.mp3';
@@ -79,12 +80,23 @@ const saveText = computed(() => {
 // 存档块 key 含模式：切模式时与标题/主按钮同一节奏切入切出，而非原地不动
 const saveKey = computed(() => `${isStory.value ? 'story' : 'infinite'}:${canContinue.value ? 'has' : 'none'}`);
 
-function launch(loadSave) {
+async function launch(loadSave) {
   // 读档以存档自身的模式为准；新开局以当前复选框为准
   const story = loadSave ? loadSave.storyMode !== false : isStory.value;
   if (story) {
     showMenuPopup('故事模式暂未开放');
     return;
+  }
+  // 新开局且本模式已有存档：确认覆盖（弹窗全局组件的首个使用实例）
+  if (!loadSave && canContinue.value) {
+    const { ok } = await showMenuDialog({
+      title: '覆盖存档？',
+      message: `已有进行中的存档（${saveText.value}），开始新游戏将覆盖它。`,
+      mode: 'confirmCancel',
+      confirmText: '覆盖并开始',
+      cancelText: '取消',
+    });
+    if (!ok) return; // 取消：留在开始界面，存档不动
   }
   // 肉鸽模式：无开场滚动动画，直接开始
   emit('start', { storyMode: false, loadSave });

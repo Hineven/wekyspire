@@ -75,7 +75,7 @@ describe('Picker', () => {
     expect(picker.pick(x, y)).toEqual({ kind: 'card', id: 'front' });
   });
 
-  it('hover 事件流：token show → move → hide，整卡 hover/leave', () => {
+  it('hover 事件流：卡面 token 同时维持整卡 hover（show → move → hide，卡离场才 leave）', () => {
     const { sm, picker, scene, events } = make();
     const region = { type: 'named', payload: { name: '瑞米' }, rect: { x: 0, y: 0, w: 10, h: 10 } };
     addCard(picker, scene, 'c1', 0, 0, [region]);
@@ -88,15 +88,37 @@ describe('Picker', () => {
     picker.hover(cardPos.x, cardPos.y);
     picker.hover(bgPos.x, bgPos.y);
 
+    // 进 token 即入卡悬浮（不打断），离卡（背景）才 CARD_LEAVE
     expect(events.map(e => e.name)).toEqual([
+      EventNames.CARD_HOVER,
       EventNames.TOOLTIP_SHOW,
       EventNames.TOOLTIP_MOVE,
       EventNames.TOOLTIP_HIDE,
-      EventNames.CARD_HOVER,
       EventNames.CARD_LEAVE,
     ]);
-    expect(events[0].payload).toMatchObject({ kind: 'named', name: '瑞米' });
-    expect(events[3].payload).toEqual({ uniqueID: 'c1' });
+    expect(events[1].payload).toMatchObject({ kind: 'named', name: '瑞米' });
+    expect(events[0].payload).toEqual({ uniqueID: 'c1' });
+  });
+
+  it('卡面 token 不打断所属卡悬浮：卡身 → token 不发 leave；A 卡 token → B 卡身正常切换', () => {
+    const { sm, picker, scene, events } = make();
+    const region = { type: 'effect', payload: { name: '燃烧' }, rect: { x: 0, y: 0, w: 10, h: 10 } };
+    addCard(picker, scene, 'a', 0, 0, [region]);
+    addCard(picker, scene, 'b', 30, 0); // 另一张卡（卡身）
+    const aBody = toScreen(sm, 5, -5);   // a 卡热区外
+    const aToken = toScreen(sm, -5, 8.5); // a 卡热区内
+    const bBody = toScreen(sm, 30, 0);
+
+    picker.hover(aBody.x, aBody.y);   // 入 a
+    picker.hover(aToken.x, aToken.y); // a 卡身 → a token：tooltip 出、无 CARD_LEAVE
+    expect(events.filter(e => e.name === EventNames.CARD_LEAVE)).toHaveLength(0);
+    expect(events.map(e => e.name)).toEqual([EventNames.CARD_HOVER, EventNames.TOOLTIP_SHOW]);
+
+    picker.hover(bBody.x, bBody.y); // a token → b 卡身：离 a 入 b + tooltip 收起
+    expect(events.map(e => e.name).slice(2)).toEqual([
+      EventNames.TOOLTIP_HIDE, EventNames.CARD_LEAVE, EventNames.CARD_HOVER,
+    ]);
+    expect(events.at(-1).payload).toEqual({ uniqueID: 'b' });
   });
 
   it('单位效果行：hover 走 token tooltip 协议；kinds:[unit] 过滤时仍返回整单位', () => {

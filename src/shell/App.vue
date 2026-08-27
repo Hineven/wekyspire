@@ -11,6 +11,7 @@ import { MapStage } from '../stage/stages/MapStage.js';
 import { createRunController } from './runController.js';
 import { readSave } from './saves.js';
 import StartScreen from './components/StartScreen.vue';
+import AssetLoadingScreen from './components/AssetLoadingScreen.vue';
 import GameMenu from './components/GameMenu.vue';
 import PrepPanel from './components/PrepPanel.vue';
 import BattleHud from './components/BattleHud.vue';
@@ -19,9 +20,14 @@ import RoomPanel from './components/RoomPanel.vue';
 import AscensionPanel from './components/AscensionPanel.vue';
 import EndPanel from './components/EndPanel.vue';
 import MenuPopup from './components/MenuPopup.vue';
+import MenuDialog from './components/MenuDialog.vue';
+import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
+import { preloadAllArt } from '../stage/art/assetManifest.js';
+import './components/runPanels.css'; // 发育阶段 run 面板公共样式（奖励/房间/进阶）
 
 const canvas = ref(null);
+const frame = ref(null);
 const ctrl = ref(null);
 let stageManager = null;
 let mapStage = null;
@@ -31,6 +37,14 @@ const menuOpen = ref(false);    // 游戏内弹出菜单（Esc）
 const saves = ref({ infinite: readSave(false), story: readSave(true) }); // 两模式存档隔离
 
 const stage = computed(() => ctrl.value?.run.gameStage ?? 'prep');
+
+// 全量美术预载：setup 即启动（与 Vue 挂载/舞台初始化并行）。加载界面挡在开始界面
+// 之前——完成才放行（此后所有舞台首拍同步命中素材缓存，无占位闪变）。
+const assetsReady = ref(false);
+const assetProgress = ref({ loaded: 0, total: 0 });
+preloadAllArt({
+  onProgress: (loaded, total) => { assetProgress.value = { loaded, total }; },
+}).then(() => { assetsReady.value = true; });
 
 // 菜单级全局共享 toast：任意菜单级组件 inject('showMenuPopup') 后调用（跨 phase 可用）。
 // 多条 toast 各自 3s 寿命独立消亡；新 toast 从底部进入，旧 toast 被顶起，消亡后其余平滑回落。
@@ -44,6 +58,11 @@ provide('showMenuPopup', (title, text = '') => {
     menuToasts.value = menuToasts.value.filter(t => t.id !== id);
   }, 3000);
 });
+
+// toast 手动关闭（× 按钮）：与 3s 自然寿命同一条移除路径
+function dismissMenuToast(id) {
+  menuToasts.value = menuToasts.value.filter(t => t.id !== id);
+}
 
 function newGame({ storyMode = false, loadSave = null } = {}) {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
@@ -76,7 +95,9 @@ function onPointer(type) {
   return (e) => {
     const battleStage = ctrl.value?.getBattleStage();
     if (!battleStage || ctrl.value.run.gameStage !== 'battle') return;
-    battleStage[type]?.(e.clientX, e.clientY);
+    // 画布在 16:9 取景框内，窗口坐标需减去取景框偏移
+    const rect = e.currentTarget.getBoundingClientRect();
+    battleStage[type]?.(e.clientX - rect.left, e.clientY - rect.top);
   };
 }
 
@@ -85,62 +106,88 @@ const onPointerMove = onPointer('handlePointerMove');
 const onPointerDown = onPointer('handlePointerDown');
 const onPointerUp = onPointer('handlePointerUp');
 
+// 16:9 取景框：在窗口内取最大可容纳的 16:9 矩形居中摆放，边缘铺黑。
+// 框带 translateZ —— 内部一切 position:fixed 的 UI（面板/菜单/toast）以框为
+// 包含块，内容编排只依赖 16:9 画布，与窗口实际比例解耦。
+function fitFrame() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const w = Math.min(W, (H * 16) / 9);
+  const h = Math.min(H, (W * 9) / 16);
+  const f = frame.value;
+  f.style.left = `${Math.round((W - w) / 2)}px`;
+  f.style.top = `${Math.round((H - h) / 2)}px`;
+  f.style.width = `${Math.round(w)}px`;
+  f.style.height = `${Math.round(h)}px`;
+  // 画布缓冲由 StageManager.resize → renderer.setSize 建立（按 devicePixelRatio 放大）
+  stageManager.resize(Math.round(w), Math.round(h));
+}
+
 let resizeHandler = null;
 let keyHandler = null;
 onMounted(() => {
   stageManager = new StageManager();
   stageManager.attach(canvas.value);
-  resizeHandler = () => {
-    canvas.value.width = window.innerWidth;
-    canvas.value.height = window.innerHeight;
-    stageManager.resize(window.innerWidth, window.innerHeight);
-  };
-  window.addEventListener('resize', resizeHandler);
-  resizeHandler();
+  fitFrame();
+  window.addEventListener('resize', fitFrame);
   stageManager.start();
-  // Esc = 游戏内弹出菜单开关（菜单级界面不响应）
+  // Esc = 游戏内弹出菜单开关（菜单级界面不响应；全局模态弹窗打开时让位，Esc 归弹窗取消）
   keyHandler = (e) => {
-    if (e.key === 'Escape' && phase.value === 'game') menuOpen.value = !menuOpen.value;
+    if (e.key === 'Escape' && phase.value === 'game' && !menuDialogState().open) {
+      menuOpen.value = !menuOpen.value;
+    }
   };
   window.addEventListener('keydown', keyHandler);
 });
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', resizeHandler);
+  window.removeEventListener('resize', fitFrame);
   window.removeEventListener('keydown', keyHandler);
   stageManager?.dispose();
 });
 </script>
 
 <template>
-  <canvas
-    id="stage-canvas" ref="canvas"
-    @pointermove="onPointerMove"
-    @pointerdown="onPointerDown"
-    @pointerup="onPointerUp"
-  ></canvas>
-  <!-- 菜单级：开始界面（含 changelog 弹层） -->
-  <StartScreen v-if="phase === 'menu'" :saves="saves" @start="onStart" />
-  <template v-else-if="ctrl">
-    <!-- 玩家/瑞米常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
-    <PrepPanel v-if="stage === 'prep'" :ctrl="ctrl" />
-    <BattleHud v-else-if="stage === 'battle'" :ctrl="ctrl" />
-    <RewardPanel v-else-if="stage === 'reward'" :ctrl="ctrl" />
-    <RoomPanel v-else-if="stage === 'room'" :ctrl="ctrl" />
-    <AscensionPanel v-else-if="stage === 'ascension'" :ctrl="ctrl" />
-    <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
-    <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
-    <button class="menu-fab" @click="menuOpen = true">菜单</button>
-    <GameMenu v-if="menuOpen" :ctrl="ctrl" @close="menuOpen = false" @toTitle="toTitle" />
-    <!-- cutscene overlay：对话剧本 + 幕间转场，激活时阻塞一切流程（游戏流程手动驱动） -->
-    <CutsceneOverlay v-if="ctrl.cutscene.state.mode !== 'idle'" :player="ctrl.cutscene" />
-  </template>
-  <!-- 菜单级全局 toast 提示（两 phase 均可用，无阻塞，3s 自然消亡） -->
-  <MenuPopup :toasts="menuToasts" />
+  <!-- 16:9 取景框：JS 定尺寸（fitFrame），所有游戏 UI 都框在内部编排 -->
+  <div id="game-frame" ref="frame">
+    <canvas
+      id="stage-canvas" ref="canvas"
+      @pointermove="onPointerMove"
+      @pointerdown="onPointerDown"
+      @pointerup="onPointerUp"
+    ></canvas>
+    <!-- 菜单层顶层加载门：全量美术预载完成前挡住一切（最高 z-index），完成才放行开始界面 -->
+    <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />
+    <!-- 菜单级：开始界面（含 changelog 弹层） -->
+    <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />
+    <template v-else-if="ctrl">
+      <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
+      <PrepPanel v-if="stage === 'prep'" :ctrl="ctrl" />
+      <BattleHud v-else-if="stage === 'battle'" :ctrl="ctrl" />
+      <RewardPanel v-else-if="stage === 'reward'" :ctrl="ctrl" />
+      <RoomPanel v-else-if="stage === 'room'" :ctrl="ctrl" />
+      <AscensionPanel v-else-if="stage === 'ascension'" :ctrl="ctrl" />
+      <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
+      <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
+      <button class="menu-fab" @click="menuOpen = true">菜单</button>
+      <GameMenu v-if="menuOpen" :ctrl="ctrl" @close="menuOpen = false" @toTitle="toTitle" />
+      <!-- cutscene overlay：对话剧本 + 幕间转场，激活时阻塞一切流程（游戏流程手动驱动） -->
+      <CutsceneOverlay v-if="ctrl.cutscene.state.mode !== 'idle'" :player="ctrl.cutscene" />
+    </template>
+    <!-- 菜单级全局 toast 提示（两 phase 均可用，无阻塞，3s 自然消亡 / × 手动关闭） -->
+    <MenuPopup :toasts="menuToasts" @close="dismissMenuToast" />
+    <!-- 菜单级全局模态弹窗（confirm / confirmCancel / input，语义见 menuDialog.js） -->
+    <MenuDialog />
+  </div>
 </template>
 
 <style>
-html, body { margin: 0; padding: 0; overflow: hidden; background: #0b1026; }
-#stage-canvas { display: block; position: fixed; inset: 0; }
+html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+#game-frame {
+  /* transform 使本框成为内部 position:fixed 后代的包含块：全部 UI 锁定 16:9 编排 */
+  position: absolute; background: #000;
+  transform: translateZ(0);
+}
+#stage-canvas { display: block; position: absolute; inset: 0; }
 .menu-fab {
   position: fixed; top: 14px; right: 14px; z-index: 25;
   padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 6px;

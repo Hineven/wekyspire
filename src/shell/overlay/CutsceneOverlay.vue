@@ -1,8 +1,9 @@
 <script setup>
 // cutscene overlay（统一）：按播放器当前 step 渲染对应图层，全屏阻塞。
-// step 词汇表见 cutscenePlayer.js 头注；CSS 过渡时长必须与 step 时长参数一致：
-//   wipe 缺省 600/800ms（SCENE_TRANSITION_MS）；image 缺省 fadeIn/fadeOut 400ms。
+// step 词汇表见 cutscenePlayer.js 头注；过渡时长由 step 参数驱动：
+//   wipe 缺省取 SCENE_TRANSITION_MS；image 缺省 fadeIn/fadeOut 400ms。
 import { computed } from 'vue';
+import { SCENE_TRANSITION_MS } from './cutscenePlayer.js';
 
 const props = defineProps({ player: { type: Object, required: true } });
 const state = computed(() => props.player.state);
@@ -18,6 +19,14 @@ const cgDur = computed(() => {
   if (state.value.phase === 'fadeOut') return s.fadeOutMs ?? 400;
   return 0;
 });
+// wipe 过渡时长跟随当前子阶段（cover/reveal；参数与播放器编译侧同源缺省）
+const wipeDur = computed(() => {
+  const s = step.value;
+  if (s?.type !== 'wipe') return 0;
+  if (state.value.phase === 'cover') return s.coverMs ?? SCENE_TRANSITION_MS.cover;
+  if (state.value.phase === 'reveal') return s.revealMs ?? SCENE_TRANSITION_MS.reveal;
+  return 0;
+});
 </script>
 
 <template>
@@ -26,8 +35,10 @@ const cgDur = computed(() => {
     <div v-if="step?.type === 'fade'" class="fade" :class="step.to >= 1 ? 'toBlack' : 'toClear'"
       :style="{ animationDuration: step.ms + 'ms' }"></div>
 
-    <!-- wipe：自右向左的渐变黑幕（enter 落位 → cover 盖屏[atCover 换景] → reveal 露出） -->
-    <div v-else-if="step?.type === 'wipe'" class="wipe" :class="state.phase"></div>
+    <!-- wipe：自右向左的渐变黑幕（enter 落位 → cover 盖屏[atCover 换景/预载] → reveal 露出）；
+         时长由 step 参数驱动（缺省同 SCENE_TRANSITION_MS），atCover 等待预载期间黑幕保持 -->
+    <div v-else-if="step?.type === 'wipe'" class="wipe" :class="state.phase"
+      :style="{ transitionDuration: wipeDur + 'ms' }"></div>
 
     <!-- image：CG/插图（enter 落位 → fadeIn 淡入 → hold 停留 → fadeOut 淡出；缺省各 400ms） -->
     <img v-else-if="step?.type === 'image'" class="cg" :class="state.phase"
@@ -69,13 +80,16 @@ const cgDur = computed(() => {
   will-change: transform;
 }
 .wipe.enter { transform: translateX(100vw); }
+/* 时长由内联 transitionDuration 驱动（step 参数），这里只定缓动曲线 */
 .wipe.cover {
   transform: translateX(-30vw);
-  transition: transform .6s cubic-bezier(.55, .06, .85, .35);
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(.55, .06, .85, .35);
 }
 .wipe.reveal {
   transform: translateX(-130vw);
-  transition: transform .8s cubic-bezier(.15, .55, .3, .97);
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(.15, .55, .3, .97);
 }
 
 /* CG：全屏等比覆盖；opacity 三段（enter 落位无过渡；fadeIn/fadeOut 时长由内联 style 给，

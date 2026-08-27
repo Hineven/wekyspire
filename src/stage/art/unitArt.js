@@ -1,6 +1,11 @@
 // 立牌素材映射与缓存：defId/side → assets/stage/*.png。
-// 与 CardArtCache 同模式：get() 未命中即发起异步加载并先返回 null（占位色块），
-// 加载完成经 onLoad 通知 Stage 补挂纹理（立牌纹理不带 hit map，无成对替换问题）。
+// 缓存/订阅/就绪信号语义继承 ArtImageCache（与 CardArtCache 共用实现）；
+// get() 未命中即发起异步加载并先返回 null（占位色块），
+// 加载完成经 addOnLoad 订阅通知 Stage 补挂纹理（立牌纹理不带 hit map，无成对替换问题）。
+// 实例为应用级共享单例（sharedUnitArtCache）：BattleStage/MapStage 共用一份，
+// 跨舞台/跨战斗复用已解码图（各自 new 会导致头像等素材重复加载与解码）。
+
+import { ArtImageCache } from './imageCache.js';
 //
 // 视角约定（STAGE_DESIGN §0 用户手绘稿）：友军（玩家/队友）背对屏幕，敌军正对屏幕。
 //   unit_xxx.png      = 舞台用图（友军=背视图，敌军=正视图）
@@ -34,13 +39,7 @@ export function unitHeightFactor(defId, side) {
   return UNIT_HEIGHT_FACTOR[defId] ?? 0.9;
 }
 
-export class UnitArtCache {
-  /** @param {object} options  onLoad(url): 某张立牌加载完成（Stage 借此补挂纹理） */
-  constructor({ onLoad = null } = {}) {
-    this._cache = new Map(); // url -> HTMLImageElement | 'loading' | 'error'
-    this._onLoad = onLoad;
-  }
-
+export class UnitArtCache extends ArtImageCache {
   resolveUrl(defId, side) {
     const file = side === 'player' ? 'unit_player.png' : UNIT_ART_FILES[defId];
     return file ? (ART_URLS[file] ?? null) : null;
@@ -51,30 +50,15 @@ export class UnitArtCache {
    */
   get(defId, side) {
     const url = this.resolveUrl(defId, side);
-    return url ? this._getByUrl(url) : null;
+    return url ? this.getByUrl(url) : null;
   }
 
   /** 按文件名直接取图（如 'unit_player_front.png' 头像正视图），加载语义同 get()。 */
   getFile(file) {
     const url = ART_URLS[file] ?? null;
-    return url ? this._getByUrl(url) : null;
-  }
-
-  _getByUrl(url) {
-    const hit = this._cache.get(url);
-    if (hit && hit !== 'loading' && hit !== 'error') return hit;
-    if (hit === undefined) this._load(url);
-    return null;
-  }
-
-  _load(url) {
-    this._cache.set(url, 'loading');
-    const img = new Image();
-    img.onload = () => {
-      this._cache.set(url, img);
-      this._onLoad?.(url);
-    };
-    img.onerror = () => this._cache.set(url, 'error');
-    img.src = url;
+    return url ? this.getByUrl(url) : null;
   }
 }
+
+// 应用级共享单例：BattleStage/MapStage 直接复用（node 单测无 document 不会触达）
+export const sharedUnitArtCache = new UnitArtCache();

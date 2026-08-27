@@ -5,7 +5,7 @@ import Enemy from '../src/core/state/enemy.js';
 import { zoneOf, aliveAllies } from '../src/core/state/battleState.js';
 import { registerEffect } from '../src/core/effects/registry.js';
 import { registerSkill } from '../src/core/skills/registry.js';
-import { registerEnemy } from '../src/core/enemies/registry.js';
+import { registerEnemy, getEnemyDefinition } from '../src/core/enemies/registry.js';
 import AIActInstruction from '../src/core/instructions/aiAct.js';
 import AwaitPlayerInputInstruction from '../src/core/instructions/input.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
@@ -88,6 +88,17 @@ registerEnemy({
     const remi = aliveAllies(actx.battleState)[0];
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: actx.unit, target: remi ?? actx.player, amount: 8,
+    }));
+  },
+});
+
+// 杀手：一击致命（失败路径专用）
+registerEnemy({
+  id: 'killer', name: '杀手',
+  createUnit: () => new Enemy({ defId: 'killer', name: '杀手', maxHp: 50 }),
+  act(actx) {
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 100,
     }));
   },
 });
@@ -250,5 +261,39 @@ describe('复杂战斗：效果致死', () => {
     expect(d.isFinished()).toBe(true);
     expect(d.calls('battleEnd')).toHaveLength(1);
     expect(d.kernel.subscriptions).toHaveLength(0);
+  });
+});
+
+describe('复杂战斗：失败路径', () => {
+  it('玩家死于敌方回合：后续敌人行动被 abort，战后清理照常', () => {
+    const d = new BattleDriver({ deck: ['punch'], enemies: ['killer', 'killer'], seed: 3 });
+    const [k1, k2] = d.state.enemies;
+    d.start();
+
+    d.endTurn(); // 敌方回合：k1 一击致命
+
+    expect(d.verdict).toBe('defeat');
+    expect(d.player.hp).toBe(0);
+    expect(k1.actionIndex).toBe(1);  // k1 行动过
+    expect(k2.actionIndex).toBe(0);  // k2 被 abort 未曾行动（终局 abort 的是 TurnLoop 而非根节点）
+    expect(d.calls('battleEnd')[0].args[0].result).toBe('defeat');
+    expect(d.kernel.subscriptions).toHaveLength(0);
+  });
+});
+
+describe('复杂战斗：敌方施加状态', () => {
+  it('燃焰术士给玩家上燃烧，玩家回合开始跳伤并递减', () => {
+    const pyro = getEnemyDefinition('pyro').createUnit();
+    pyro.maxHp = 200; // 木桩化：活过四次行动（第 3 次给玩家上 2 层燃烧）
+    pyro.hp = 200;
+    const d = new BattleDriver({ deck: ['punch'], enemies: [pyro], seed: 5 });
+    d.start();
+
+    for (let i = 0; i < 4 && !d.isFinished(); i++) d.endTurn();
+
+    const burnTicks = d.calls('damage')
+      .filter(c => c.args[0].pierce === true && c.args[0].target === d.player);
+    expect(burnTicks.length).toBeGreaterThan(0);
+    expect(d.player.getEffectStacks('burn')).toBeLessThanOrEqual(1);
   });
 });

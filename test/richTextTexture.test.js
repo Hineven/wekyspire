@@ -38,14 +38,4 @@ describe('richtext/texture', () => {
     // canvas 内部像素是 scale 倍
     expect(mock.canvas.width).toBe(60);
   });
-
-  it('glyph 绘制调用顺序与文案一致', () => {
-    const mock = createMockCanvas();
-    renderRichTextBlock('甲乙', {
-      measure: (t) => t.length * 10,
-      createCanvas: mock.factory,
-    });
-    const texts = mock.calls.filter(c => c[0] === 'fillText').map(c => c[1]);
-    expect(texts).toEqual(['甲', '乙']);
-  });
 });

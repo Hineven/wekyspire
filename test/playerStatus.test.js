@@ -1,101 +1,93 @@
 import { describe, it, expect } from 'vitest';
-import { PlayerStatusObject, PLAYER_STATUS_LAYOUT } from '../src/stage/objects/PlayerStatusObject.js';
+import { PlayerStatusObject } from '../src/stage/objects/PlayerStatusObject.js';
+import { ManaCrystalObject } from '../src/stage/objects/ManaCrystalObject.js';
+import { ApCoinObject } from '../src/stage/objects/ApCoinObject.js';
 
-// 左下角玩家状态栏契约：底板/头像/四行信息结构、左对齐布局、头像纹理裁切、销毁
-describe('PlayerStatusObject 玩家状态栏', () => {
-  it('结构：底板 + 头像 + 描边环 + AP/魏启两排 + 金币/瑞米行（左对齐）+ 能力留位', () => {
-    const bar = new PlayerStatusObject();
-    expect(bar.getObjectByName('plate')).toBeTruthy();
-    expect(bar.getObjectByName('avatar')).toBeTruthy();
-    expect(bar.getObjectByName('avatarRing')).toBeTruthy();
-    expect(bar.getObjectByName('moneyLabel')).toBeTruthy();
-    expect(bar.getObjectByName('remiLabel')).toBeTruthy();
-    expect(bar.getObjectByName('abilities')).toBeTruthy(); // 能力/灵脉留位挂载点
-    expect(bar.apPips.parent).toBe(bar);
-    expect(bar.manaPips.parent).toBe(bar);
-    // 四行左锚定在同一 x，自上而下 AP > 魏启 > 金币 > 瑞米
-    expect(bar.apPips.position.x).toBe(bar.manaPips.position.x);
-    expect(bar.apPips.position.y).toBeGreaterThan(bar.manaPips.position.y);
-    expect(bar.manaPips.position.y).toBeGreaterThan(bar.getObjectByName('moneyLabel').position.y);
-    expect(bar.getObjectByName('moneyLabel').position.y).toBeGreaterThan(bar.getObjectByName('remiLabel').position.y);
-    // node 无 document：底板退化纯色半透明
-    expect(bar._plateMaterial.map).toBe(null);
-    expect(bar._plateMaterial.opacity).toBeLessThan(1);
+// 玩家状态栏测试方针：只测基础设施契约（美术图异步补挂 = 前端绘制同步、
+// dispose 订阅退订 = 资源卸载、悬浮开销交互态机 = 面板功能骨干）。
+// 视觉样式（布局/颜色/淡入淡出曲线等）不写测试，浏览器由用户验收。
+describe('PlayerStatusObject 玩家状态栏（基础设施契约）', () => {
+  it('美术图注入：unitArt 提供水晶/金币图 → 按态挂载；onLoad 回调补挂', () => {
+    const fullImg = { width: 2048, height: 2048 };
+    const listeners = [];
+    const unitArt = {
+      getFile: (f) => (f === 'mana_crystal_full.png' ? fullImg : null),
+      addOnLoad: (fn) => { listeners.push(fn); return () => listeners.splice(listeners.indexOf(fn), 1); },
+    };
+    const bar = new PlayerStatusObject({ unitArt });
+    expect(listeners).toHaveLength(1);
+    // 有魏启（current>0）→ 满晶图挂载
+    bar.manaCrystal.setValue(2, 3);
+    expect(bar.manaCrystal._crystalMaterial.map).toBeTruthy();
+    // onLoad：缓存补齐空晶/金币图后回调 → 0 魏启切空晶、金币挂美术面
+    const emptyImg = { width: 2048, height: 2048 };
+    const coinImg = { width: 2048, height: 2048 };
+    unitArt.getFile = (f) => (f === 'mana_crystal_empty.png' ? emptyImg : f === 'ap_coin.png' ? coinImg : null);
+    listeners[0]();
+    bar.manaCrystal.setValue(0, 3);
+    expect(bar.manaCrystal._crystalMaterial.map).toBeTruthy(); // 空晶图
+    expect(bar.apCoin._coinMaterial.map).toBeTruthy();         // 金币美术面
   });
 
-  it('资源点左对齐：label 左缘锚定排原点（不再是整体居中）', () => {
-    const bar = new PlayerStatusObject({
-      bakeLabel: (text) => ({
-        texture: null, width: text.length * 10, height: 20, // 100px 宽 → 10wu
-      }),
-    });
-    bar.apPips.setValue(2, 3);
-    // "AP 2/3" = 6 字符 × 10px = 60px → 6wu：左缘 = 排原点 x，中心 = +3
-    expect(bar.apPips._label.position.x).toBeCloseTo(3, 5);
-    // 点排紧跟文本之后（6 + 1.5 间隙 + 点半径 0.9 = 8.4）
-    expect(bar.apPips._pips[0].position.x).toBeCloseTo(8.4, 5);
-  });
-
-  it('头像：setAvatar 按图比例做方形裁切（repeat/offset），旧纹理被销毁', () => {
-    const bar = new PlayerStatusObject();
-    const fake = { width: 400, height: 800 }; // 竖图
-    bar.setAvatar(fake);
-    const map = bar._avatarMaterial.map;
-    expect(map).toBeTruthy();
-    // 方形裁切：repeat.x * w_px == repeat.y * h_px；顶对齐（offset.y + repeat.y = 1）
-    expect(map.repeat.x * 400).toBeCloseTo(map.repeat.y * 800, 5);
-    expect(map.offset.y + map.repeat.y).toBeCloseTo(1, 5);
-    // 水平居中
-    expect(map.offset.x).toBeCloseTo((1 - map.repeat.x) / 2, 5);
-    const first = map;
-    bar.setAvatar(fake); // 重挂：旧纹理销毁
-    expect(first.disposed ?? true).toBe(true); // three Texture.dispose 后无标志位，仅验证不抛错
-    expect(bar._avatarMaterial.map).not.toBe(first);
-    bar.setAvatar(null); // 非法输入静默忽略
-    expect(bar._avatarMaterial.map).toBeTruthy();
-  });
-
-  it('布局常量自洽：面板能容纳头像与四行信息，且在 UI 底缘可视区内', () => {
-    const L = PLAYER_STATUS_LAYOUT;
-    // 头像（含环）在面板左半内
-    expect(L.AVATAR_X - L.RING_R).toBeGreaterThan(-L.PANEL_W / 2);
-    // 信息行左锚点在头像右侧
-    expect(L.ROW_X).toBeGreaterThan(L.AVATAR_X + L.RING_R - 1);
-    // 四行均在面板高度内
-    for (const y of [L.ROW_AP_Y, L.ROW_MANA_Y, L.ROW_MONEY_Y, L.ROW_REMI_Y]) {
-      expect(Math.abs(y)).toBeLessThan(L.PANEL_H / 2);
-    }
-  });
-
-  it('金币行/瑞米行：签名驱动重烘，左缘锚定，被打跑红色警示', () => {
-    const baked = [];
-    const bar = new PlayerStatusObject({
-      bakeLabel: (text) => {
-        baked.push(text);
-        return { texture: {}, width: text.length * 10, height: 20 };
-      },
-    });
-    bar.setMoney(30);
-    expect(baked).toContain('金币 30');
-    // 左缘锚定 ROW_X：中心 = ROW_X + lw/2（30wu? "金币 30" 5字符 → 50px → 5wu）
-    const money = bar.getObjectByName('moneyLabel');
-    expect(money.position.x).toBeCloseTo(PLAYER_STATUS_LAYOUT.ROW_X + 2.5, 5);
-    // 签名不变不重烘
-    bar.setMoney(30);
-    expect(baked.filter(t => t === '金币 30')).toHaveLength(1);
-
-    bar.setRemi({ level: 2, fruits: 3 });
-    expect(baked).toContain('remi Lv.2 · 果 3');
-    expect(bar.getObjectByName('remiLabel').material.color.getHex()).toBe(0xb7eb8f);
-    bar.setRemi({ level: 2, fruits: 3, drivenOff: true });
-    expect(baked).toContain('remi 被打跑');
-    expect(bar.getObjectByName('remiLabel').material.color.getHex()).toBe(0xff7875);
-  });
-
-  it('dispose：资源点随父级销毁', () => {
-    const bar = new PlayerStatusObject();
-    bar.apPips.setValue(3, 3);
+  it('dispose：水晶/金币/盾徽随父级销毁，美术订阅退订', () => {
+    const listeners = [];
+    const unitArt = {
+      getFile: () => null,
+      addOnLoad: (fn) => { listeners.push(fn); return () => listeners.splice(listeners.indexOf(fn), 1); },
+    };
+    const bar = new PlayerStatusObject({ unitArt });
+    bar.manaCrystal.setValue(3, 3);
+    bar.apCoin.setValue(3, 3);
+    bar.setPlayerShield(5);
+    bar.setRemi({ present: true, hp: 15 });
     expect(() => bar.dispose()).not.toThrow();
-    expect(bar.apPips._pips).toHaveLength(0);
+    expect(listeners).toHaveLength(0); // 退订
+  });
+
+  it('瑞米区：setRemi 显隐与血量数字去抖重烘；头像补挂走专用材质', () => {
+    const bar = new PlayerStatusObject({});
+    const remi = () => bar.getObjectByName('remi');
+    expect(remi().visible).toBe(false); // 初始隐藏（出战状态由注入驱动）
+
+    bar.setRemi({ present: true, hp: 15 });
+    expect(remi().visible).toBe(true);
+    const tex1 = bar.getObjectByName('remiHpText').material.map;
+    expect(tex1).toBeTruthy();
+    bar.setRemi({ present: true, hp: 15 }); // 同值不重烘（签名去抖）
+    expect(bar.getObjectByName('remiHpText').material.map).toBe(tex1);
+    bar.setRemi({ present: true, hp: 9 });  // 血量变化重烘
+    expect(bar.getObjectByName('remiHpText').material.map).not.toBe(tex1);
+
+    bar.setRemi({ present: false });        // 未出战/被打跑 → 整区隐藏
+    expect(remi().visible).toBe(false);
+
+    bar.setRemiAvatar({ width: 1024, height: 1024 }); // 近方肖像整图入圆
+    expect(bar.getObjectByName('remiAvatar').material.map).toBeTruthy();
+  });
+
+  it('悬浮开销交互态机：零开销=normal，可负担=highlight，不满足=insufficient（覆盖高亮）', () => {
+    const mana = new ManaCrystalObject({});
+    const ap = new ApCoinObject({});
+    mana.setValue(2, 3);
+    ap.setValue(3, 3);
+
+    mana.setHoverCost(0, 2);
+    ap.setHoverCost(0, 3);
+    expect(mana.mode).toBe('normal');
+    expect(ap.mode).toBe('normal');
+
+    mana.setHoverCost(2, 2); // 恰好可负担
+    ap.setHoverCost(1, 3);
+    expect(mana.mode).toBe('highlight');
+    expect(ap.mode).toBe('highlight');
+
+    mana.setHoverCost(3, 2); // 超出可用 → 不足态覆盖高亮
+    ap.setHoverCost(4, 3);
+    expect(mana.mode).toBe('insufficient');
+    expect(ap.mode).toBe('insufficient');
+
+    // 回到常态可从不足态直接切回高亮（悬浮切卡场景）
+    ap.setHoverCost(1, 3);
+    expect(ap.mode).toBe('highlight');
   });
 });

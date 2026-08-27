@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
+import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
-import { UnitArtCache } from '../art/unitArt.js';
+import { sharedUnitArtCache } from '../art/unitArt.js';
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
 // 夜空背景 + 点星 + 右侧塔楼侧视图（只看当前层附近一截——看不到顶底）+ 高亮当前层。
@@ -19,8 +20,9 @@ export class MapStage {
    * @param {object} options
    *   totalFloors: 塔高（缺省 44）
    *   bakeLabel: 文本烘焙（缺省浏览器用 renderRichTextBlock，node 退化为 1x1 占位）
+   *   unitArt: 立牌/图标美术缓存（缺省浏览器用 sharedUnitArtCache，node 为 null）
    */
-  constructor({ totalFloors = 44, bakeLabel = null } = {}) {
+  constructor({ totalFloors = 44, bakeLabel = null, unitArt = null } = {}) {
     this.name = 'map';
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b1026); // 夜空
@@ -31,13 +33,20 @@ export class MapStage {
     this._buildStars();
 
     // ---- 玩家状态栏（与战斗内共享 PlayerStatusObject，同位同尺寸）----
+    // 头像素材走应用级共享立牌缓存（与 BattleStage 同一份，互为预热）；
+    // 必须先取缓存再构造状态栏——构造时即按缓存现状挂水晶/金币美术并订阅 onLoad
+    this._unitArt = unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null);
     this._bakeLabel = bakeLabel || defaultBakeLabel();
-    this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel });
+    this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
-    this._unitArt = (typeof document !== 'undefined')
-      ? new UnitArtCache({ onLoad: () => this._applyAvatar() })
-      : null;
+    // 顶端居中资源行（金币数值 + 遗物槽；与战斗内同物同位）
+    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
+    this.uiScene.add(this._topBar);
+    this._unsubArt = this._unitArt?.addOnLoad(() => {
+      this._applyAvatar();
+      // 水晶/金币的晚到补挂由 PlayerStatusObject 自身的 onLoad 订阅负责（unitArt 已注入）
+    });
     this._applyAvatar();
 
     this._unsubTick = null;
@@ -45,29 +54,37 @@ export class MapStage {
   }
 
   get statusBar() { return this._statusBar; }
+  get topBar() { return this._topBar; }
 
   /**
    * 同步状态栏数值（run 层每次阶段迁移后由编排器调用）。
-   * 战斗外 AP 恒满（战斗内才消耗）；魏启 = run 持久值；金币/瑞米同源于 run。
+   * 战斗外 AP 恒满（战斗内才消耗）；魏启 = run 持久值；金币/遗物路由到顶端资源行；
+   * hp/maxHp 为角色血条（run 快照，战斗外无变化不重烘）；remi 为瑞米区视图
+   * （{ present, hp }，编排器压平后透传）。
    */
-  setStatus({ ap, apMax, mana, manaMax, money = null, remi = null }) {
-    this._statusBar.apPips.setValue(ap, apMax);
-    this._statusBar.manaPips.setValue(mana, manaMax);
-    if (money !== null) this._statusBar.setMoney(money);
+  setStatus({ ap, apMax, mana, manaMax, money = null, hp = null, maxHp = null, relics = null, remi = null }) {
+    this._statusBar.apCoin.setValue(ap, apMax);
+    this._statusBar.manaCrystal.setValue(mana, manaMax);
+    if (money !== null) this._topBar.setMoney(money);
+    if (hp != null && maxHp != null) this._statusBar.setPlayerHp(hp, maxHp);
+    if (relics) this._topBar.setRelics(relics);
     if (remi) this._statusBar.setRemi(remi);
   }
 
   _applyAvatar() {
-    const img = this._unitArt?.getFile('unit_player_front.png');
-    if (img) this._statusBar.setAvatar(img);
+    // 骑士徽章头像与战斗内同源（knight_avatar.png，近方肖像整图入圆）；
+    // 瑞米专用圆像同源补挂（remi_avatar.png，素材已预翻转）
+    const img = this._unitArt?.getFile('knight_avatar.png');
+    if (img) this._statusBar.setAvatar(img, { crop: 'full', mirror: true });
+    const remiImg = this._unitArt?.getFile('remi_avatar.png');
+    if (remiImg) this._statusBar.setRemiAvatar(remiImg);
   }
 
-  // 帧驱动：资源点颜色渐变/弹跳过渡（与 BattleStage 同契约）
+  // 帧驱动：状态栏整体过渡（资源点颜色渐变/弹跳 + 双血环弧长/低量脉动）
   onEnter(manager) {
     this._unsubTick?.();
     this._unsubTick = manager.onTick((dt) => {
-      this._statusBar.apPips.update(dt);
-      this._statusBar.manaPips.update(dt);
+      this._statusBar.update(dt);
     });
   }
 
@@ -78,6 +95,7 @@ export class MapStage {
 
   dispose() {
     this.onExit();
+    this._unsubArt?.(); // 共享缓存订阅摘除（防幽灵舞台补挂头像）
     for (const child of [...this._tower.children]) { // 塔身层块（与 setFloor 重建同律）
       child.geometry.dispose();
       child.material.dispose();
@@ -87,6 +105,7 @@ export class MapStage {
     this._stars?.material.dispose();
     this.scene.remove(this._stars);
     this._statusBar.dispose();
+    this._topBar.dispose();
   }
 
   _buildStars() {
@@ -142,7 +161,7 @@ export class MapStage {
 }
 
 // 缺省文本烘焙：浏览器走 RichTextEngine（与 BattleStage 小字号同参数）；
-// node 无 document 退化为 1x1 占位（与 ResourcePipsObject 缺省一致）
+// node 无 document 退化为 1x1 占位（与其他状态件一致）
 function defaultBakeLabel() {
   if (typeof document === 'undefined') return null;
   return (text) => renderRichTextBlock(text, {

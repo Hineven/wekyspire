@@ -80,17 +80,17 @@ describe('演出', () => {
     const display = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 0 && r.to.y === -2 && r.to.scale === 1.15);
     expect(display).toBeTruthy();
 
-    tween.completeAll(); // 停留 → 衔接离场飞行 → 播完销毁
-    const flight = tween.records.find(r => r.obj.uniqueID === first.uniqueID && r.to.x === 80 && r.to.y === -38);
-    expect(flight).toBeTruthy();
-    expect(flight.obj).toBe(display.obj); // 全程同一视觉实体
-    // 展示结束后不回手牌跟踪（无折返）：展示记录与离场飞行记录之间没有 hand 锚点记录
+    tween.completeAll(); // 停留 → 衔接离场弧线飞行（淡出）→ 停车
+    // 全程同一视觉实体：展示对象 == 终态视图，弧线落位坟堆
+    const view = stage._views.get(first.uniqueID);
+    expect(view).toBe(display.obj);
+    expect(view.position.x).toBe(80);
+    expect(view.position.y).toBe(-38);
+    // 展示结束后不回手牌跟踪（无折返）：展示记录之后没有 hand 锚点记录
     const cardRecords = tween.records.filter(r => r.obj.uniqueID === first.uniqueID);
     const iDisplay = cardRecords.indexOf(display);
-    const iFlight = cardRecords.indexOf(flight);
-    expect(cardRecords.slice(iDisplay + 1, iFlight).some(r => r.to.containerKey === 'hand')).toBe(false);
-    expect(stage.animator.getObject(first.uniqueID)).toBeNull();
-    expect(stage.scene.children.includes(display.obj)).toBe(false);
+    expect(cardRecords.slice(iDisplay + 1).some(r => r.to.containerKey === 'hand')).toBe(false);
+    expect(stage.animator.getObject(first.uniqueID)).toBe(display.obj); // 停车留存：注册健在
     expect(stage._piles.discard.count).toBe(1);
   });
 
@@ -149,7 +149,7 @@ describe('演出', () => {
     bridge.start();
     tween.completeAll();
     const first = bridge.getProjection().hand[0];
-    const obj = stage._cards.get(first.uniqueID).object;
+    const obj = stage._views.get(first.uniqueID);
 
     const finishes = [];
     const onFinish = p => finishes.push(p.id);
@@ -178,7 +178,7 @@ describe('演出', () => {
 
     // 威力提升随 sync 节拍应用（状态差分驱动），金色脉冲 non-blocking
     tween.completeAll();
-    const obj = stage._cards.get(target.uniqueID).object;
+    const obj = stage._views.get(target.uniqueID);
     expect(obj._overlay).toBeTruthy();
     expect(obj._overlay.material.color.getHex()).toBe(0xffd34c);
     // 脉冲 tween 收回后隐藏

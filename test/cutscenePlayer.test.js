@@ -46,8 +46,10 @@ describe('剧本数据与触发规则契约', () => {
     expect(p.pendingTriggers({ stage: 'reward', floor: 11, storyMode: false })).toEqual([]);
   });
 
-  it('缺省转场总时长 ≤ 1.5s', () => {
-    expect(SCENE_TRANSITION_MS.cover + SCENE_TRANSITION_MS.reveal).toBeLessThanOrEqual(1500);
+  it('缺省转场总时长 ≤ 2s（加大幕间预算：盖屏 750 + 揭幕 950）', () => {
+    expect(SCENE_TRANSITION_MS.cover + SCENE_TRANSITION_MS.reveal).toBeLessThanOrEqual(2000);
+    expect(SCENE_TRANSITION_MS.cover).toBeGreaterThanOrEqual(700);
+    expect(SCENE_TRANSITION_MS.reveal).toBeGreaterThanOrEqual(900);
   });
 });
 
@@ -225,6 +227,32 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
       'wipe', 'wipe', 'wipe',
       'fade',
     ]);
+    expect(p.state.mode).toBe('idle');
+  });
+
+  it('atCover 返回 Promise（战场预载）：黑幕保持到兑现才 reveal；holdMs 追加停留', async () => {
+    const timeline = [];
+    const p = createCutscenePlayer({
+      sleep: (ms) => { timeline.push(`sleep:${ms}@${p.state.phase}`); return Promise.resolve(); },
+    });
+    let resolvePreload = null;
+    const preloadDone = new Promise(r => { resolvePreload = r; });
+    let revealedBeforeResolve = null;
+
+    const transition = p.sceneTransition(
+      () => preloadDone, // 黑幕中点：建场并返回 whenReady 信号
+      { holdMs: 120 },
+    );
+    // 微任务推进到 atCover 之后：reveal 尚未开始（黑幕等待预载）
+    await flush(8);
+    revealedBeforeResolve = p.state.phase;
+    expect(revealedBeforeResolve).toBe('cover'); // 预载未兑现：仍处全黑段
+
+    resolvePreload(); // 预载完成
+    await transition;
+    expect(p.state.phase).toBe(null);
+    // holdMs 生效：atCover 兑现后先追加黑幕停留再 reveal
+    expect(timeline).toContain('sleep:120@cover');
     expect(p.state.mode).toBe('idle');
   });
 });

@@ -121,8 +121,11 @@ export class RunDriver {
   defaultRoomAction(run) {
     switch (run.currentRoom) {
       case 'training':
-        if (trainingMode(run) === 'upgrade') trainUpgrade(run, upgradableCards(run)[0].uniqueID);
-        else { trainDrawChoices(run); trainDraw(run, null); } // 抓牌分支缺省跳过
+        // 先升后抓：升级后强制三选一，headless 缺省取首张候选
+        if (trainingMode(run) === 'upgrade') {
+          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+          trainDraw(run, run.roomData.drawChoices[0]);
+        } else { trainDrawChoices(run); trainDraw(run, null); } // 抓牌分支缺省跳过
         break;
       case 'camp':
         // 缺省：瑞米被打跑则找回，否则休整（保命优先）

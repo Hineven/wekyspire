@@ -24,8 +24,12 @@ const DEFAULT_EASE = 'power2.out';
 
 // 默认 tween：一条 timeline 同步推 position/scale/rotation，返回可 kill 句柄
 // delayMs：延迟启动（用于"停留"节拍——保持某姿态一段时间再进下一步）
+// onUpdate(progress)：逐帧进度回调——只服务通用键补间（进度代理 {t:0→1}）。
+//   gsap 原生 onUpdate 不带实参，这里必须显式回传被补间键的当前值，
+//   否则消费方（曲线飞行的 sample(t)）拿到 undefined → NaN 变换 → 飞行全程不可见
 // 导出供 BattleStage 的非注册表 FX（overlay 脉冲等不阻塞队列的小动画）复用
-export function gsapTween(object3D, to, { durationMs, ease = DEFAULT_EASE, onComplete, delayMs = 0 } = {}) {
+const HANDLED_KEYS = new Set(['x', 'y', 'z', 'scale', 'rotation']);
+export function gsapTween(object3D, to, { durationMs, ease = DEFAULT_EASE, onComplete, delayMs = 0, onUpdate = null } = {}) {
   const duration = Math.max(0.001, durationMs / 1000);
   const delay = Math.max(0, delayMs / 1000);
   const tl = gsap.timeline({ onComplete });
@@ -38,8 +42,21 @@ export function gsapTween(object3D, to, { durationMs, ease = DEFAULT_EASE, onCom
   if (to.rotation != null) {
     tl.to(object3D.rotation, { z: to.rotation, duration, ease, delay }, 0);
   }
+  // 通用键（进度代理 {t: 0→1} 等）：直接补间在目标对象上（曲线飞行等自管 onUpdate 的演出）
+  const rest = {};
+  for (const k of Object.keys(to)) {
+    if (!HANDLED_KEYS.has(k)) rest[k] = to[k];
+  }
+  if (Object.keys(rest).length) {
+    const progressKey = Object.keys(rest)[0];
+    tl.to(object3D, {
+      ...rest,
+      duration, ease, delay,
+      onUpdate: onUpdate ? () => onUpdate(object3D[progressKey]) : undefined,
+    }, 0);
+  }
   // 纯延迟（无属性变化）：用于停留
-  if (to.x == null && to.y == null && to.z == null && to.scale == null && to.rotation == null) {
+  if (to.x == null && to.y == null && to.z == null && to.scale == null && to.rotation == null && !Object.keys(rest).length) {
     tl.to({}, { duration: 0.001, delay }, 0);
   }
   return tl;
@@ -133,11 +150,42 @@ export class StageAnimator {
     return this.animate(id, target, opts);
   }
 
+  /**
+   * 自定义演出动画：补间一个进度代理 t∈[0,1]，逐帧回调 onUpdate(t)——
+   * 曲线飞行/淡入淡出等自管轨迹的动画由此表达，同时保持状态机语义
+   * （ANIMATING 期间布局跟踪让位，完成后自动回落 idle，kill 走注册表）。
+   * onUpdate 只在真 gsap 下逐帧触发；同步测试 tween 至少保证 onComplete
+   * （调用方在 onComplete 里硬化终态，使无 onUpdate 的路径也能落位）。
+   */
+  animateCustom(id, { durationMs = 300, ease, delayMs = 0, onUpdate = null, onComplete } = {}) {
+    const entry = this._registry.get(id);
+    if (!entry) {
+      onComplete?.();
+      return null;
+    }
+    this._killTweens(id);
+    entry.state = ANIMATOR_STATES.ANIMATING;
+    const proxy = { t: 0 };
+    const handle = this._tween(proxy, { t: 1 }, {
+      durationMs, ease, delayMs, onUpdate,
+      onComplete: () => {
+        entry.state = ANIMATOR_STATES.IDLE;
+        onComplete?.();
+      },
+    });
+    entry.tweens.push(handle);
+    return handle;
+  }
+
   _trackToAnchor(id, durationMs) {
     const entry = this._registry.get(id);
     const anchor = this._layout?.getAnchor(id);
     if (!entry || !anchor) return;
-    const handle = this._tween(entry.object3D, anchor, { durationMs, ease: TRACKING_EASE });
+    // 锚点是布局产物，带元数据（containerKey 等）——只取变换键喂给 tween，
+    // 不把整个对象透传（元数据键会被补间到物体上，gsap 报 Missing plugin）
+    const handle = this._tween(entry.object3D, {
+      x: anchor.x, y: anchor.y, z: anchor.z, scale: anchor.scale, rotation: anchor.rotation,
+    }, { durationMs, ease: TRACKING_EASE });
     entry.tweens.push(handle);
   }
 

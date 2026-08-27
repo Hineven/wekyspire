@@ -3,6 +3,7 @@
 import '../effects/definitions/strength.js';
 import './effects.js';
 import './skills.js';
+import './bodySkills.js';
 import './enemies.js';
 import './allies.js';
 import './abilities.js';

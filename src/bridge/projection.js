@@ -47,6 +47,14 @@ export function projectUnit(u) {
 }
 
 // 卡牌完整视图（Stage 烘焙纹理用）：runtime 投影 + 定义元数据 + 动态描述文本
+// 关键词 id → 卡面页脚标签（drawFooter 直出；未映射的透传原词）。
+// 导出供 shell 侧同源卡面预览（CardFacePreview）复用同一映射。
+export const KEYWORD_LABELS = Object.freeze({
+  exhaust: '消耗',
+  slowStart: '缓启',
+  anchored: '锁定',
+});
+
 export function projectCardFull(battle, rt) {
   const def = getSkillDefinition(rt.defId);
   const sctx = makeSkillCtx(battle.ctx, rt);
@@ -58,12 +66,16 @@ export function projectCardFull(battle, rt) {
     series: def.series ?? null,
     image: def.image ?? null,
     cost: def.cost ?? { mana: 0, actionPoint: 0 },
-    keywords: def.keywords ?? [],
+    keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
     // 前端交互声明：'enemy' = 需指定敌方目标（瞄准交互）；'none' = 免目标（拖拽出牌）
     targetMode: def.targetMode ?? 'none',
     charges: def.charges ?? null,
-    text: def.describe ? def.describe(sctx) : '',
+    // 战斗卡面 = 应用后描述（实时结算，previewDamage 干跑）；缺省回落应用前机制描述
+    text: def.battleDescribe?.(sctx) ?? (def.describe ? def.describe(sctx) : ''),
+    // 未应用描述（机制详情）：仅双轨卡提供（战斗卡面按住 Shift 临时切换），
+    // 纯机制卡（无 battleDescribe）本身就是未应用口径，无切换意义 → null
+    textAlt: def.battleDescribe && def.describe ? def.describe(sctx) : null,
   };
 }
 

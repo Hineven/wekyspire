@@ -2,14 +2,19 @@ import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册效果定义（燃烧等），emoji/特征色解析依赖注册表
 import { bakeCardFace, CARD_FACE_SIZE } from '../src/stage/richtext/cardFace.js';
 
-// 全吸收 mock ctx：记录 fillText / 画布尺寸
+// 全吸收 mock ctx：记录 fillText / drawImage 首参 / 画布尺寸
 function createMockCanvas() {
   const texts = [];
+  const images = [];
+  const gradient = { addColorStop: () => {} }; // 渐变对象桩：addColorStop 可链
   const canvas = {
     width: 0, height: 0,
     getContext: () => new Proxy({
       fillText: (t) => texts.push(t),
       measureText: (t) => ({ width: t.length * 10 }),
+      drawImage: (img) => images.push(img),
+      createLinearGradient: () => gradient,
+      createRadialGradient: () => gradient,
     }, {
       get(target, prop) {
         if (prop in target) return target[prop];
@@ -18,7 +23,7 @@ function createMockCanvas() {
       set() { return true; }, // 吸收 fillStyle/font 等赋值
     }),
   };
-  return { canvas, texts, factory: (w, h) => { canvas.width = w; canvas.height = h; return canvas; } };
+  return { canvas, texts, images, factory: (w, h) => { canvas.width = w; canvas.height = h; return canvas; } };
 }
 
 const CARD = {
@@ -67,6 +72,34 @@ describe('cardFace', () => {
     expect(mock.texts).toContain('S');
   });
 
+  it('Shift 方标：仅双轨卡的已应用卡面呈现（含 shift 热区），详情面/纯机制卡无标', () => {
+    // 已应用面（双轨卡）：方标字母 + shift 热区
+    const mock = createMockCanvas();
+    const r = bakeCardFace({ ...CARD, textAlt: '6伤害' }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    expect(mock.texts).toContain('S');
+    const region = r.hitRegions.find(h => h.type === 'shift');
+    expect(region).toBeTruthy();
+    expect(region.payload.name).toBe('按住 Shift 显示详细信息');
+    // 热区落在右下角
+    expect(region.rect.x + region.rect.w).toBeCloseTo(CARD_FACE_SIZE.width - 8);
+    expect(region.rect.y + region.rect.h).toBeCloseTo(CARD_FACE_SIZE.height - 8);
+
+    // 详情面（altFace）：不带标
+    const mock2 = createMockCanvas();
+    const r2 = bakeCardFace({ ...CARD, textAlt: '6伤害', altFace: true }, {
+      createCanvas: mock2.factory, measure: (t) => t.length * 10,
+    });
+    expect(r2.hitRegions.find(h => h.type === 'shift')).toBeUndefined();
+
+    // 纯机制卡（无 textAlt）：无标
+    const r3 = bakeCardFace(CARD, {
+      createCanvas: createMockCanvas().factory, measure: (t) => t.length * 10,
+    });
+    expect(r3.hitRegions.find(h => h.type === 'shift')).toBeUndefined();
+  });
+
   it('有卡图时正文区下移到图区之下', () => {
     const mock = createMockCanvas();
     const r = bakeCardFace({ ...CARD, text: '施加/effect{燃烧}' }, {
@@ -90,5 +123,40 @@ describe('cardFace', () => {
     const regions = r.hitRegions.filter(h => h.type === 'effect');
     expect(regions.length).toBe(2);
     expect(regions.every(h => h.payload.name === '燃烧')).toBe(true);
+  });
+
+  it('无卡图 → 系列字形占位水印（series 优先，回落 type，未知回落「技」）', () => {
+    const mock = createMockCanvas();
+    bakeCardFace({ ...CARD, type: 'fire', series: 'blade' }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    expect(mock.texts).toContain('刃'); // series 优先
+
+    const mock2 = createMockCanvas();
+    bakeCardFace({ ...CARD, type: 'fire' }, {
+      createCanvas: mock2.factory, measure: (t) => t.length * 10,
+    });
+    expect(mock2.texts).toContain('炎'); // 回落 type
+
+    const mock3 = createMockCanvas();
+    bakeCardFace({ ...CARD, type: 'unknownType', series: null }, {
+      createCanvas: mock3.factory, measure: (t) => t.length * 10,
+    });
+    expect(mock3.texts).toContain('技');
+  });
+
+  it('无卡图时不发起 drawImage（占位是程序化绘制）；有卡图/decor 时各绘制一次', () => {
+    const mock = createMockCanvas();
+    bakeCardFace(CARD, { createCanvas: mock.factory, measure: (t) => t.length * 10 });
+    expect(mock.images.length).toBe(0); // 占位不走图像
+
+    const mock2 = createMockCanvas();
+    const art = { width: 100, height: 100 };
+    const decor = { width: 200, height: 270 };
+    bakeCardFace(CARD, {
+      createCanvas: mock2.factory, measure: (t) => t.length * 10, art, decor,
+    });
+    expect(mock2.images).toContain(art);
+    expect(mock2.images).toContain(decor);
   });
 });

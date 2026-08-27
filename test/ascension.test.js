@@ -5,7 +5,6 @@ import {
   ASCENSION_PLACEHOLDER, LEINO_DIMENSIONS, totalLeino,
   ascensionReady, chooseAscension, chooseAscensionAbility,
 } from '../src/core/run/ascension.js';
-import { RunDriver } from '../src/core/run/runDriver.js';
 
 // 构造"刚离开训练房"的 run：floor 1 训练房，手动设置训练次数
 const leaveTraining = (trainings) => {
@@ -81,21 +80,5 @@ describe('进阶事件结算', () => {
   it('能力授予占位：无待授予能力时直接调用 chooseAscensionAbility 抛错', () => {
     const run = createRun({ seed: 1 });
     expect(() => chooseAscensionAbility(run, 'x')).toThrow(/没有待授予的能力/);
-  });
-});
-
-describe('RunDriver 整局进阶接入', () => {
-  it('整局自动触发进阶：进阶次数 = floor(trainingCount/门槛)，四维总和一致', () => {
-    const d = new RunDriver({ seed: 7, totalFloors: 11 }).start();
-    d.runToEnd();
-    const p = d.run.player;
-    const expected = Math.min(
-      Math.floor(p.trainingCount / ASCENSION_PLACEHOLDER.trainingsPerLevel),
-      ASCENSION_PLACEHOLDER.maxTotalLeino,
-    );
-    expect(p.ascensionCount).toBe(expected);
-    expect(totalLeino(d.run)).toBe(p.ascensionCount);
-    // 占位缺省策略加火灵脉
-    expect(p.leino.fire).toBe(p.ascensionCount);
   });
 });

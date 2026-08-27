@@ -8,6 +8,7 @@ import {
 } from '../src/core/run/runFlow.js';
 import { RunDriver } from '../src/core/run/runDriver.js';
 import { chooseSkillReward } from '../src/core/run/rewards.js';
+import { ASCENSION_PLACEHOLDER, totalLeino } from '../src/core/run/ascension.js';
 
 describe('塔结构与楼层表（RUN_DESIGN §1/§4）', () => {
   it('44 层 = 4 章，Boss 层 11/22/33/44', () => {
@@ -127,7 +128,7 @@ describe('阶段机迁移', () => {
 });
 
 describe('RunDriver 整局驱动（§6.5）', () => {
-  it('一行跑完整局（11 层一章，含 Boss）', () => {
+  it('一行跑完整局（11 层一章，含 Boss）：训练房/进阶缺省处理一致', () => {
     const d = new RunDriver({ seed: 7, totalFloors: 11 }).start();
     d.runToEnd();
     expect(d.isFinished()).toBe(true);
@@ -135,6 +136,19 @@ describe('RunDriver 整局驱动（§6.5）', () => {
     // 每层都有战斗记录，层数连续
     expect(d.history.map(h => h.floor)).toEqual(
       Array.from({ length: d.history.length }, (_, i) => i + 1));
+    // 训练房缺省处理：每个训练房都被计入 trainingCount
+    const trainingRooms = d.history.filter(h => h.room === 'training').length;
+    expect(trainingRooms).toBeGreaterThan(0);
+    expect(d.run.player.trainingCount).toBe(trainingRooms);
+    // 进阶缺省处理：次数 = floor(trainingCount/门槛)，四维总和与灵脉分配一致
+    const p = d.run.player;
+    const expected = Math.min(
+      Math.floor(p.trainingCount / ASCENSION_PLACEHOLDER.trainingsPerLevel),
+      ASCENSION_PLACEHOLDER.maxTotalLeino,
+    );
+    expect(p.ascensionCount).toBe(expected);
+    expect(totalLeino(d.run)).toBe(p.ascensionCount);
+    expect(p.leino.fire).toBe(p.ascensionCount); // 占位缺省策略加火灵脉
   });
 
   it('onRewards/onRoom 钩子在每个对应阶段被调用', () => {

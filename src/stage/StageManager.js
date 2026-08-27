@@ -90,12 +90,21 @@ export class StageManager {
 
   attach(canvas) {
     this._renderer = this._createRenderer({ canvas });
+    this._renderer?.setPixelRatio?.(this._devicePixelRatio());
     // 阴影贴图（月光穿窗投影用；假 renderer 无 shadowMap，单测跳过）
     if (this._renderer.shadowMap) {
       this._renderer.shadowMap.enabled = true;
       this._renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft 在新版 three 已弃用（自动回退 PCF）
     }
     return this;
+  }
+
+  // HiDPI：渲染缓冲按设备像素比放大（cap 2 防 4K+ 高倍屏填充率浪费）。
+  // 缺了这步，DPR>1 的屏上 canvas 以 CSS 像素渲染再被浏览器拉伸——整屏发糊
+  // （烘焙分辨率再高也救不回来）。node 单测无 window → 1。
+  _devicePixelRatio() {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    return Math.min(dpr, 2);
   }
 
   // UI 正交视锥：z=0 平面可视高恰好 = worldHeight（与世界相机同约定）。
@@ -118,6 +127,8 @@ export class StageManager {
     this._camera.aspect = width / height;
     this._camera.updateProjectionMatrix();
     this._fitUiFrustum(width / height);
+    // setSize 前重申像素比：窗口跨屏拖动时 DPR 可能变化
+    this._renderer?.setPixelRatio?.(this._devicePixelRatio());
     this._renderer?.setSize?.(width, height);
     this._stage?.composeResize?.(width, height); // 后处理链 RT 跟随（如体积光 composer）
   }

@@ -1,6 +1,8 @@
 // Picker（§4.7）：raycast 拾取 + hit map 二级查询 + hover 事件。
 // 优先级铁律：token 热区 > 整卡 > 场景按钮 > 背景。
-// 命中 token 热区 → 发 tooltip:*（Shell 消费）；未命中 → 整卡 hover（card:hover/leave）。
+// 命中 token 热区 → 发 tooltip:*（Shell 消费）；卡面 token（富文本/S 标）同时
+// 维持所属卡的 hover（悬浮到关键词上不该让手牌退出撑开态）；单位效果行 token
+// 照旧离卡（单位无卡悬浮概念）。
 // 拖拽由 BattleStage 在 Picker 的 card 命中基础上驱动（射线与牌桌平面求交），不在本模块内。
 //
 // 双相机路由：pickable 带 space（'world'|'ui'，缺省 world）——UI pass 用专用 uiCamera
@@ -84,7 +86,9 @@ export class Picker {
 
     if (hit.kind === 'token') {
       const same = this._hoverToken && this._hoverToken.id === hit.id && this._hoverToken.region === hit.region;
-      this._leaveCard();
+      // 卡面 token = 仍悬浮在所属卡上：维持整卡 hover 不中断（tooltip 与撑开并存）
+      if (this._pickables.get(hit.id)?.kind === 'card') this._hoverCardOn(hit.id);
+      else this._leaveCard();
       if (!same) {
         this._hoverToken = { id: hit.id, region: hit.region };
         this._bus.emit(EventNames.TOOLTIP_SHOW, {
@@ -102,15 +106,19 @@ export class Picker {
 
     this._leaveToken();
     if (hit.kind === 'card') {
-      if (this._hoverCard !== hit.id) {
-        this._leaveCard();
-        this._hoverCard = hit.id;
-        this._bus.emit(EventNames.CARD_HOVER, { uniqueID: hit.id });
-      }
+      this._hoverCardOn(hit.id);
     } else {
       this._leaveCard();
     }
     return hit;
+  }
+
+  // 卡悬浮维护：目标卡变化时先离后入（同卡在 整卡↔卡面token 间移动不抖动）
+  _hoverCardOn(id) {
+    if (this._hoverCard === id) return;
+    this._leaveCard();
+    this._hoverCard = id;
+    this._bus.emit(EventNames.CARD_HOVER, { uniqueID: id });
   }
 
   _leaveToken() {

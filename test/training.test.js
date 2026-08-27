@@ -5,9 +5,8 @@ import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { createRun } from '../src/core/run/runFlow.js';
 import { promotionTargets, canPromoteRuntime, promoteCard } from '../src/core/run/promotion.js';
 import {
-  trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw,
+  trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining,
 } from '../src/core/run/rooms/training.js';
-import { RunDriver } from '../src/core/run/runDriver.js';
 
 // 测试用晋升链（本文件独立模块注册表，不污染其他用例）
 const noop = { use: () => true, describe: () => '测试卡' };
@@ -37,14 +36,19 @@ describe('promotesTo 晋升机制（RUN_DESIGN §6.2）', () => {
     expect(canPromoteRuntime(createSkillRuntime('testDead'))).toBe(false); // 目标内容缺省 → 跳过
   });
 
-  it('晋升：换绑 defId + uniqueID 不变 + 记一次训练', () => {
+  it('晋升：换绑 defId + uniqueID 不变；升级本身不计次（计次在终端抓牌动作）', () => {
     const run = createRun({ seed: 1 });
     const rt = createSkillRuntime('testBase');
     run.player.deck.push(rt);
     trainUpgrade(run, rt.uniqueID);
     expect(rt.defId).toBe('testUp');
     expect(run.player.deck.at(-1).uniqueID).toBe(rt.uniqueID);
-    expect(run.player.trainingCount).toBe(1);
+    expect(run.player.trainingCount).toBe(0);
+    // 升级后强制尾款已挂起：三选一候选待抉择
+    expect(run.roomData?.forced).toBe(true);
+    expect(run.roomData?.drawChoices.length).toBe(3);
+    trainDraw(run, run.roomData.drawChoices[0]);
+    expect(run.player.trainingCount).toBe(1); // 每次到访恰记一次
   });
 
   it('分叉晋升：缺省取首个，指定 targetId 走对应分支；非法目标抛错', () => {
@@ -64,10 +68,11 @@ describe('promotesTo 晋升机制（RUN_DESIGN §6.2）', () => {
     const rt = createSkillRuntime('testDead');
     run.player.deck.push(rt);
     expect(() => trainUpgrade(run, rt.uniqueID)).toThrow(/无法升级/);
+    expect(run.roomData).toBeNull(); // 失败不留半途状态
   });
 });
 
-describe('训练场免费流程（§4.1）', () => {
+describe('训练场免费流程（§4.1 先升后抓强绑）', () => {
   it('有可升级卡 → upgrade 模式', () => {
     const run = createRun({ seed: 1 });
     run.player.deck.push(createSkillRuntime('testBase'));
@@ -75,7 +80,7 @@ describe('训练场免费流程（§4.1）', () => {
     expect(upgradableCards(run).length).toBe(1);
   });
 
-  it('无可升级卡 → draw 模式：3 选 1 抓牌可领取或跳过', () => {
+  it('无可升级卡 → draw 退化模式：3 选 1 可领取或跳过', () => {
     const run = createRun({ seed: 2 }); // 初始卡组均无 promotesTo
     expect(trainingMode(run)).toBe('draw');
 
@@ -90,23 +95,36 @@ describe('训练场免费流程（§4.1）', () => {
     expect(run.roomData).toBeNull(); // 抉择后清理
   });
 
-  it('抓牌跳过：不入 deck 也记一次训练；未 roll 候选直接抓牌抛错', () => {
+  it('跳过放行回归（原 bug）：未 roll 候选直接跳过不再抛错；领取仍须先 roll', () => {
     const run = createRun({ seed: 2 });
-    expect(() => trainDraw(run, null)).toThrow(/尚未生成抓牌候选/);
-    trainDrawChoices(run);
     const before = run.player.deck.length;
     trainDraw(run, null);
     expect(run.player.deck.length).toBe(before);
     expect(run.player.trainingCount).toBe(1);
+    expect(run.roomData).toBeNull();
+    expect(() => trainDraw(run, 'anything')).toThrow(/尚未生成抓牌候选/);
   });
-});
 
-describe('RunDriver 训练房缺省行为', () => {
-  it('整局中每个训练房都被缺省处理，trainingCount 与训练房数一致', () => {
-    const d = new RunDriver({ seed: 7, totalFloors: 11 }).start();
-    d.runToEnd();
-    const trainingRooms = d.history.filter(h => h.room === 'training').length;
-    expect(trainingRooms).toBeGreaterThan(0);
-    expect(d.run.player.trainingCount).toBe(trainingRooms);
+  it('先升后抓强绑：升级后的抓牌是必付尾款，null 跳过被核心拦截', () => {
+    const run = createRun({ seed: 3 });
+    run.player.deck.push(createSkillRuntime('testBase'));
+    trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+    const choices = run.roomData.drawChoices;
+    expect(choices.length).toBe(3);
+    expect(() => trainDraw(run, null)).toThrow(/不可跳过/);
+    const before = run.player.deck.length;
+    trainDraw(run, choices[0]);
+    expect(run.player.deck.length).toBe(before + 1);
+    expect(run.player.deck.at(-1).defId).toBe(choices[0]);
+    expect(run.player.trainingCount).toBe(1);
+    expect(run.roomData).toBeNull();
+  });
+
+  it('skipTraining：阶段一「免费升一」跳过也记一次训练并清瞬态', () => {
+    const run = createRun({ seed: 2 });
+    trainDrawChoices(run);          // 脏 roomData 也应被清掉
+    skipTraining(run);
+    expect(run.player.trainingCount).toBe(1);
+    expect(run.roomData).toBeNull();
   });
 });

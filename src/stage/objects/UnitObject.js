@@ -1,6 +1,5 @@
 // UnitObject（STAGE_DESIGN §3）：场景内的一个单位（玩家/敌人/队友）——2.5D 立牌。
 // 结构：Group（位置/缩放由 BattleStage 按战线轴槽位设置，animator 补间作用于整组）
-//   ├─ shadow:  引擎画椭圆，平贴地板不动（仿射/billboard 都不打在它身上）
 //   ├─ billboard: 立牌形 billboard 子组（faceCamera 逐帧 yaw 转向相机，立面保持垂直地面）
 //   │   ├─ standee: 立牌子组（呼吸/受击等仿射只作用在这里）
 //   │   │   └─ body: PlaneGeometry，**底部锚定**（position.y = h/2），纹理=抠图 PNG，
@@ -68,23 +67,13 @@ export class UnitObject extends THREE.Group {
     this._bakeLabel = bakeLabel || defaultBakeLabel;
     this._ppw = pixelsPerWorld;
     this._standeeHeight = standeeHeight;
+    this._groundRadius = standeeHeight * 0.32; // 金环横向半径（setArt 后随牌面加宽）
     this._hasArt = false;
     this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
 
-    // 地面阴影：压扁椭圆平贴地板（水平面），半透明涂鸦黑；仿射动效不打在它身上
-    this._shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(1, 24),
-      new THREE.MeshBasicMaterial({ color: 0x0a0a12, transparent: true, opacity: 0.45, depthWrite: false, fog: false }),
-    );
-    this._shadow.name = 'shadow';
-    this._shadow.rotation.x = -Math.PI / 2; // 平贴地面（local y → world z 纵深）
-    this._shadow.position.y = 0.15;         // 抬离地板防 z-fight
-    this._shadow.scale.set(standeeHeight * 0.32, standeeHeight * 0.1, 1);
-    this.add(this._shadow);
-
     // billboard 子组：standee/hpBar/fxAnchor 全部挂进来，faceCamera 逐帧水平转向相机
     // （立牌形/圆柱 billboard，只 yaw——斜视下立牌不转正会被透视压斜；
-    // 立面保持垂直地面，球面 pitch 后仰已弃；阴影/金环贴地不参与）
+    // 立面保持垂直地面，球面 pitch 后仰已弃；金环贴地不参与）
     this._billboard = new THREE.Group();
     this._billboard.name = 'billboard';
     this._billboard.rotation.order = 'YXZ';
@@ -208,7 +197,7 @@ export class UnitObject extends THREE.Group {
     old?.dispose?.();
     this._body.geometry.dispose();
     this._body.geometry = new THREE.PlaneGeometry(this._standeeHeight * aspect, this._standeeHeight);
-    this._shadow.scale.set(this._standeeHeight * aspect * 0.5, this._standeeHeight * 0.1, 1);
+    this._groundRadius = this._standeeHeight * aspect * 0.5;
     this._hasArt = true;
   }
 
@@ -339,7 +328,7 @@ export class UnitObject extends THREE.Group {
   /**
    * 立牌形（圆柱）billboard：只转 yaw 让牌面水平朝向相机，立面保持与地面垂直
    * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃——用户定）。
-   * 相机静止时每帧结果相同，代价可忽略；阴影/金环贴地不参与。
+   * 相机静止时每帧结果相同，代价可忽略；金环贴地不参与。
    * @param {THREE.Vector3|{x,y,z}} camDir 相机方向向量
    */
   faceCamera(camDir) {
@@ -377,7 +366,7 @@ export class UnitObject extends THREE.Group {
     else this._body.material.color.set(SIDE_COLORS[this.side] ?? 0x888888);
   }
 
-  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板，与阴影同语言）。 */
+  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板）。 */
   setHighlight(on) {
     if (on === !!this._ring) return;
     if (on) {
@@ -388,7 +377,7 @@ export class UnitObject extends THREE.Group {
           blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
         }),
       );
-      const rx = this._shadow.scale.x;
+      const rx = this._groundRadius;
       this._ring.rotation.x = -Math.PI / 2;
       this._ring.position.y = 0.25;
       this._ring.scale.set(rx * 1.3, this._standeeHeight * 0.14, 1);
@@ -406,8 +395,6 @@ export class UnitObject extends THREE.Group {
   dispose() {
     this.setHighlight(false);
     this._clearEffectRows();
-    this._shadow.geometry.dispose();
-    this._shadow.material.dispose();
     this._body.geometry.dispose();
     this._body.material.map?.dispose?.();
     this._body.material.dispose();
