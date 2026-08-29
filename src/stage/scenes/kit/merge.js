@@ -8,6 +8,26 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { materialOf } from './materials.js';
 
+// 负 scale（mirror）网格的世界矩阵行列式为负，烘焙后三角形绕序翻转、会被背面剔除——
+// 逐三角形反转顶点序恢复外向绕序（非索引几何直接三三换位）。
+function flipWinding(g) {
+  for (const name of ['position', 'normal', 'color']) {
+    const attr = g.attributes[name];
+    if (!attr) continue;
+    const item = attr.itemSize;
+    const arr = attr.array;
+    for (let i = 0; i < arr.length; i += item * 3) {
+      for (let k = 0; k < item; k++) {
+        const a = arr[i + k], b = arr[i + item + k];
+        arr[i + k] = b; arr[i + item + k] = a;
+        // 第三顶点不动：交换前两个即反转绕序
+      }
+    }
+    attr.needsUpdate = true;
+  }
+  return g;
+}
+
 /**
  * 合并 Group 子树里的静态网格。
  * 约定输入 root 的直接子节点 = 已摆好位的单个道具（位置/旋转/缩放已设）；
@@ -38,6 +58,9 @@ export function mergeStatic(root) {
         g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
       }
       g.applyMatrix4(o.matrixWorld);
+      if (new THREE.Matrix3().setFromMatrix4(o.matrixWorld).determinant() < 0) {
+        flipWinding(g);
+      }
       if (!buckets.has(fam)) buckets.set(fam, []);
       buckets.get(fam).push(g);
     });

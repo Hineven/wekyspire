@@ -23,12 +23,12 @@ export default {
     // 框架：四腿微外撇 + 三层搁板 + 背靠两杆（瓶斜靠用）
     for (const sx of [-1.6, 1.6]) for (const sz of [-0.55, 0.55]) {
       g.add(K.put(K.tilt(
-        K.box({ color: P.woodDark, size: [0.35, 4.2, 0.35] }),
+        K.box({ color: P.woodDark, size: [0.35, 4.2, 0.35], family: 'wood' }),
         0, 0, sx * 0.03), sx, 2.1, sz));
     }
     for (const y of [0.7, 2.0, 3.3]) {
-      g.add(K.put(K.box({ color: P.wood, size: [3.5, 0.24, 1.3] }), 0, y, 0));
-      g.add(K.put(K.box({ color: P.woodDark, size: [3.4, 0.14, 0.14] }), 0, y + 1.0, -0.5));
+      g.add(K.put(K.box({ color: P.wood, size: [3.5, 0.24, 1.3], family: 'wood' }), 0, y, 0));
+      g.add(K.put(K.box({ color: P.woodDark, size: [3.4, 0.14, 0.14], family: 'wood' }), 0, y + 1.0, -0.5));
     }
     // 酒瓶：分层斜靠背杆，颜色轮换；rng 在场时逐瓶微抖（确定性变体）
     const standing = bottles - fallen;

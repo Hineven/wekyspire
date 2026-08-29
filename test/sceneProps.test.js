@@ -202,6 +202,26 @@ describe('kit 静态合并', () => {
       new THREE.MeshStandardMaterial()));
     expect(() => mergeStatic(root)).toThrow(/非 kit 族材质/);
   });
+
+  it('mirror 负 scale 网格参与合并时绕序被翻正（烘焙后面朝相机可见）', () => {
+    const root = new THREE.Group();
+    const m = mirror(box({ color: P.stone, size: [1, 1, 1] }));
+    root.add(put(m, 3, 0.5, 0));
+    const out = mergeStatic(root);
+    const merged = out.children.find(c => c.isMesh);
+    const geo = merged.geometry;
+    // 合并后绕序健康度：每三角形法线（右手定则）应与内置 normal 属性同向
+    const pos = geo.attributes.position, nor = geo.attributes.normal;
+    const v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
+    const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), n = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i += 3) {
+      v0.fromBufferAttribute(pos, i); v1.fromBufferAttribute(pos, i + 1); v2.fromBufferAttribute(pos, i + 2);
+      e1.subVectors(v1, v0); e2.subVectors(v2, v0);
+      n.crossVectors(e1, e2);
+      expect(n.dot(new THREE.Vector3(
+        nor.getX(i), nor.getY(i), nor.getZ(i)))).toBeGreaterThan(0);
+    }
+  });
 });
 
 function grpOf(...children) {
@@ -325,8 +345,15 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
     const bbox = exactBounds(built);
     expect(Number.isFinite(bbox.min.x)).toBe(true); // 空组/退化几何在此暴露
     if (GROUNDED.has(def.place)) {
-      expect(bbox.min.y).toBeGreaterThanOrEqual(-0.6);
-      expect(bbox.max.y).toBeGreaterThan(0);
+      const mounts = Array.isArray(def.mount) ? def.mount : [def.mount ?? 'floor'];
+      if (mounts.includes('ceiling') && !mounts.includes('floor')) {
+        // 纯顶挂件：原点=天花板锚点，身体自锚点垂挂向下（max.y 近 0）
+        expect(bbox.max.y).toBeLessThanOrEqual(0.6);
+        expect(bbox.min.y).toBeLessThan(0);
+      } else {
+        expect(bbox.min.y).toBeGreaterThanOrEqual(-0.6);
+        expect(bbox.max.y).toBeGreaterThan(0);
+      }
     }
     // smallWall 宿主顶面 = topY（柱顶摆放准入的机器可读事实，容差 0.5）
     if (def.place === 'smallWall' && typeof def.topY === 'number') {
