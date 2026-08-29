@@ -234,6 +234,7 @@ function exactBounds(root) {
 const PLACE_SET = new Set([
   'roomWall', 'smallWall', 'floor', 'prop', 'floorDecal', 'wallStructure', 'wallDecor',
 ]);
+const MOUNT_SET = new Set(['floor', 'smallWallTop', 'ceiling']);
 const BAND_SET = new Set(['high', 'mid', 'low']);
 // 贴地类：build 产物应底部着地（bbox.min.y ≥ -GROUND_TOL）
 const GROUNDED = new Set(['prop', 'floorDecal', 'smallWall']);
@@ -268,7 +269,10 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
 
   it('类专属字段：mount/band/bayWidth 按摆放类补齐（CATALOG §2）', () => {
     if (def.place === 'prop') {
-      expect(['floor', 'smallWallTop', 'ceiling']).toContain(def.mount ?? 'floor');
+      // mount 可单值或数组（目录双宿主条目如 floor/smallWallTop）
+      const mounts = Array.isArray(def.mount) ? def.mount : [def.mount ?? 'floor'];
+      expect(mounts.length).toBeGreaterThan(0);
+      for (const mo of mounts) expect(MOUNT_SET.has(mo), `mount "${mo}"`).toBe(true);
     }
     if (def.place === 'wallDecor') {
       const bands = Array.isArray(def.band) ? def.band : [def.band];
@@ -323,6 +327,11 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
     if (GROUNDED.has(def.place)) {
       expect(bbox.min.y).toBeGreaterThanOrEqual(-0.6);
       expect(bbox.max.y).toBeGreaterThan(0);
+    }
+    // smallWall 宿主顶面 = topY（柱顶摆放准入的机器可读事实，容差 0.5）
+    if (def.place === 'smallWall' && typeof def.topY === 'number') {
+      expect(Math.abs(bbox.max.y - def.topY), `顶面 ${bbox.max.y.toFixed(2)} ≠ 声明 topY ${def.topY}`)
+        .toBeLessThanOrEqual(0.5);
     }
     if (def.footprint) {
       const ex = bbox.max.x - bbox.min.x, ez = bbox.max.z - bbox.min.z;

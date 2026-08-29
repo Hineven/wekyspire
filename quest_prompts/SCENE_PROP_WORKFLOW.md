@@ -98,6 +98,8 @@ export default {
 ```
 
 **登记**：`props/index.js` 显式 import + 注册表登记（同 content/index.js 约定）。
+`mount` 可为单值或数组（目录双宿主条目如 `mount: ['floor', 'smallWallTop']`，
+契约测试两者皆收；`band` 同理支持数组，见 CATALOG §2）。
 
 **预算**（契约测试常量，初期值）：单件 ≤ 40 个 Mesh（合并前）、顶点数 ≤ 3000、
 材质族 ≤ 3。超预算 = 拆资产或简化，不是调大常量。

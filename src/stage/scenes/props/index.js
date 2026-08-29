@@ -3,7 +3,12 @@
 // 陈列页/房型配方层的可用集合；新资产验收通过后由 orchestrator 按 id 排序插入。
 
 import bottleRack from './bottleRack.js';
+import candleStand from './candleStand.js';
+import columnRound from './columnRound.js';
+import pilasterHalf from './pilasterHalf.js';
 import rubblePile from './rubblePile.js';
+import statuePedestal from './statuePedestal.js';
+import vaseClay from './vaseClay.js';
 import wallTorch from './wallTorch.js';
 
 const propRegistry = new Map();
@@ -15,7 +20,12 @@ function register(def) {
 }
 
 register(bottleRack);
+register(candleStand);
+register(columnRound);
+register(pilasterHalf);
 register(rubblePile);
+register(statuePedestal);
+register(vaseClay);
 register(wallTorch);
 
 /** 全部已登记资产（id → 契约对象）。 */
