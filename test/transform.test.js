@@ -36,17 +36,16 @@ registerSkill({
   use() { return true; },
 });
 
-// 点化：选一张其他手牌，转化为点火（结算期输入 + 转化的集成）
+// 点化：选一张手牌，转化为点火（结算期输入 + 转化的集成；发动中自身已离手，剩余手牌皆候选）
 registerSkill({
   id: 'transmute', name: '点化',
   cost: { mana: 0, actionPoint: 1 },
   use(sctx, stage) {
     if (stage === 0) {
-      const others = sctx.battleState.zones.hand
-        .filter(c => c.uniqueID !== sctx.self.uniqueID);
-      if (others.length === 0) return true;
+      const hand = sctx.battleState.zones.hand;
+      if (hand.length === 0) return true;
       sctx.self._input = new AwaitPlayerInputInstruction({
-        request: { kind: 'selectHandCard', count: 1, candidates: others.map(c => c.uniqueID) },
+        request: { kind: 'selectHandCard', count: 1, candidates: hand.map(c => c.uniqueID) },
       });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;

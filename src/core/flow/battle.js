@@ -23,7 +23,7 @@ export function createBattle({
     enemies, allies, seed,
     chantCapacity: runState.player.chantSlotBase,
   });
-  battleState.config = { initialDraw: 4, drawPerTurn: 3, swapBaseCost: 0, ...config };
+  battleState.config = { initialDraw: 4, drawPerTurn: 2, swapBaseCost: 0, ...config };
   battleState.result = null;
 
   const kernel = new BattleKernel({

@@ -34,6 +34,7 @@ import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
+import { ScreenShake, DamageVignette, damageSeverity } from '../objects/screenImpactFX.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
 import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
@@ -101,11 +102,21 @@ export class BattleStage {
       scale: 3, // 卡面烘焙超采样：卡牌 26×35.1wu 在 1080p 已近 380px 高，scale 2 会糊
       art: this._artCache?.get(card) ?? null,
       decor: this._artCache?.getDecor?.(card) ?? null, // 系列装饰图层（素材未就位为 null，走程序化占位）
+      manaCrystal: this._unitArt?.getFile('mana_crystal_full.png') ?? null, // 魏启开销徽章素材（未就位蓝色圆回落）
     }));
     // 小字号文本（HP/效果行/资源点）：烘焙 scale 3 供更干净的 mipmap 链，
     // 并开各向异性过滤（效果行随 billboard 与俯视相机成斜角，aniso 防斜向模糊/闪烁）
     this._bakeLabel = bakeLabel || ((text) => {
       const out = renderRichTextBlock(text, { maxWidth: 220, scale: 3, style: { fontSize: 16, lineHeight: 20 } });
+      out.texture.anisotropy = Math.min(8, this._smMaxAnisotropy());
+      return out;
+    });
+    // 单位 billboard 文本（HP 数值/效果行/盾徽 chip）专用大字号烘焙：敌排在
+    // z≈-50 视距下屏幕像素密度仅 ~9px/wu，16px 字号的屏上高度只有 ~17px 且被
+    // mip 大幅缩小采样——视觉发糊。单位侧提到 22px + scale4（ppw 不变 → 世界
+    // 尺寸放大 ~37%、纹理密度 ×1.8）；玩家状态栏/顶栏仍走 16px 通用烘焙不动。
+    this._bakeUnitLabel = bakeLabel || ((text) => {
+      const out = renderRichTextBlock(text, { maxWidth: 320, scale: 4, style: { fontSize: 22, lineHeight: 28 } });
       out.texture.anisotropy = Math.min(8, this._smMaxAnisotropy());
       return out;
     });
@@ -189,12 +200,20 @@ export class BattleStage {
     this.scene.add(this.particles.points);
     this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
+
+    // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
+    // 震荡对双相机施加位移 = 世界 pass 与 UI pass 一起晃（真·全屏）；
+    // 渐晕是友军受击专属的视角边缘压暗压红覆盖面（uiScene 顶层）
+    this.shake = new ScreenShake({ cameras: [stageManager.camera, stageManager.uiCamera] });
+    this._vignette = new DamageVignette();
+    this.uiScene.add(this._vignette.object);
+
     this._unsubTick = stageManager.onTick((dt) => {
       this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
       this._updateBurning(dt);
-      for (const view of this._views.values()) view.updateGlow(dt);
+      for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       for (const unit of this._units.values()) {
         unit.update(dt);
         let fwd = this._sm.camera.localToWorld(new THREE.Vector3(0, 0, 1));
@@ -205,6 +224,8 @@ export class BattleStage {
       }
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
+      this._vignette.update(dt);  // 友军受击渐晕释放
+      this.shake.update(dt);      // 相机位移最后落位：本帧逻辑读基位，渲染带偏移
     });
 
     // 区域图标（牌库/坟墓）：点击开查看器，计数经 reconcile 同步
@@ -263,7 +284,10 @@ export class BattleStage {
       onBus(this._bus, EventNames.CARD_LEAVE, () => this._setHoveredCard(null)),
       // 共享素材缓存的加载完成订阅（到图补挂/重烘）：与总线退订同律，dispose 一并摘除
       this._artCache?.addOnLoad(() => this._rebakeCardFaces()),
-      this._unitArt?.addOnLoad(() => this._applyUnitArt()),
+      this._unitArt?.addOnLoad(() => {
+        this._applyUnitArt();
+        this._rebakeCardFaces(); // 魏启水晶等舞台素材到图后，卡面开销徽章补真图
+      }),
     ];
 
     // Shift 键盘态（详情卡面切换）：window 级监听，dispose 摘除；node 无 window 由单测直调
@@ -330,7 +354,8 @@ export class BattleStage {
         obj = new UnitObject({
           uniqueID: unitProj.uniqueID, side,
           standeeHeight: STANDEE_BASE_HEIGHT * unitHeightFactor(unitProj.defId, side),
-          bakeLabel: this._bakeLabel,
+          bakeLabel: this._bakeUnitLabel,
+          textureAnisotropy: Math.min(8, this._smMaxAnisotropy()),
         });
         obj._defId = unitProj.defId;
         this._units.set(unitProj.uniqueID, obj);
@@ -379,6 +404,16 @@ export class BattleStage {
         this._setCardZone(id, zone);
       }
     }
+    // 结算区（pending，发动中的卡）：模型标 'held'（展示位停留，不回手牌锚点）——
+    // 纯标签直写（同 _skillDisplay 的 held 分支），不走 _setCardZone 的隐形停车分支
+    for (const id of proj.pending ?? []) {
+      present.add(id);
+      if (this.model.getZone(id) !== 'held') {
+        this.model.setZone(id, 'held');
+        this.springs.release(id); // 离手即摘弹簧目标：不被拉回手牌锚点
+        this.picker.removePickable(id);
+      }
+    }
     for (const id of this.model.cards.keys()) {
       if (present.has(id) || this.model.getZone(id) === 'held') continue;
       console.warn('[stage] 注册卡不在任何显示 zone（上游丢节拍？）', id, this.model.getZone(id));
@@ -397,7 +432,9 @@ export class BattleStage {
     const view = this._ensureView(id);
     if (!change) return;
     if (zone !== 'hand' && zone !== 'chant') {
-      // 离场停车（节拍路径的飞行完成时已隐形；此处兜底 sync 驱动的迁移）
+      // 离手即摘弹簧目标（同 _skillDisplay 的 held 分支）：目标表只在 sync 节拍
+      // 重算，不即刻摘除的话空窗期 idle 卡会被拉回手牌锚点（回归病灶）
+      this.springs.release(id);
       view.visible = false;
       this.picker.removePickable(id);
     } else if (change.from !== 'held') {
@@ -430,11 +467,12 @@ export class BattleStage {
     this._views.delete(id);
     this.picker.removePickable(id);
     this.animator.unregister(id);
+    this.springs.release(id); // 弃管即刻化：不等弹簧 update 的惰性清理
     this.uiScene.remove(view);
     view.dispose();
   }
 
-  // 在场卡（手牌/咏唱）内容同步：显形 + 惰性烘面 + 拾取注册 + 激活流光 + 威力脉冲
+  // 在场卡（手牌/咏唱）内容同步：显形 + 惰性烘面 + 拾取注册 + 激活流光 + 威力脉冲 + 冷却盖纱
   _syncCardContents(proj) {
     const present = new Map();
     for (const c of proj.hand) present.set(c.uniqueID, { card: c, zone: 'hand' });
@@ -458,6 +496,11 @@ export class BattleStage {
       entry.prevPower = card.power ?? 0;
       // 咏唱已激活 → 边缘流光（幂等）
       view.setActiveGlow(zone === 'chant' && !!card.isActivated);
+      // 冷却态盖纱（特效层持久指示）：充能未满=冷却中青纱；冷却被衰败推深（超定义基准）=衰败红纱
+      const max = card.charges?.max ?? Infinity;
+      const cooling = card.remainingUses < max;
+      const decayed = cooling && card.currentCooldown > (card.charges?.cooldownTurns ?? 0);
+      view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null));
     }
   }
 
@@ -815,28 +858,27 @@ export class BattleStage {
     // 咏唱激活：不播 scale 脉冲——会打断入槽的跟踪飞行把卡晾在半路；
     // 激活表达由边缘流光（状态差分）承担，这里只打节拍
     if (type === EventNames.ANIM_CHANT_STARTED) return finish();
-    // 冷却推进：绿色脉冲，立即 finish——non-blocking，不占队列节拍
-    // （反向冷却/强冷却的差异化着色等 presenter 载荷带 delta 后再做）
+    // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
+    // 立即 finish——non-blocking，不占队列节拍
     if (type === EventNames.ANIM_COOLDOWN_TICK) {
-      this._pulseCard(payload?.skill?.uniqueID, 0x66ff99);
+      const delta = payload?.delta ?? 1;
+      this._pulseCard(payload?.skill?.uniqueID, delta < 0 ? 0xc87070 : 0x66ff99);
       return finish();
     }
 
     const target = this._findAnimTarget(payload);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
-    if (type === EventNames.ANIM_UNIT_DEATH && target) {
-      this.particles.spawn(target.position.x, target.position.y, { count: 22, color: 0x999999, speed: 16, ttl: 0.8, z: target.position.z });
-      this.animator.animate(target.uniqueID, { scale: 0.01 }, { durationMs: 300, onComplete: finish });
-      return;
-    }
-    // 治疗/护盾/效果：目标脉冲 + 对应色粒子；治疗追加 +N 绿色文本粒子（无重力上飘）
+    if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, finish);
+    // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
+    // 治疗追加 +N 绿色文本粒子（无重力上飘）
     if (target && (type === EventNames.ANIM_HEAL || type === EventNames.ANIM_SHIELD || type === EventNames.ANIM_EFFECT)) {
       const fx = {
-        [EventNames.ANIM_HEAL]: { color: 0x55ff88, gravity: 25 },
-        [EventNames.ANIM_SHIELD]: { color: 0x66aaff, gravity: 0 },
-        [EventNames.ANIM_EFFECT]: { color: 0xffd34c, gravity: 0 },
+        [EventNames.ANIM_HEAL]: { color: 0x66ff9e, accent: 0xd0ffe0, gravity: 18 },
+        [EventNames.ANIM_SHIELD]: { color: 0x8fc3ff, accent: 0xeaf4ff, gravity: -8 },
+        [EventNames.ANIM_EFFECT]: { color: 0xffd34c, accent: 0xffedb0, gravity: -6 },
       }[type];
-      this.particles.spawn(target.position.x, target.position.y, { count: 10, speed: 10, ttl: 0.6, z: target.position.z ?? 0, ...fx });
+      this.particles.spawn(target.position.x, target.position.y, { count: 16, color: fx.color, speed: 10, ttl: 0.6, size: 1.4, gravity: fx.gravity, z: target.position.z ?? 0 });
+      this.particles.spawn(target.position.x, target.position.y, { count: 8, color: fx.accent, speed: 16, ttl: 0.45, size: 1.0, gravity: fx.gravity, z: target.position.z ?? 0 });
       if (type === EventNames.ANIM_HEAL && (payload?.healed ?? 0) > 0) {
         const p = this._unitToUI(target, (Math.random() - 0.5) * 3, 4);
         this.particles.spawnText(
@@ -871,8 +913,9 @@ export class BattleStage {
 
   // 发动展示（全局唯一卡牌：展示用本体，无替身无瞬移）：
   // 卡本体从当前位置（手牌/松手点）飞到中央放大 → 停留 → 节拍 finish。
-  // 收尾分两路：已有离场节拍在排队（正常打出/焚毁）→ 停留展示位等收（不回手牌）；
-  // 否则（咏唱入槽 / 结算期输入挂起，离场节拍尚未产生）→ 回锚点跟踪
+  // 收尾分两路：已有离场节拍在排队（正常打出/焚毁）或卡已进结算区（pending，
+  // 结算期输入挂起、离场节拍尚未产生）→ 停留展示位等收（不回手牌——它已不是手牌）；
+  // 否则（咏唱入槽等）→ 回锚点跟踪
   _skillDisplay(payload, finish) {
     const id = payload?.skill?.uniqueID;
     const view = id != null ? this._views.get(id) : null;
@@ -886,9 +929,13 @@ export class BattleStage {
           onComplete: () => {
             this._displayCard = null;
             finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
-            if (!this._views.has(id)) return;
-            if (this._hasDepartureBeatQueued(id)) this.model.setZone(id, 'held'); // 停留位等收
-            // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+            if (this._views.has(id)) {
+              if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
+                this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
+                this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
+              }
+              // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+            }
           },
         });
       },
@@ -930,10 +977,19 @@ export class BattleStage {
     const dealt = payload?.dealt ?? 0;
     const absorbed = payload?.shieldAbsorbed ?? 0;
 
+    // 全屏受击演出：震荡烈度 = 生命值伤害 + 护盾吸收 ×0.2（护盾受击严重度低）；
+    // 收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕。均为 non-blocking FX，
+    // 与闪红/粒子/读数并行，不占队列节拍
+    const severity = damageSeverity(dealt, absorbed);
+    if (severity > 0) {
+      this.shake.impulse(severity);
+      if (unit.side !== 'enemy') this._vignette.pulse(severity);
+    }
+
     if (absorbed > 0) {
       // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
       this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 12, color: 0x7fb8ff, speed: 16, ttl: 0.6, z: unit.position.z,
+        count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
       });
       const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
       this.particles.spawnText(
@@ -951,8 +1007,12 @@ export class BattleStage {
 
     if (dealt > 0) {
       unit.flash?.(0xff2222);
+      // 受击火花双色爆发：主簇暖红橙 + 高速亮黄白迸溅（系统内亮度抖动再分层）
       this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 16, color: 0xff5533, speed: 22, z: unit.position.z,
+        count: 24, color: 0xff6a3d, speed: 22, size: 1.6, z: unit.position.z,
+      });
+      this.particles.spawn(unit.position.x, unit.position.y + 2, {
+        count: 10, color: 0xffd9a0, speed: 30, ttl: 0.4, size: 1.1, z: unit.position.z,
       });
       // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
       const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
@@ -968,7 +1028,9 @@ export class BattleStage {
       );
       const id = unit.uniqueID;
       const x0 = unit.position.x;
-      this.animator.animate(id, { x: x0 + 1.8 }, {
+      // 击退幅度随伤害缩放（与震荡同语言）：轻伤轻晃、重伤踉跄
+      const knock = 1.1 + Math.min(dealt, 20) * 0.055;
+      this.animator.animate(id, { x: x0 + knock }, {
         durationMs: 80,
         ease: 'power1.in',
         onComplete: () => {
@@ -987,6 +1049,74 @@ export class BattleStage {
     this.animator.animate(unit.uniqueID, {}, { delayMs: 220, onComplete: finish });
   }
 
+  // 单位死亡演出（用户定 2026-08）：立牌「以脚为轴」向后倾倒（重力加速）→
+  // 落地扬尘 + 一次阻尼回弹 → 焚毁（焦黑化 + alphaTest 侵蚀淡出 + 余烬升腾）→
+  // 整体隐藏收殓。节拍阻塞至收殓，其后的 sync 才应用 isDead 面色（先演后变）。
+  // 倾倒作用于 billboard 的 X 轴（YXZ 序下与 faceCamera 的 yaw 正交组合，逐帧
+  // yaw 不吃掉倾倒角），旋转轴过脚底——立牌物理感的根源；牌面立面底部锚定，
+  // 绕原点转即天然「栽倒」而非「缩没」。
+  _unitDeathBeat(unit, finish) {
+    const id = unit.uniqueID;
+    const billboard = unit.billboard;
+    unit.hideIntention(); // 意图即隐：尸体不再预告下一手
+    const px = unit.position.x;
+    const py = unit.position.y;
+    const pz = unit.position.z;
+    // TIP 略欠 90°：完全放平会透视成一条线，82° 平躺仍留一线牌面可读
+    const TIP = THREE.MathUtils.degToRad(82);
+
+    // ① 倒下（~0.47s，power2.in 重力加速：越落越快）
+    this.animator.animateCustom(id, {
+      durationMs: 470,
+      ease: 'power2.in',
+      onUpdate: (t) => { billboard.rotation.x = -TIP * t; },
+      onComplete: () => {
+        // 落地扬尘：近处低速大颗粒 + 外围溅尘（加色混合下土色即微光尘雾）
+        this.particles.spawn(px, py + 0.8, { count: 18, color: 0xb59a72, speed: 9, ttl: 0.7, gravity: -6, size: 2.2, z: pz });
+        this.particles.spawn(px, py + 0.5, { count: 12, color: 0x857358, speed: 16, ttl: 0.45, gravity: -12, size: 1.4, z: pz });
+        // ② 回弹（~0.22s）：阻尼单次反弹，sin 包络 × (1-t) 衰减，峰值离地约 2°
+        this.animator.animateCustom(id, {
+          durationMs: 220,
+          onUpdate: (t) => {
+            const lift = THREE.MathUtils.degToRad(4) * Math.sin(Math.PI * t) * (1 - t);
+            billboard.rotation.x = -(TIP - lift);
+          },
+          onComplete: () => this._unitBurnAway(unit, finish),
+        });
+      },
+    });
+  }
+
+  // ③ 焚毁：状态绘制先隐（尸体不再读数），立牌焦黑化 + alphaTest 侵蚀淡出
+  // （opacity 压低 alpha 后 0.5 阈值逐像素 discard，边缘呈烧蚀状）+ 余烬/烟升腾；
+  // 播毕整体隐藏——place() 不重置 visible，尸体自此退场（后续 sync 幂等保持隐藏）。
+  _unitBurnAway(unit, finish) {
+    const bodyMat = unit.body.material;
+    unit.hideStatus();
+    unit.body.castShadow = false; // 深度材质不认 opacity：不关影，影子会在淡出期赖在地板上
+    bodyMat.transparent = true;
+    bodyMat.needsUpdate = true;
+    const startColor = bodyMat.color.clone();
+    const charColor = new THREE.Color(0x1a0f0a);
+    const px = unit.position.x;
+    const py = unit.position.y;
+    const pz = unit.position.z;
+    this.particles.spawn(px, py + 1, { count: 26, color: 0xffa040, speed: 8, ttl: 0.6, gravity: 14, size: 1.1, z: pz - 2 });
+    this.particles.spawn(px, py + 1, { count: 12, color: 0x6b655e, speed: 4, ttl: 0.9, gravity: 6, size: 2.2, z: pz - 2 });
+    this.animator.animateCustom(unit.uniqueID, {
+      durationMs: 430,
+      ease: 'power1.in',
+      onUpdate: (t) => {
+        bodyMat.opacity = 1 - t;
+        bodyMat.color.copy(startColor).lerp(charColor, Math.min(1, t * 1.3)); // 先焦后散
+      },
+      onComplete: () => {
+        unit.visible = false;
+        finish();
+      },
+    });
+  }
+
   // 显示状态（上一 sync 快照）里某单位的盾量——判断本击是否吸穿护盾的依据
   _displayShieldOf(unitId) {
     const p = this._snapshot;
@@ -998,17 +1128,7 @@ export class BattleStage {
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
   _pulseCard(id, color) {
-    const obj = this._views.get(id);
-    if (!obj) return;
-    const overlay = obj.ensureOverlay();
-    overlay.material.color.set(color);
-    overlay.visible = true;
-    overlay.scale.set(1.2, 1.2, 1);
-    overlay.userData.fxTween?.kill?.();
-    overlay.userData.fxTween = this._tweenFactory(overlay, { scale: 1.0 }, {
-      durationMs: 220,
-      onComplete: () => { overlay.visible = false; },
-    });
+    this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
   }
 
   // 护盾破碎演出：蓝白碎粒自血条处迸射——只在伤害节拍里被驱动（吸收击穿护盾的
@@ -1019,10 +1139,10 @@ export class BattleStage {
     const y = unit.position.y + 3.4 * s; // hpBar 在脚底上方 3.4（local）
     const z = unit.position.z;
     this.particles.spawn(unit.position.x, y, {
-      count: 24, color: 0x7fb8ff, speed: 15, ttl: 0.75, gravity: -30, size: 1.0, z,
+      count: 30, color: 0x9ccfff, speed: 16, ttl: 0.75, gravity: -30, size: 1.5, z,
     });
     this.particles.spawn(unit.position.x, y, {
-      count: 10, color: 0xd8eaff, speed: 9, ttl: 0.55, gravity: -20, size: 0.7, z,
+      count: 12, color: 0xeaf4ff, speed: 10, ttl: 0.55, gravity: -20, size: 1.0, z,
     });
   }
 
@@ -1370,6 +1490,8 @@ export class BattleStage {
     this._arrow.dispose();
     this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
     this._topBar.dispose();
+    this.shake.dispose();      // 相机精确回基位（防偏移泄漏给下一舞台）
+    this._vignette.dispose();
     // 视图全销毁；模型跨场存活（下一场 beginBattle 重置），不在此清理
     for (const view of this._views.values()) {
       this.uiScene.remove(view);

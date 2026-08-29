@@ -1,12 +1,11 @@
 <script setup>
 // 战后奖励面板：金币入账展示 + 技能 3 选 1（或跳过）。
-// 卡牌候选直接用战场同源烘焙卡面（CardFacePreview）——所见即所得。
-import { getSkillDefinition } from '../../core/skills/registry.js';
+// 卡牌候选直接用战场同源烘焙卡面（CardFacePreview）——所见即所得，
+// 富文本热区释义由 CardFacePreview 自带（与战斗 Picker 同协议）。
 import CardFacePreview from './CardFacePreview.vue';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
 const run = props.ctrl.run;
-const def = (id) => getSkillDefinition(id);
 </script>
 
 <template>
@@ -18,7 +17,6 @@ const def = (id) => getSkillDefinition(id);
       <button
         v-for="id in run.rewards.skillChoices" :key="id"
         class="card-choice"
-        :title="def(id)?.name"
         @click="ctrl.claimReward(id)"
       >
         <CardFacePreview :skill-id="id" :ctx="{ player: run.player }" />

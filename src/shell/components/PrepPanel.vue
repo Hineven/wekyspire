@@ -22,7 +22,7 @@ const usesLeft = (id) => run.relicUses[id];
     </div>
     <div class="section">
       <div class="title">下层敌人预告</div>
-      <div v-for="(id, i) in run.encounter" :key="i" class="enemy">{{ ctrl.enemyName(id) }}</div>
+      <div v-for="(e, i) in run.encounter" :key="i" class="enemy">{{ ctrl.enemyName(e) }}</div>
     </div>
     <div class="section" v-if="run.player.relics.length">
       <div class="title">遗物（装备位 {{ run.player.equippedRelics.length }}/{{ run.player.relicSlots }}）</div>

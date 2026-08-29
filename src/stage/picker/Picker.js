@@ -95,6 +95,7 @@ export class Picker {
           kind: hit.region.type,
           name: hit.region.payload.name,
           powerDelta: hit.region.payload.powerDelta,
+          payload: hit.region.payload, // 热区完整载荷（如意图释义的 intention 数据）
           x: screenX,
           y: screenY,
         });

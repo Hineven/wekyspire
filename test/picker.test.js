@@ -142,6 +142,8 @@ describe('Picker', () => {
       EventNames.TOOLTIP_SHOW, EventNames.TOOLTIP_MOVE, EventNames.TOOLTIP_HIDE,
     ]);
     expect(events[0].payload).toMatchObject({ kind: 'effect', name: '燃烧' });
+    // 热区完整载荷随事件透传（意图释义等需要结构化数据的消费方）
+    expect(events[0].payload.payload).toEqual({ name: '燃烧' });
 
     // 拖牌/瞄准路径（kinds:['unit']）：效果行区域仍算单位落点，不弹 token
     const hit = picker.pick(rowPos.x, rowPos.y, { kinds: ['unit'] });

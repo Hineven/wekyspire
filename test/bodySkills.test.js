@@ -123,25 +123,28 @@ describe('描述双轨（应用前 describe / 应用后 battleDescribe）', () =
     expect(def.battleDescribe(sctxOf(d, rt))).toBe('24伤害，弃3/effect{格挡}');
   });
 
-  it('斩：应用后伤害反映衰败（power）', () => {
+  it('斩：卡面为 named 词条（伤害 + 衰败1 + 斩），应用后伤害反映 power', () => {
     const def = getSkillDefinition('slash');
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const rt = toHand(d, 'slash');
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害');
-    rt.power = -2; // 模拟两回合衰败
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('14伤害');
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，/named{衰败1}，/named{斩}');
+    expect(def.describe()).toBe('16伤害，衰败1，斩'); // 未应用口径为纯文本
+    rt.power = -2; // power 仍是通用伤害修正（锻刀等来源）
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('14伤害，/named{衰败1}，/named{斩}');
   });
 
-  it('仿形拳：应用后按是否最后手牌切换结算', () => {
+  it('仿形拳：应用后按是否唯一手牌切换结算', () => {
     const def = getSkillDefinition('mimicFist');
     const d = new BattleDriver({ deck: ['mimicFist', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const rt = toHand(d, 'mimicFist');
-    placeAt(d, 'mimicFist', 0);
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('5伤害');
-    placeAt(d, 'mimicFist', d.state.zones.hand.length - 1);
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('12伤害，抽1牌');
+    placeAt(d, 'mimicFist', 0); // 手中多牌 → 非唯一
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('7伤害');
+    for (const other of [...d.state.zones.hand.filter(c => c.defId !== 'mimicFist')]) {
+      moveCard(d.state, other.uniqueID, 'discard');
+    }
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('14伤害，抽1牌');
   });
 });
 
@@ -218,21 +221,39 @@ describe('拳组合：过牌引擎', () => {
     expect(d.state.zones.hand.length).toBe(before2 - 1); // 无抽牌
   });
 
-  it('蓄力：向牌库随机位插入 1 张千击；千击 0 费抽 1 后消耗', () => {
+  it('蓄力：向牌库随机位插入 2 张千击；千击 0 费 7 伤抽 1 后消耗', () => {
     const d = new BattleDriver({
       deck: ['chargeUp', 'punch', 'punch', 'punch', 'punch'],
-      enemies: ['slime'], seed: 5,
+      enemies: [tank()], seed: 5,
     });
     d.start();
     d.play('chargeUp');
-    expect(d.state.zones.deck.filter(c => c.defId === 'thousandHits')).toHaveLength(1);
+    expect(d.state.zones.deck.filter(c => c.defId === 'thousandHits')).toHaveLength(2);
 
     const hit = d.state.zones.deck.find(c => c.defId === 'thousandHits');
     moveCard(d.state, hit.uniqueID, 'hand');
     const before = d.state.zones.hand.length;
+    const hp0 = enemyHp(d);
     d.play('thousandHits');
+    expect(hp0 - enemyHp(d)).toBe(7); // 千击现为 7 伤害
     expect(d.state.zones.hand.length).toBe(before); // 自身离手 + 抽 1
     expect(zoneOf(d.state, hit.uniqueID)).toBe('burnt'); // 消耗
+  });
+
+  it('肾上腺素：0 开销 +1AP 并抽 1，打出即消耗', () => {
+    const d = new BattleDriver({
+      deck: ['adrenaline', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], seed: 5,
+    });
+    d.start();
+    d.play('punch'); // 先花 1AP，给 +1AP 留出可观察余量
+    const apBefore = d.player.actionPoints;
+    const handBefore = d.state.zones.hand.length;
+    const adr = d.state.zones.hand.find(c => c.defId === 'adrenaline');
+    d.play('adrenaline');
+    expect(d.player.actionPoints).toBe(apBefore + 1); // 0 开销净 +1AP
+    expect(d.state.zones.hand.length).toBe(handBefore); // 自身离手 + 抽 1
+    expect(zoneOf(d.state, adr.uniqueID)).toBe('burnt'); // 消耗
   });
 
   it('猛拳：手中无自然冷却，每打出 1 牌冷却 1，归零回充', () => {
@@ -263,62 +284,78 @@ describe('拳组合：过牌引擎', () => {
     d.play('punch');
     expect(fist.currentCooldown).toBe(0);
     expect(fist.remainingUses).toBe(1); // 回充
+    // 卡内加速同向播报（发生在别的卡的结算里，不播报前端不可见）
+    expect(d.presenter.calls).toContainEqual({ method: 'cooldownTick', args: [{ skill: fist, delta: 1 }] });
   });
 
-  it('仿形拳：作为最后一张手牌打出时 12 伤并抽 1，否则 5 伤', () => {
+  it('仿形拳：为唯一手牌打出时 14 伤并抽 1，否则 7 伤', () => {
     const d = new BattleDriver({
       deck: ['mimicFist', 'punch', 'punch', 'punch', 'punch'],
       enemies: [tank()], seed: 5,
     });
     d.start();
 
-    placeAt(d, 'mimicFist', 0); // 非最后一张
+    placeAt(d, 'mimicFist', 0); // 手中多牌 → 非唯一手牌
     let hp0 = enemyHp(d);
     d.play('mimicFist');
-    expect(hp0 - enemyHp(d)).toBe(5);
+    expect(hp0 - enemyHp(d)).toBe(7);
 
+    // 清空手牌后只留仿形拳：唯一手牌位
     const again = toHand(d, 'mimicFist');
-    placeAt(d, 'mimicFist', d.state.zones.hand.length - 1);
+    for (const other of [...d.state.zones.hand.filter(c => c.defId !== 'mimicFist')]) {
+      moveCard(d.state, other.uniqueID, 'discard');
+    }
     again.currentCooldown = 0; // 冷却 1 回合，测试直改解锁
     again.remainingUses = 1;
+    expect(d.state.zones.hand).toHaveLength(1);
     hp0 = enemyHp(d);
-    const before = d.state.zones.hand.length;
     d.play('mimicFist');
-    expect(hp0 - enemyHp(d)).toBe(12);
-    expect(d.state.zones.hand.length).toBe(before); // 离手 -1、抽 1 +1
+    expect(hp0 - enemyHp(d)).toBe(14);
+    expect(d.state.zones.hand).toHaveLength(1); // 离手后抽 1 回补
   });
 });
 
 describe('刀组合：卡序机制', () => {
-  it('斩：仅在牌库中冷却；在手中渡过回合伤害 -1 且冷却不推进', () => {
+  it('斩：打出后回牌库底部（代替弃牌）；在手衰败=冷却反向；牌库中正常冷却', () => {
     const d = new BattleDriver({
       deck: ['slash', 'punch', 'punch', 'punch', 'punch'],
       enemies: [tank()], seed: 5,
     });
     d.start();
 
-    // 在手中渡过回合：衰败 + 不冷却
+    // 在手中渡过回合（冷却中）：衰败反向 +1，冷却不推进，power 不再衰减
     const slash = toHand(d, 'slash');
     slash.remainingUses = 0;
     slash.currentCooldown = 2;
     d.endTurn();
-    expect(slash.power).toBe(-1);
-    expect(slash.currentCooldown).toBe(2);
+    expect(slash.currentCooldown).toBe(3);
+    expect(slash.power).toBe(0);
+    expect(d.presenter.calls).toContainEqual({ method: 'cooldownTick', args: [{ skill: slash, delta: -1 }] }); // 反向播报（前端暗红脉冲）
+
+    // 满充能在手：计时为 0 无处可反，衰败不生效
+    slash.remainingUses = 1;
+    slash.currentCooldown = 0;
+    d.endTurn();
+    expect(slash.currentCooldown).toBe(0);
 
     // 回到牌库：正常冷却推进、不再衰败
+    slash.remainingUses = 0;
+    slash.currentCooldown = 2;
     moveCard(d.state, slash.uniqueID, 'deck');
     d.endTurn();
     expect(slash.currentCooldown).toBe(1);
-    expect(slash.power).toBe(-1);
+    expect(d.presenter.calls).toContainEqual({ method: 'cooldownTick', args: [{ skill: slash, delta: 1 }] }); // 正向播报（前端绿脉冲）
 
-    // 打出：16 + power(-1) = 15（木桩第二次行动会上盾，先清零免干扰）
+    // 打出：16 伤害，且落牌库底部（代替弃牌——牌库即刀鞘，回库期间冷却）
     slash.currentCooldown = 0;
     slash.remainingUses = 1;
     moveCard(d.state, slash.uniqueID, 'hand');
     d.state.enemies[0].shield = 0;
     const hp0 = enemyHp(d);
     d.play('slash');
-    expect(hp0 - enemyHp(d)).toBe(15);
+    expect(hp0 - enemyHp(d)).toBe(16);
+    expect(zoneOf(d.state, slash.uniqueID)).toBe('deck');
+    expect(d.state.zones.deck[d.state.zones.deck.length - 1].uniqueID).toBe(slash.uniqueID);
   });
 
   it('回旋斩：从牌库末抽牌', () => {
@@ -332,7 +369,7 @@ describe('刀组合：卡序机制', () => {
     expect(zoneOf(d.state, bottom.uniqueID)).toBe('hand');
   });
 
-  it('刀背打击：丢弃最右侧手牌（跳过自身）；自身已在最右端时丢次右一张', () => {
+  it('刀背打击：丢弃最右侧手牌；自身已在最右端时（离手进 pending）丢次右一张', () => {
     const d = new BattleDriver({
       deck: ['knifeBack', 'punch', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5,
@@ -345,7 +382,7 @@ describe('刀组合：卡序机制', () => {
     expect(hp0 - enemyHp(d)).toBe(6);
     expect(zoneOf(d.state, rightmost.uniqueID)).toBe('discard');
 
-    // 边界：自身位于最右端 → 跳过自身丢次右一张
+    // 边界：自身位于最右端 → 出牌即离手（pending），剩余手牌的最右 = 次右一张
     const d2 = new BattleDriver({
       deck: ['knifeBack', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5,
@@ -423,6 +460,28 @@ describe('体修卡组：晋升链与投放', () => {
       expect(pool).toContain(id);
     }
     expect(pool).not.toContain('thousandHits');
+    expect(pool).not.toContain('badOmen'); // 系统级保险卡不入奖励池
+  });
+
+  it('情况不对：固有起手直接入手（不占抽牌位）；弃全手牌抽等量；打出即焚', () => {
+    const d = new BattleDriver({
+      deck: ['badOmen', 'punch', 'guard', 'duckHead', 'punch', 'guard'],
+      enemies: [tank()], seed: 5,
+    });
+    d.start();
+    // 固有：开局在手、不在牌库；手牌 = 固有 1 + 初始抽 4
+    expect(d.state.zones.hand.some(c => c.defId === 'badOmen')).toBe(true);
+    expect(d.state.zones.deck.some(c => c.defId === 'badOmen')).toBe(false);
+    expect(d.state.zones.hand.length).toBe(5);
+
+    d.play('badOmen');
+    // 自身消耗焚毁，不再出现在任何活区
+    expect(d.state.zones.burnt.some(c => c.defId === 'badOmen')).toBe(true);
+    expect(d.state.zones.hand.some(c => c.defId === 'badOmen')).toBe(false);
+    // 等量重抽：手牌回到打出前数量 - 1（自身离手）；6 张卡全部仍在（无丢失）
+    expect(d.state.zones.hand.length).toBe(4);
+    const all = ['hand', 'deck', 'discard', 'burnt'].flatMap(z => d.state.zones[z]);
+    expect(all.length).toBe(6);
   });
 
   it('guard 已更名「盾」，格挡名下只剩 block 层数版', () => {

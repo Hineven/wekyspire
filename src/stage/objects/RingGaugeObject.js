@@ -224,12 +224,12 @@ function makeArcGeometry(innerR, outerR, frac, segments, startAngle = Math.PI / 
   const colors = [];
   const indices = [];
   for (let i = 0; i <= n; i++) {
-    const a = startAngle - (sweep * i) / segments; // 起点始，顺时针（角度递减）
+    const a = startAngle - (sweep * i) / n; // 起点始，顺时针（角度递减；步进按实际段数 n 归一）
     const cos = Math.cos(a);
     const sin = Math.sin(a);
     positions.push(innerR * cos, innerR * sin, 0, outerR * cos, outerR * sin, 0);
     const k = fadeFrac > 0 ? TAIL_DIM + (1 - TAIL_DIM) * Math.min(1, (i / n) / fadeFrac) : 1;
-    colors.push(k, k, k);
+    colors.push(k, k, k, k, k, k); // 内外两顶点同色：每段 2 顶点，颜色与顶点一一对应
   }
   for (let i = 0; i < n; i++) {
     const b = i * 2;
@@ -243,6 +243,7 @@ function makeArcGeometry(innerR, outerR, frac, segments, startAngle = Math.PI / 
     const apexA = headA - apexRad;
     const rMid = (innerR + outerR) / 2;
     positions.push(rMid * Math.cos(apexA), rMid * Math.sin(apexA), 0);
+    if (fadeFrac > 0) colors.push(1, 1, 1); // 指针尖端在头部端：全亮，勿留越界缺色
     const innerN = n * 2;
     indices.push(innerN, positions.length / 3 - 1, innerN + 1);
   }

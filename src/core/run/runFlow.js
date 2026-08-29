@@ -1,7 +1,6 @@
 import { createRunState } from '../state/runState.js';
-import { createRng } from '../state/rng.js';
 import { createBattle } from '../flow/battle.js';
-import { getEnemyDefinition } from '../enemies/registry.js';
+import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
@@ -37,16 +36,9 @@ export function roomOfFloor(floor, rng) {
   return rng.pick(['slot', 'camp', 'event']);
 }
 
-// 遭遇生成（占位）：按 battleSeed 确定性编成。正式权重/敌人池在阶段 6 替换。
-export function generateEncounter(run) {
-  const rng = createRng(deriveBattleSeed(run.seed, run.floor));
-  if (isBossFloor(run.floor)) {
-    return ['pyro']; // 占位 Boss：复用现有敌人，正式 Boss 内容待补
-  }
-  const pool = ['slime', 'slime', 'pyro']; // 占位池：弱敌权重更高
-  const count = run.floor >= 5 && rng.next() < 0.4 ? 2 : 1;
-  return Array.from({ length: count }, () => rng.pick(pool));
-}
+// 遭遇生成：floorEnemyGenerator 按楼层分段池 + HP/攻击缩放产出可序列化描述符。
+import { generateEncounter } from './floorEnemyGenerator.js';
+export { generateEncounter }; // 转发保旧引用兼容（直接 import 自 runFlow 的写法不变）
 
 // ---- 建局 ----
 // profile：跨局持久内容（故事模式接缝 §6.4；单次游玩传空，行为不变）。
@@ -77,7 +69,7 @@ export function enterBattle(run) {
 // 真实游戏（runController → createBridge）共用，瑞米出战/种子派生规则改一处即可。
 export function assembleBattle(run) {
   return {
-    enemies: run.encounter.map(id => getEnemyDefinition(id).createUnit()),
+    enemies: run.encounter.map(spawnEnemy), // 描述符（楼层缩放终值）| 裸 id（测试直塞兼容）
     allies: run.remi.drivenOff ? [] : [getAllyDefinition('remi').createUnit()],
     seed: deriveBattleSeed(run.seed, run.floor),
   };

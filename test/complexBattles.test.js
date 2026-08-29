@@ -124,7 +124,7 @@ describe('复杂战斗：多敌人', () => {
     d.endTurn();
     const hits = d.calls('damage').filter(c => c.args[0].target === d.player);
     expect(hits.map(c => c.args[0].source)).toEqual([e1, e2]);
-    expect(d.player.hp).toBe(24);
+    expect(d.player.hp).toBe(18);
 
     // 回合 2：补刀前排，后续出牌自动打后排
     d.play('punch');
@@ -149,7 +149,7 @@ describe('复杂战斗：veto（眩晕）', () => {
     expect(slime.actionIndex).toBe(0);             // 行动未发生，游标未推进
 
     d.endTurn(); // 再一回合：正常行动
-    expect(d.player.hp).toBe(27);
+    expect(d.player.hp).toBe(24);
     expect(slime.actionIndex).toBe(1);
   });
 });

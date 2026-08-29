@@ -163,8 +163,12 @@ describe('RunDriver 整局驱动（§6.5）', () => {
 });
 
 describe('完整 44 层整局（测试计划：胜利/失败两条终局路径）', () => {
-  it('胜利路径：默认策略杀穿 44 层，层数连续无死路', () => {
-    const d = new RunDriver({ seed: 5 }).start();
+  it('胜利路径：流程完整性（坦克验证流）——44 层连续无死路', () => {
+    // 敌人强度已随楼层缩放（floorEnemyGenerator），天真策略中后期阵亡是设计使然；
+    // 本用例只验证流程完整性：坦克玩家（maxHp 999 + 攻击面板 40，战斗必然终局）
+    // + 默认策略杀穿全塔，层数连续、Boss 层无奖励房、无卡死。
+    // 平衡口径由「天真策略推进下限」另测。
+    const d = new RunDriver({ seed: 5, player: { maxHp: 999, attack: 40 } }).start();
     d.runToEnd();
     expect(d.result).toBe('victory');
     expect(d.isFinished()).toBe(true);
@@ -177,8 +181,23 @@ describe('完整 44 层整局（测试计划：胜利/失败两条终局路径�
     }
   });
 
+  it('平衡下限：天真策略至少能过开局教学段（推进到 floor 4）', () => {
+    // 设计口径（2026-08 定调）：多敌压力从第 2 层起铺开，「无脑出牌」只保底
+    // 过开局教学段（约 3-4 层）；此后被多敌战斗拦下属预期，不设更高保底。
+    let reached = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const d = new RunDriver({ seed }).start();
+      d.runToEnd();
+      if (d.result === 'victory' || d.floor >= 4) reached++;
+    }
+    expect(reached).toBeGreaterThanOrEqual(36); // 36/40 = 90% 过教学段
+  });
+
   it('失败路径：脆皮玩家首场阵亡 → run 失败终局', () => {
+    // 钉死强化史莱姆（高 HP 高攻，首回合必打不死且必挨刀）——初始卡组的
+    // 肾上腺素爆发已能一回合秒掉基础弱敌，1 血照样过层，不能用裸怪测阵亡
     const d = new RunDriver({ seed: 5, player: { maxHp: 1 } }).start();
+    d.run.encounter = [{ defId: 'slime', maxHp: 999, attack: 99 }];
     d.runToEnd();
     expect(d.result).toBe('defeat');
     expect(d.floor).toBe(1);

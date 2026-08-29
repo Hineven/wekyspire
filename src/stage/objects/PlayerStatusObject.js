@@ -32,6 +32,25 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 // 瑞米区回归后维持 1.8（瑞米区占骑士头像下方空带，不挤右列）。
 const STATUS_SCALE = 1.8;
 
+// 状态层法则（与 UnitObject 的 statusify 同律）：整面板统一关深度测试/写入、
+// 全件透明材质、renderOrder 归零（构造尾部 traverse 一把梭）——面板对内对外的
+// 层级只认 uiCamera 正交 z 的 painter 序：件与件之间靠局部 z 错层（瑞米区
+// 0.7~1.2 盖过骑士头像/血环 0.5~0.66，盾徽 z=2 全组最高，数字再 +0.5），面板
+// 对外靠组 z 抬进手牌之上的层级（见 PLAYER_STATUS_POS 注释）。旧 per-part
+// renderOrder（瑞米 10/11、盾徽 40/41）已废弃——renderOrder>0 会把部件钉在
+// renderOrder-0 的悬浮手牌之上，破坏「面板压静息手牌、让位悬浮牌」的层级契约。
+function statusifyPanel(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.renderOrder = 0;
+    const m = o.material;
+    if (!m) return;
+    m.transparent = true;
+    m.depthTest = false;
+    m.depthWrite = false;
+  });
+}
+
 const BASE_LAYOUT = Object.freeze({
   PANEL_W: 36,
   PANEL_H: 18.6,
@@ -58,7 +77,8 @@ const BASE_LAYOUT = Object.freeze({
   REMI_HEART_SIZE: 1.05, // 瑞米心形边长（随骑士心形同语言缩小）
   REMI_BANNER_W: 9.6,    // 攻/盾横幅（概念图暗灰笔刷条：剑+数 / 盾+数）
   REMI_BANNER_H: 3.0,
-  REMI_BANNER_X: -5.8,   // 横幅中心（头像右缘外一线；下缘避让 AP 金币底）
+  REMI_BANNER_X: 7.9,    // 横幅中心（相对瑞米组原点=头像中心）：头像右缘外一线
+                         // = R 2.68 + 间隙 0.4 + 半宽 4.8；负值会把横幅推出面板左界
   REMI_BANNER_Y: -3.6,
 });
 export const PLAYER_STATUS_LAYOUT = Object.freeze(
@@ -70,10 +90,16 @@ export const PLAYER_STATUS_LAYOUT = Object.freeze(
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const UI_BOTTOM = UI_CAMERA_LOOK_AT_Y - WORLD_HEIGHT / 2;
 const EDGE_PAD = 0.8; // 贴边留一线缝
+// uiScene 正交 z 层级表（世界单位，painter 序即层级）：咏唱槽 4+ / 静息手牌
+// 10+n·0.5（n≤10 → ≤15）/ 状态栏 24（本面板，件内再 +0~2.5）/ 悬浮·瞄准牌
+// 静息位 +20（liftZBoost）≈ 30.5+ / 瞄准箭头 45 / 牌库查看器 80 / 渐晕·冲击 490+。
+// 状态栏卡在静息手牌与悬浮牌之间：任何非悬浮手牌盖不过面板，而悬浮（提拉
+// z+20）/瞄准中的牌仍在面板之上——「面板在 non-hovered 手牌之上」由 z 层级
+// 差天然实现（用户定）。
 export const PLAYER_STATUS_POS = Object.freeze({
   x: -(HALF_UI_W - EDGE_PAD - PLAYER_STATUS_LAYOUT.PANEL_W / 2),
   y: UI_BOTTOM + EDGE_PAD + PLAYER_STATUS_LAYOUT.PANEL_H / 2,
-  z: 6,
+  z: 24,
 });
 
 // 瑞米横幅展示数值（占位）：攻击 = 当前行为定义实际伤害（act 内硬编码，前端无定义级
@@ -169,8 +195,9 @@ export class PlayerStatusObject extends THREE.Group {
     this._hpSig = null;
     this.add(this._hpOverlay);
 
-    // 盾形护盾徽章（头像右下角悬挂；0 盾淡出）。z 抬到全组最高 + 徽章内部
-    // renderOrder 压环——悬挂处与血环/盾环重叠，徽章必须盖在环上（概念图层级）
+    // 盾形护盾徽章（头像右下角悬挂；0 盾淡出）。z 抬到全组最高（2）——悬挂处与
+    // 血环/盾环重叠，徽章必须盖在环上（概念图层级；状态层法则下 z 差即层级差，
+    // 数字面片在徽章内再 +0.5 盖住盾面）
     this.playerShieldBadge = new ShieldBadgeObject({
       bakeLabel, width: L.SHIELD_W, height: L.SHIELD_H,
     });
@@ -182,8 +209,8 @@ export class PlayerStatusObject extends THREE.Group {
 
     // ---- 瑞米区（概念图新稿）：小圆头像叠骑士左下 + 金环 + 心形血量 + 攻/盾横幅 ----
     // 金环为纯装饰（瑞米血量走心形当前值，不走血环）。圆缘遮搭骑士头像/外环，必须
-    // 整区盖在其上：与 ShieldBadge 同款手法挂显式 renderOrder（10，图标 5 与盾徽 40
-    // 之间）——透明排序受 depthWrite/材质态影响，显式 painter 序才是硬保证。
+    // 整区盖在其上：整区各件局部 z（0.7~1.2）抬过骑士头像/血环（0.5~0.66）——
+    // 状态层法则下 z 差即层级差（见 statusifyPanel）。
     // 未出战/被打跑整区隐藏（setRemi 驱动）。
     this._remi = new THREE.Group();
     this._remi.name = 'remi';
@@ -195,7 +222,6 @@ export class PlayerStatusObject extends THREE.Group {
     );
     this._remiAvatarBack.name = 'remiAvatarBack';
     this._remiAvatarBack.position.z = 0.7;
-    this._remiAvatarBack.renderOrder = 10;
     this._remi.add(this._remiAvatarBack);
 
     this._remiAvatarMaterial = new THREE.MeshBasicMaterial({ color: 0x232838, transparent: true });
@@ -203,16 +229,16 @@ export class PlayerStatusObject extends THREE.Group {
       new THREE.CircleGeometry(L.REMI_AVATAR_R, 40), this._remiAvatarMaterial);
     this._remiAvatar.name = 'remiAvatar';
     this._remiAvatar.position.z = 0.75;
-    this._remiAvatar.renderOrder = 10;
     this._remi.add(this._remiAvatar);
 
     this._remiRing = new THREE.Mesh(
       new THREE.RingGeometry(L.REMI_AVATAR_R, L.REMI_AVATAR_R + L.REMI_RING_T, 40),
-      new THREE.MeshBasicMaterial({ color: 0xc9a13b }),
+      // transparent 必开：不透明件进 opaque 队列会被透明件整体盖住（z painter 序
+      // 只在透明队列内生效）——瑞米区就压不到骑士之上了
+      new THREE.MeshBasicMaterial({ color: 0xc9a13b, transparent: true }),
     );
     this._remiRing.name = 'remiRing';
     this._remiRing.position.z = 0.8;
-    this._remiRing.renderOrder = 10;
     this._remi.add(this._remiRing);
 
     // 心形 + 当前血量数字（概念图口径：只显当前值，无 "/max"），成对水平居中挂头像下缘
@@ -230,13 +256,11 @@ export class PlayerStatusObject extends THREE.Group {
       this._remiHeartMaterial.color.set(0xe04343); // node 退化：红心色块
     }
     this._remiHeartMaterial.needsUpdate = true;
-    remiHeart.renderOrder = 11; // 心+数在金环/头像面之上
     this._remiHpOverlay.add(remiHeart);
     this._remiHpTextMaterial = new THREE.MeshBasicMaterial({ transparent: true });
     this._remiHpText = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._remiHpTextMaterial);
     this._remiHpText.name = 'remiHpText';
     this._remiHpText.position.z = 0.3;
-    this._remiHpText.renderOrder = 11;
     this._remiHpOverlay.add(this._remiHpText);
     this._remiHpSig = null;
     this._remi.add(this._remiHpOverlay);
@@ -248,7 +272,6 @@ export class PlayerStatusObject extends THREE.Group {
       new THREE.PlaneGeometry(L.REMI_BANNER_W, L.REMI_BANNER_H), this._remiBannerMaterial);
     this._remiBanner.name = 'remiBanner';
     this._remiBanner.position.set(L.REMI_BANNER_X, L.REMI_BANNER_Y, 0.7);
-    this._remiBanner.renderOrder = 10;
     this._remi.add(this._remiBanner);
     this._remiBannerSig = null;
     this.add(this._remi);
@@ -278,6 +301,9 @@ export class PlayerStatusObject extends THREE.Group {
         this.apCoin.setFace(unitArt.getFile('ap_coin.png'));
       });
     }
+
+    // 整面板套状态层法则（见 statusifyPanel 注释）
+    statusifyPanel(this);
 
     // 血量数字 node 兜底烘焙（浏览器走 bakeBoldText）
     this._bake = bakeLabel || defaultInfoBake();

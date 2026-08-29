@@ -44,7 +44,7 @@ export const EventNames = {
   ANIMATION_INSTRUCTION_FINISHED: 'animation-instruction-finished', // { id }
 
   // ---- UI 协议（Stage Picker → Shell 消费） ----
-  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'skill', name, powerDelta?, x, y }（x/y 为屏幕像素）
+  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'skill'|'effect'|'intention', name, powerDelta?, payload?, x, y }（x/y 为屏幕像素；payload 为热区完整载荷）
   TOOLTIP_MOVE: 'tooltip:move',   // { x, y }
   TOOLTIP_HIDE: 'tooltip:hide',   // {}
   CARD_HOVER: 'card:hover',       // { uniqueID } 整卡悬浮（token 未命中时）
@@ -62,7 +62,7 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_SHIELD]: 2000,
   [EventNames.ANIM_RESOURCE]: 2000,
   [EventNames.ANIM_EFFECT]: 2000,
-  [EventNames.ANIM_UNIT_DEATH]: 3000,
+  [EventNames.ANIM_UNIT_DEATH]: 6000,   // 倾倒470+回弹220+焚毁430 ≈1.1s，按 ≥5 倍余量
   [EventNames.ANIM_SKILL_USED]: 5000,   // 发动展示（飞中放大180+停留380）+ 充分余量
   [EventNames.ANIM_CHANT_STARTED]: 2500,
   [EventNames.ANIM_CHANT_STOPPED]: 2500,

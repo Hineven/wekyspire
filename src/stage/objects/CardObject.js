@@ -1,6 +1,7 @@
 // CardObject（§4.2）：场景内的一张牌。
 // 结构：Group
 //   ├─ face: PlaneGeometry(cardWidth, cardHeight)，材质 map = RichTextEngine 烘焙纹理
+//   ├─ fx:   CardFxLayer（卡面特效层：veil 盖纱/ pulse 闪光/ edge 流光，时间驱动 updateFx）
 //   └─ (燃尽时) embers: 局部 Points 余烬粒子（前沿喷发，加色混合）
 // 牌面内容（名称/费用/描述文本）由注入的 bakeFace(cardData) 函数产出
 // { texture, hitRegions, width, height } —— 纹理与 hit map 永远成对替换（§4.6 铁律）。
@@ -9,6 +10,7 @@
 // 由宿主逐帧驱动，燃尽回调 onBurnt（BattleStage 届时瞬移落位坟墓并销毁）。
 
 import * as THREE from 'three';
+import { CardFxLayer } from './CardFxLayer.js';
 
 // 余烬色板（加色混合，r/g/b 0~1）：火线喷出的火星从深橙到亮黄
 const EMBER_COLORS = [
@@ -37,6 +39,10 @@ export class CardObject extends THREE.Group {
     this._face = new THREE.Mesh(new THREE.PlaneGeometry(cardWidth, cardHeight), this._material);
     this._face.name = 'face';
     this.add(this._face);
+
+    // 卡面特效层：盖纱/闪光/流光统一在此（z 分层与扩层约定见 CardFxLayer 头注释）
+    this.fx = new CardFxLayer({ width: cardWidth, height: cardHeight });
+    this.add(this.fx);
 
     this._hitRegions = [];   // 烘焙布局坐标（见 setCard）
     this._layoutSize = { width: cardWidth, height: cardHeight };
@@ -113,53 +119,13 @@ export class CardObject extends THREE.Group {
     }
   }
 
-  /** 激活态边缘流光（咏唱已激活）：绕牌边缘循环的小光点，由 updateGlow(dt) 逐帧驱动。 */
-  setActiveGlow(on) {
-    if (on === !!this._glowDot) return;
-    if (on) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0xffe9a0, transparent: true, opacity: 0.9,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      this._glowDot = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), mat);
-      this._glowDot.position.z = 0.6;
-      this._glowT = 0;
-      this.add(this._glowDot);
-    } else {
-      this.remove(this._glowDot);
-      this._glowDot.geometry.dispose();
-      this._glowDot.material.dispose();
-      this._glowDot = null;
-    }
-  }
+  /** 激活态边缘流光（咏唱已激活）开关；轨道推进走 updateFx（门面：转发特效层）。 */
+  setActiveGlow(on) { this.fx.setEdgeGlow(on); }
 
-  get hasActiveGlow() { return !!this._glowDot; }
+  get hasActiveGlow() { return this.fx.hasEdgeGlow; }
 
-  /** 逐帧驱动流光：沿牌边缘矩形路径循环 + 呼吸脉动。 */
-  updateGlow(dt) {
-    if (!this._glowDot) return;
-    this._glowT = (this._glowT + dt * 0.35) % 1; // ≈2.9s 一圈
-    const p = perimeterPoint(this._glowT, this.cardWidth + 1.6, this.cardHeight + 1.6);
-    this._glowDot.position.x = p.x;
-    this._glowDot.position.y = p.y;
-    const pulse = 0.75 + 0.25 * Math.sin(this._glowT * Math.PI * 8);
-    this._glowDot.scale.set(pulse, pulse, 1);
-  }
-
-  /** 特效 overlay（冷却/充能脉冲）：盖住牌面的发光片，惰性创建，默认隐藏。 */
-  ensureOverlay() {
-    if (this._overlay) return this._overlay;
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.55,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    this._overlay = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.cardWidth * 1.06, this.cardHeight * 1.06), mat);
-    this._overlay.position.z = 0.4;
-    this._overlay.visible = false;
-    this.add(this._overlay);
-    return this._overlay;
-  }
+  /** 帧驱动卡面特效（脉冲回程/盖纱呼吸/流光轨道）。 */
+  updateFx(dt) { this.fx.update(dt); }
 
   get visualState() { return this._visualState; }
 
@@ -175,8 +141,7 @@ export class CardObject extends THREE.Group {
    */
   startBurn({ durationMs = 700, onBurnt = null } = {}) {
     if (this._burn) return;
-    this.setActiveGlow(false);
-    if (this._overlay) this._overlay.visible = false;
+    this.fx.clearTransient(); // 焚毁接管牌面：熄灭盖纱/闪光/流光
     this._burnUniforms = {
       uBurn: { value: 0 },                 // 0=完好 → 1=燃尽
       uSeed: { value: Math.random() * 100 }, // 噪声种子（每张卡的咬边形状不同）
@@ -318,14 +283,7 @@ float bNoise(vec2 p) {
   }
 
   dispose() {
-    this.setActiveGlow(false);
-    if (this._overlay) {
-      this._overlay.userData.fxTween?.kill?.();
-      this.remove(this._overlay);
-      this._overlay.geometry.dispose();
-      this._overlay.material.dispose();
-      this._overlay = null;
-    }
+    this.fx.dispose();
     if (this._embers) {
       this.remove(this._embers);
       this._embers.geometry.dispose();
@@ -336,19 +294,6 @@ float bNoise(vec2 p) {
     this._material.dispose();
     this._face.geometry.dispose();
   }
-}
-
-// 矩形周长参数路径（t∈[0,1)，顶边左→右起顺时针），w/h 为路径全宽/全高
-function perimeterPoint(t, w, h) {
-  const per = 2 * (w + h);
-  let d = t * per;
-  if (d < w) return { x: -w / 2 + d, y: h / 2 };   // 顶边 左→右
-  d -= w;
-  if (d < h) return { x: w / 2, y: h / 2 - d };    // 右边 上→下
-  d -= h;
-  if (d < w) return { x: w / 2 - d, y: -h / 2 };   // 底边 右→左
-  d -= w;
-  return { x: -w / 2, y: -h / 2 + d };             // 左边 下→上
 }
 
 // 占位烘焙：无 RichTextEngine 时的纯色 1x1 纹理（§8 风险条款允许的 placeholder 链路）

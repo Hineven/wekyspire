@@ -57,7 +57,6 @@ const eventText = (r) => ({
           <button
             v-for="id in run.roomData.drawChoices" :key="id"
             class="card-choice"
-            :title="skillDef(id)?.name"
             @click="ctrl.trainingDraw(id)"
           >
             <CardFacePreview :skill-id="id" :ctx="{ player: run.player }" />

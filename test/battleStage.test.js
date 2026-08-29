@@ -529,11 +529,11 @@ describe('BattleStage 无头联调', () => {
     expect(anchor.y).toBe(16);           // 列顶（受正交取景上限 y=35 与卡半高 17.55 约束）
     expect(anchor.z).toBeLessThan(10);   // z 区间低于手牌
 
-    // 已激活 → 边缘流光开启，且随帧推进
+    // 已激活 → 边缘流光开启（特效层），且随帧推进
     expect(view.hasActiveGlow).toBe(true);
-    const dot = view._glowDot;
+    const dot = view.fx.edgeDot;
     const p0 = { x: dot.position.x, y: dot.position.y };
-    view.updateGlow(0.4);
+    view.updateFx(0.4);
     expect(dot.position.x !== p0.x || dot.position.y !== p0.y).toBe(true);
 
     // 停止咏唱 → 卡离场飞行入坟（持久模型：停车不销毁）
@@ -545,16 +545,16 @@ describe('BattleStage 无头联调', () => {
     const { bridge, stage } = make();
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
-    // 开局 3/3：金币数字 3/3，水晶满态
+    // 开局：AP 3/3 回满；魏启入战半满1 + 回合恢复1 = 2/3（新魏启规则）
     expect(stage._resources.ap.current).toBe(3);
     expect(stage._resources.ap.max).toBe(3);
-    expect(stage._resources.mana.current).toBe(3);
+    expect(stage._resources.mana.current).toBe(2);
     expect(stage._resources.mana.max).toBe(3);
 
-    bridge.intents.playCard(bridge.getProjection().hand[0].uniqueID); // 冲拳 -1AP
-    // AP 2/3：金币数字变化；魏启未消耗仍满态
+    bridge.intents.playCard(bridge.getProjection().hand[0].uniqueID); // 拳 -1AP
+    // AP 2/3：金币数字变化；魏启未消耗不变
     expect(stage._resources.ap.current).toBe(2);
-    expect(stage._resources.mana.current).toBe(3);
+    expect(stage._resources.mana.current).toBe(2);
   });
 
   it('悬浮卡牌开销 → 资源徽章交互态：可负担=highlight、不足=insufficient、离开=normal', () => {
@@ -619,6 +619,45 @@ describe('BattleStage 无头联调', () => {
     expect(stage._piles.discard.count).toBe(1); // 飞进坟堆后 sync 才 +1
   });
 
+  it('回归·打出卡的空窗期不被弹簧拉回手牌：展示毕（held）即摘弹簧目标', () => {
+    // 步进 tween：不自动 complete，手动推进以观察「展示完成 → 离场起飞」之间的空窗
+    const pending = [];
+    const stepTween = (obj, to, opts = {}) => {
+      pending.push(() => {
+        if (to.x != null) obj.position.x = to.x;
+        if (to.y != null) obj.position.y = to.y;
+        if (to.z != null) obj.position.z = to.z;
+        if (to.scale != null) obj.scale.set(to.scale, to.scale, 1);
+        opts?.onComplete?.();
+      });
+      return { kill() {} };
+    };
+    const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch'], 1, stepTween);
+    bridge.start();
+    while (pending.length) pending.shift()(); // 起手入场飞行全部落位
+    settleHand(stage);
+    const id = bridge.getProjection().hand[0].uniqueID;
+    const view = stage._views.get(id);
+    const homeX = view.position.x; // 手牌扇形锚点 x
+    expect(homeX).toBeLessThan(-5); // 锚点确在扇形内（与展示位 0 可区分）
+
+    bridge.intents.playCard(id); // 冲拳：sync → 展示（飞中 + 停留）→ 伤害 → 离场
+    pending.shift()(); // 展示飞行：卡到中央 (0,-2,60)
+    pending.shift()(); // 停留结束：finish + zone 'held' + 弹簧弃管；伤害节拍随后启动
+    expect(view.position.x).toBe(0);
+    expect(stage.model.getZone(id)).toBe('held');
+
+    // 空窗推帧：离场飞行尚未开始，卡不得被弹簧拉回手牌锚点（回归病灶：飞回手→再飞牌库）
+    for (let i = 0; i < 30; i++) stage.springs.update(1 / 60);
+    expect(view.position.x).toBeCloseTo(0, 5);
+    expect(view.position.y).toBeCloseTo(-2, 5);
+    expect(stage.springs._targets.has(id)).toBe(false); // 弃管契约：目标表已摘
+
+    while (pending.length) pending.shift()(); // 离场飞行等余下节拍播完
+    expect(stage.model.getZone(id)).toBe('discard');
+    expect(view.visible).toBe(false);
+  });
+
   it('伤害节拍分流：全吸收不翻红不击退；生命值受伤才闪红', () => {
     const { bridge, stage } = make(['guard', 'punch', 'punch', 'punch']);
     bridge.start();
@@ -654,15 +693,16 @@ describe('BattleStage 无头联调', () => {
     expect(bridge.getProjection().player.shield).toBe(5);
     const unit = stage._units.get(bridge.getProjection().player.uniqueID);
 
-    // 部分吸收（5 盾吸 2）：蓝色火花 12，无破碎碎粒
+    // 部分吸收（5 盾吸 2）：有吸收火花，无破碎碎粒（粒子具体数量属视觉调参，只断言语义）
     let before = stage.particles.activeCount;
     stage._damageHit(unit, { dealt: 0, shieldAbsorbed: 2 }, () => {});
-    expect(stage.particles.activeCount - before).toBe(12);
+    const partial = stage.particles.activeCount - before;
+    expect(partial).toBeGreaterThan(0);
 
-    // 吸穿最后一击（显示盾 5 吸 5）：火花 12 + 碎粒 34
+    // 吸穿最后一击（显示盾 5 吸 5）：追加破碎碎粒 → 粒量明显多于部分吸收
     before = stage.particles.activeCount;
     stage._damageHit(unit, { dealt: 0, shieldAbsorbed: 5 }, () => {});
-    expect(stage.particles.activeCount - before).toBe(12 + 34);
+    expect(stage.particles.activeCount - before).toBeGreaterThan(partial);
   });
 
   it('结算期输入挂起时卡不离场；应答后打出卡与被弃卡依次离场', () => {
@@ -672,9 +712,10 @@ describe('BattleStage 无头联调', () => {
     const ask = bridge.getProjection().hand.find(c => c.defId === 'askDiscardStage');
     bridge.intents.playCard(ask.uniqueID);
 
-    // 结算暂停等玩家选卡：打出的卡仍在桌上（回手牌位等待），未起飞
+    // 结算暂停等玩家选卡：打出卡已离手进 pending → held 展示位停留（不回手牌、不离场）
     expect(bridge.getProjection().pendingInput).toBeTruthy();
-    expect(stage.model.getZone(ask.uniqueID)).toBe('hand');
+    expect(bridge.getProjection().pending).toContain(ask.uniqueID);
+    expect(stage.model.getZone(ask.uniqueID)).toBe('held');
 
     const victim = bridge.getProjection().pendingInput.request.candidates[0];
     bridge.interaction.respond([victim]);

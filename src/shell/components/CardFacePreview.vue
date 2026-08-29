@@ -2,12 +2,17 @@
 // 卡面预览（战斗同源）：直接调战场牌面烘焙器 bakeCardFace 出 dataURL，
 // 与战场卡走同一渲染管线（等阶边框/费用徽章/富文本正文/卡图）——所见即所得，
 // 无需在 Vue 面板里维护第二套卡面样式。
+// 富文本热区（named/effect/skill）在 DOM 上复刻战场 Picker 的悬浮 tooltip：
+// 命中判定与 CardObject.hitTestLocal 同算法（烘焙布局逻辑坐标、y 向下），
+// 文案走同一 tooltipHtml——面板预览与战斗卡面的热区释义同源同语言。
 // 卡图异步加载：未命中先按无图出卡，加载完成订阅重出（与战场 addOnLoad 重烘同语言）。
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { getSkillDefinition } from '../../core/skills/registry.js';
 import { bakeCardFace } from '../../stage/richtext/cardFace.js';
 import { sharedCardArtCache } from '../../stage/art/cardArtCache.js';
+import { sharedUnitArtCache } from '../../stage/art/unitArt.js';
 import { KEYWORD_LABELS } from '../../bridge/projection.js';
+import { tooltipHtml } from '../tooltip.js';
 
 const props = defineProps({
   skillId: { type: String, required: true },
@@ -49,14 +54,61 @@ watch(view, (v) => {
 }, { immediate: true });
 onBeforeUnmount(stopListen);
 
-// 视图/卡图任一变化即整面重烘（DOM 预览不消费热区，只取像素）
-const url = computed(() => (
-  view.value ? bakeCardFace(view.value, { scale: 2, art: art.value }).canvas.toDataURL() : ''
+// 魏启水晶素材（开销徽章）：未就位先蓝色圆回落，到图后重烘补真图
+// （构建产物 URL 带 hash 后缀，匹配用文件名片段而非后缀）
+const MANA_CRYSTAL_MARK = 'mana_crystal_full';
+const manaCrystal = ref(sharedUnitArtCache.getFile('mana_crystal_full.png') ?? null);
+let unsubCrystal = null;
+if (!manaCrystal.value) {
+  unsubCrystal = sharedUnitArtCache.addOnLoad((url) => {
+    if (url?.includes(MANA_CRYSTAL_MARK)) {
+      manaCrystal.value = sharedUnitArtCache.getFile('mana_crystal_full.png');
+    }
+  });
+}
+onBeforeUnmount(() => unsubCrystal?.());
+
+// 视图/卡图任一变化即整面重烘；热区随烘焙产出（布局逻辑坐标，与 scale 无关）
+const face = computed(() => (
+  view.value
+    ? bakeCardFace(view.value, { scale: 2, art: art.value, manaCrystal: manaCrystal.value })
+    : null
 ));
+const url = computed(() => face.value?.canvas.toDataURL() ?? '');
+
+// ---- 富文本热区悬浮 tooltip（DOM 版 Picker，reward/room 等面板用）----
+const tip = ref(null); // { x, y, html }：clientX/Y + 14，fixed 定位不被卡槽裁剪
+const onMove = (e) => {
+  const f = face.value;
+  if (!f) { tip.value = null; return; }
+  const rect = e.currentTarget.getBoundingClientRect();
+  // img 显示尺寸 → 烘焙布局逻辑坐标（f.width/height = 卡面基准尺寸）
+  const lx = ((e.clientX - rect.left) / rect.width) * f.width;
+  const ly = ((e.clientY - rect.top) / rect.height) * f.height;
+  const region = f.hitRegions.find(r => (
+    lx >= r.rect.x && lx <= r.rect.x + r.rect.w
+    && ly >= r.rect.y && ly <= r.rect.y + r.rect.h
+  )) ?? null;
+  if (!region) { tip.value = null; return; }
+  tip.value = {
+    x: e.clientX + 14,
+    y: e.clientY + 14,
+    html: tooltipHtml({
+      kind: region.type,
+      name: region.payload?.name,
+      powerDelta: region.payload?.powerDelta,
+      payload: region.payload,
+    }),
+  };
+};
+const onLeave = () => { tip.value = null; };
 </script>
 
 <template>
-  <img v-if="url" class="card-face-preview" :src="url" alt="" draggable="false">
+  <img v-if="url" class="card-face-preview" :src="url" alt="" draggable="false"
+    @mousemove="onMove" @mouseleave="onLeave">
+  <div v-if="tip" class="face-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }"
+    v-html="tip.html"></div>
 </template>
 
 <style scoped>
@@ -68,4 +120,14 @@ const url = computed(() => (
   border-radius: 8px;
   user-select: none;
 }
+/* 热区 tooltip：fixed 定位（卡槽 overflow:hidden / 横滚裁剪裁不掉），
+   样式与 BattleHud 浮层同语言 */
+.face-tip {
+  position: fixed; z-index: 50; max-width: 260px;
+  background: rgba(8, 12, 24, .92); border: 1px solid #46507a; border-radius: 6px;
+  padding: 8px 12px; color: #dde; font-size: 13px; line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+  pointer-events: none;
+}
+.face-tip :deep(b) { color: #ffd; }
 </style>

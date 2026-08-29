@@ -100,6 +100,9 @@ export function projectBattle(battle) {
     enemies: battleState.enemies.map(projectUnit),
     allies: battleState.allies.map(projectUnit),
     hand: battleState.zones.hand.map(rt => projectCardFull(battle, rt)),
+    // 结算区（发动中的卡）：仅 id 列表——卡视图已在离手前的 hand 投影中建好，
+    // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）
+    pending: battleState.zones.pending.map(rt => rt.uniqueID),
     chant: {
       capacity: battleState.chant.capacity,
       slots: battleState.chant.slots.map(rt => projectCardFull(battle, rt)),

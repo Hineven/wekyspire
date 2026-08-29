@@ -6,6 +6,7 @@ import { registerSkill } from '../src/core/skills/registry.js';
 import { registerAbility } from '../src/core/abilities/registry.js';
 import { aliveEnemies, moveCard } from '../src/core/state/battleState.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
+import { GainManaInstruction } from '../src/core/instructions/resources.js';
 
 // ---- 火灵脉框架压力原型：群伤标记（tags）/ 爆发三倍 / 突破极限（可用性裁决链） ----
 
@@ -73,6 +74,7 @@ describe('爆裂术：群伤标记', () => {
       player: { maxMana: 5 },
     });
     d.start();
+    d.dispatch(new GainManaInstruction({ amount: 99 })); // 新魏启规则入战半满：测试补满回旧基准
     bringToHand(d, 'burstFlame');
 
     d.play('burstFlame');
@@ -90,6 +92,7 @@ describe('爆裂术：群伤标记', () => {
       player: { maxMana: 5 },
     });
     d.start();
+    d.dispatch(new GainManaInstruction({ amount: 99 })); // 新魏启规则入战半满：测试补满回旧基准
     bringToHand(d, 'burstFlame');
 
     // 先单点杀掉前排，再群伤：只剩一个存活敌人 → 三倍

@@ -115,18 +115,20 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     expect(baked[0]).toBe('20/40');
   });
 
-  it('有效果：行建在血条上方、左对齐血条左缘，markup = icon + 特征色名 + 层数色', () => {
+  it('有效果：行建在血条上方、左对齐血条左缘，行 = 矢量图标网格 + markup（特征色名 + 层数色）', () => {
     const { unit, baked } = makeUnit();
     unit.setUnit(proj({ effects: [burn(3)] }));
     expect(unit._fxRows.length).toBe(1);
-    // debuff：名称特征色 red，层数红
-    expect(baked[1]).toBe('🔥 /red{燃烧} /red{ 3}');
+    // debuff：名称特征色 red，层数红；图标是独立矢量网格，不进 markup（emoji 位图发糊，弃用）
+    expect(baked[1]).toBe('/red{燃烧} /red{ 3}');
     // 主标签不夹带效果文本
     expect(baked[0]).toBe('20/40');
     const row = unit._fxRows[0];
-    // fake 烘焙 100x20px → 世界 10x2（ppw=10）；背板宽 10+0.55*2=11.1，高 2+0.5=2.5
-    // 左对齐：row 中心 x = -6 + 11.1/2 = -0.45；第一行底缘 = 0.75 + 0.4 → 中心 y = 1.15 + 1.25 = 2.4
-    expect(row.position.x).toBeCloseTo(-0.45, 5);
+    // 行结构：暗背板 + 图标网格 + 文本网格（node 下图标烘焙退化为 1x1 占位 → 0.1wu）
+    expect(row.children.length).toBe(3);
+    // fake 文本烘焙 100x20px → 世界 10x2（ppw=10）；背板宽 0.55+0.1+0.35+10+0.55=11.55，高 max(2,0.1)+0.5=2.5
+    // 左对齐：row 中心 x = -6 + 11.55/2 = -0.225；第一行底缘 = 0.75 + 0.4 → 中心 y = 1.15 + 1.25 = 2.4
+    expect(row.position.x).toBeCloseTo(-0.225, 5);
     expect(row.position.y).toBeCloseTo(2.4, 5);
     // 行挂在 hpBar 内（随 billboard 转向），网格带 tooltip 拾取数据
     expect(row.parent).toBe(unit._hpBar);
@@ -142,7 +144,7 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     const { unit, baked } = makeUnit();
     unit.setUnit(proj({ effects: [burn(1), focus(2)] }));
     expect(unit._fxRows.length).toBe(2);
-    expect(baked[2]).toBe('/blue{凝神} /green{ 2}'); // 无 icon 不前缀
+    expect(baked[2]).toBe('/blue{凝神} /green{ 2}');
     // 第二行在第一行之上
     expect(unit._fxRows[1].position.y).toBeGreaterThan(unit._fxRows[0].position.y);
   });
@@ -151,7 +153,7 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     const { unit, baked } = makeUnit();
     unit.setUnit(proj({ effects: [burn()] }));
     const row = unit._fxRows[0];
-    const rowTexture = row.children[1].material.map;
+    const rowTexture = row.children[2].material.map; // [bg, 图标, 文本]
     const n = baked.length;
     unit.setUnit(proj({ hp: 15, effects: [burn()] })); // hp 变、效果不变
     expect(baked.length).toBe(n + 1); // 只重烘主标签
@@ -166,7 +168,7 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     const { unit, baked } = makeUnit();
     unit.setUnit(proj({ effects: [burn(3)] }));
     unit.setUnit(proj({ effects: [burn(2)] }));
-    expect(baked[baked.length - 1]).toBe('🔥 /red{燃烧} /red{ 2}');
+    expect(baked[baked.length - 1]).toBe('/red{燃烧} /red{ 2}');
     expect(unit._fxRows[0].children[0].userData.effectRow.payload.name).toBe('燃烧');
   });
 });

@@ -63,6 +63,8 @@ export class BurnCardInstruction extends BattleInstruction {
 }
 
 // 弃牌：手牌 → 弃牌堆。index 语义在手牌有序数组上（刀背打击"右手边"等由调用方算好 uniqueID）。
+// 结算时校验：只弃「手牌中的卡」——卡已被其他结算搬走（过期引用/同卡双弃）时静默落空，
+// 不计数不播报（与 target 结算时解析同哲学：过期引用无害）。
 export class DiscardCardInstruction extends BattleInstruction {
   constructor({ uniqueID }, opts = {}) {
     super(opts);
@@ -70,6 +72,10 @@ export class DiscardCardInstruction extends BattleInstruction {
   }
 
   execute(ctx) {
+    if (zoneOf(ctx.battleState, this.uniqueID) !== 'hand') {
+      this.result = { card: null };
+      return true;
+    }
     const card = moveCard(ctx.battleState, this.uniqueID, 'discard');
     this.result = { card };
     ctx.battleState.history.turn.discarded += 1;

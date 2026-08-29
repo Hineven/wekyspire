@@ -16,6 +16,15 @@ export const MAX_TRIGGER_DEPTH = 32;
 //   - POST 反应作为已完成节点的子节点提交：节点弹出前结算完全部后果。
 //   - 被 veto 的节点从未执行，不触发任何 POST。
 //   - 取消入口只在本内核（veto / abort / 终局检查），外部不得直写 cancelled。
+//
+// 反应书写纪律（PRE/POST 分工，防结算冲突类 bug）：
+//   - PRE 反应只做 payload 修饰（setPayload）或 veto；世界变更（改 zone/资源/生命）
+//     一律 POST 子节点提交。「额外一张」类计数语义优先改写被观察指令的 payload
+//     （替代效应：每事件至多生效一次），其次 POST 追加（目标在结算时重选，天然无冲突）。
+//     PRE 内提交「自身资源记账」类子指令（如 block 层数 -1）是合法范式；PRE 禁的是
+//     与被观察指令操作同一 zone/资源的变更指令（会在被观察指令执行前搬走它的目标）。
+//   - 结算中的卡（主语或宾语）在 pending 区（单节拍原子指令除外）：跨节拍持卡指令
+//     先入 pending、末段 zoneOf 校验后落位，落地指令对「目标不在预期区」静默落空。
 export default class BattleKernel {
   constructor({ isBattleOver = null, onWaitingCancelled = null, getAbortTarget = null, tracer = null } = {}) {
     this.stack = [];

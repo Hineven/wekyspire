@@ -59,8 +59,10 @@ export class GainActionPointsInstruction extends BattleInstruction {
   get modifiablePayload() { return ['amount']; }
   buildPayload() { this.payload.amount = this.amount; }
   execute(ctx) {
+    // AP 获取不受上限截断（battle.md §6：肾上腺素类的爆发蓄能语义）；
+    // 回合开始「回满」= 设回上限值，跨回合不保留超出部分
     const before = ctx.player.actionPoints;
-    ctx.player.actionPoints = Math.min(ctx.player.actionPoints + this.payload.amount, ctx.player.maxActionPoints);
+    ctx.player.actionPoints = ctx.player.actionPoints + this.payload.amount;
     this.result = { gained: ctx.player.actionPoints - before };
     ctx.presenter?.resource?.({ kind: 'actionPoint', delta: ctx.player.actionPoints - before });
     return true;

@@ -1,5 +1,6 @@
 import { getSkillDefinition } from './registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
+import { handNeighbors } from '../state/battleState.js';
 
 // 技能上下文：技能定义的所有方法（use/canUse/describe/subscriptions/activated.*）
 // 只接触 sctx = { ...ctx, self, def }，看不到定义外的世界。
@@ -57,4 +58,26 @@ export function enterBattle(ctx, self) {
 // 离开战斗（或转化时的换绑前奏）：注销该卡名下全部订阅（常驻 + activated 同 owner）。
 export function leaveBattle(ctx, uniqueID) {
   ctx.kernel.removeSubscriptionsByOwner(uniqueID);
+}
+
+// ---- 出牌时点位置查询 ----
+// 结算中的发动卡已离手（hand→pending，UseSkill stage 1）且带捕获手位 sctx.handIndexAtPlay；
+// 预览态（canUse / battleDescribe / projection）自身在手，无捕获值。两条路径经此组助手
+// 取得一致口径——位置类语义（最左端 / 唯一手牌 / 两侧邻牌）永远读「打出那一刻」。
+
+// 自身的出牌时点手位：结算中读捕获值，预览态实时查询。
+export function handIndexAtPlay(sctx) {
+  if (sctx.handIndexAtPlay != null) return sctx.handIndexAtPlay;
+  return sctx.battleState.zones.hand.findIndex(c => c.uniqueID === sctx.self.uniqueID);
+}
+
+// 自身的出牌时点两侧邻牌：结算中按捕获 index 对当前 hand 换算（移除自身后 left=hand[i-1]、
+// right=hand[i]）；预览态回落实时 handNeighbors。返回 { left, right }（卡 runtime 或 null）。
+export function handNeighborsAtPlay(sctx) {
+  if (sctx.handIndexAtPlay != null) {
+    const hand = sctx.battleState.zones.hand;
+    const i = sctx.handIndexAtPlay;
+    return { left: hand[i - 1] ?? null, right: hand[i] ?? null };
+  }
+  return handNeighbors(sctx.battleState, sctx.self.uniqueID);
 }

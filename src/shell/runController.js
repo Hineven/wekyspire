@@ -34,7 +34,7 @@ export { RunEvents };
 // run 本体经 reactive() 暴露（状态只存 id 与数字，代理安全）；
 // 每次阶段迁移经 runBus 发事件——阶段 8 的 cutscene/剧情在此订阅注入。
 
-// 默认起始卡组 = 体修基础卡组（BODY_CULTIVATION_CARDS §0：从冲拳/格挡生长的三系种子）
+// 默认起始卡组 = 体修基础卡组（BODY_CULTIVATION_CARDS §0：从拳/盾生长的三系种子）
 const DEFAULT_DECK = [...BODY_STARTER_DECK];
 
 // 存档快照 → run：advanceFloor 推进层数（遭遇/房间按 seed 确定性，无需回放），
@@ -337,7 +337,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     skillName: (id) => getSkillDefinition(id)?.name ?? id,
     // 升级预览：该卡晋升后的目标定义（与 trainUpgrade 缺省取的第一个可用目标一致）
     promoteTargetOf: (rt) => promotionTargets(getSkillDefinition(rt.defId))[0] ?? null,
-    enemyName: (id) => getEnemyDefinition(id)?.name ?? id,
+    // encounter 元素是楼层缩放 descriptor {defId,maxHp,attack}（兼容裸 id 字符串）
+    enemyName: (e) => {
+      const id = e?.defId ?? e;
+      return getEnemyDefinition(id)?.name ?? id;
+    },
     isBossFloor,
     trainingMode: () => trainingMode(run),
     upgradableCards: () => upgradableCards(run),

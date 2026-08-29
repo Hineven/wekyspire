@@ -3,6 +3,7 @@ import '../src/core/content/index.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { registerSkill } from '../src/core/skills/registry.js';
 import { zoneOf, moveCard, handNeighbors, firstAliveEnemy } from '../src/core/state/battleState.js';
+import { handNeighborsAtPlay } from '../src/core/skills/helpers.js';
 import AwaitPlayerInputInstruction from '../src/core/instructions/input.js';
 import { BurnCardInstruction, DiscardCardInstruction, MoveCardInstruction } from '../src/core/instructions/cards.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
@@ -17,7 +18,7 @@ registerSkill({
   cost: { mana: 0, actionPoint: 1 },
   use(sctx, stage) {
     if (stage === 0) {
-      const { left, right } = handNeighbors(sctx.battleState, sctx.self.uniqueID);
+      const { left, right } = handNeighborsAtPlay(sctx); // 出牌时点邻位（结算中自身已离手进 pending）
       for (const card of [left, right]) {
         if (card) sctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }));
       }
@@ -256,7 +257,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
 
     d.respond(true); // 确认反击
     expect(slime.hp).toBe(20 - 7);
-    expect(d.player.hp).toBe(30 - 3); // 反击后敌方行动照常结算
+    expect(d.player.hp).toBe(30 - 6); // 反击后敌方行动照常结算
     expect(d.isWaiting()).toBe(true);  // 回到下一玩家回合
     expect(d.state.turn.side).toBe('player');
   });
@@ -273,7 +274,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
     d.endTurn();
     d.respond(false);
     expect(slime.hp).toBe(20);
-    expect(d.player.hp).toBe(30 - 3);
+    expect(d.player.hp).toBe(30 - 6);
     expect(d.isWaiting()).toBe(true);
   });
 });

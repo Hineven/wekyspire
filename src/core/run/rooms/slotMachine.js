@@ -8,7 +8,8 @@ import { grantRelic } from '../prep.js';
 export const SLOT_PLACEHOLDER = {
   spinCost: 5,
   moneyPrize: 15,
-  // [奖项, 权重]：card = 高于玩家当前等阶的随机卡（小概率，占位直接池内随机）
+  // [奖项, 权重]：card = 奖励池内随机卡（同战后奖励的灵脉等阶门禁；
+  // 「高于当前等阶的彩蛋卡」作为正式版方向见 §9 留坑）
   table: [
     ['nothing', 30],
     ['money', 25],
@@ -46,7 +47,7 @@ export function spinSlot(run) {
       run.player.trainingCount += 1; // +1 等效训练（§4.2）
       break;
     case 'card': {
-      const pool = spawnableCardPool();
+      const pool = spawnableCardPool(run);
       const def = pool[Math.floor(run.rng.next() * pool.length)];
       run.player.deck.push(createSkillRuntime(def.id));
       result.defId = def.id;

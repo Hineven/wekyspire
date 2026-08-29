@@ -150,6 +150,20 @@ describe('rng：确定性', () => {
     expect(r4.next()).toBe(a);
   });
 
+  it('shuffle 是标准 Fisher-Yates：恒为排列（无丢失/重复）、无位置偏置', () => {
+    // 固定种子集（确定性测试）：首卡在各下标均出现过 → 每个位置可达，
+    // 排除「换牌位受限」之类的偏置洗法；多重集恒保持（交换不增删元素）
+    const N = 8;
+    const identity = Array.from({ length: N }, (_, i) => i);
+    const seen = new Set();
+    for (let seed = 0; seed < 400; seed++) {
+      const arr = createRng(seed).shuffle([...identity]);
+      expect([...arr].sort((a, b) => a - b)).toEqual(identity);
+      seen.add(arr.indexOf(0));
+    }
+    expect(seen.size).toBe(N);
+  });
+
   it('int 闭区间不越界', () => {
     const r = createRng(1);
     for (let i = 0; i < 200; i++) {
@@ -177,7 +191,7 @@ describe('可序列化约束', () => {
     expect(runRevived.player.effects).toEqual([{ effectId: 'strength', stacks: 2 }]);
     expect(bsRevived.enemies[0].defId).toBe('slime');
     expect(bsRevived.turn.count).toBe(5);
-    expect(bsRevived.zones).toEqual({ hand: [], deck: [], discard: [], burnt: [] });
+    expect(bsRevived.zones).toEqual({ hand: [], deck: [], discard: [], burnt: [], pending: [] });
   });
 });
 

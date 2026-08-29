@@ -3,7 +3,10 @@ import { createRng } from './rng.js';
 // battleState：单场战斗寿命，进战斗装配、战斗结束销毁。
 // zones 为有序数组（牌序玩法依赖顺序）；牌的 zone 不显式存储在 runtime 上，
 // 由 zoneOf 反查派生，防双写失同步。
-export const ZONES = ['hand', 'deck', 'discard', 'burnt'];
+// pending = 结算区（结算中的卡——主语或宾语）：跨节拍持有卡牌的指令先入 pending、
+// 末段 zoneOf 校验后落位（惯例见 AGENTS.md）；单节拍原子指令（弃/焚/移）不经 pending。
+// 与 battleState.pendingInput（输入仲裁）、sequencer 的 'pending'（演出状态）仅词根相同，互不相干。
+export const ZONES = ['hand', 'deck', 'discard', 'burnt', 'pending'];
 
 export function createBattleState({ enemies = [], allies = [], seed = 1, chantCapacity = 1 } = {}) {
   for (const e of enemies) e.side = 'enemy';
@@ -16,6 +19,7 @@ export function createBattleState({ enemies = [], allies = [], seed = 1, chantCa
       deck: [],       // 牌库（有序，约定：顶 = index 0，即下次抽的牌）
       discard: [],    // 弃牌堆
       burnt: [],      // 焚毁区
+      pending: [],    // 结算区（正在发动/被跨节拍结算搬运的卡；正常时序在结算树内清空，终局由 PostBattle 兜底）
     },
     chant: { capacity: chantCapacity, slots: [] },  // 咏唱槽（slots 放 skillRuntime）
     turn: { count: 0, side: 'player' },             // side: 'player' | 'enemy'
@@ -45,7 +49,7 @@ export function resetTurnHistory(battleState) {
   battleState.history.turn = counters;
 }
 
-// 反查卡牌所在 zone：'hand' | 'deck' | 'discard' | 'burnt' | 'chantSlot' | null
+// 反查卡牌所在 zone：'hand' | 'deck' | 'discard' | 'burnt' | 'pending' | 'chantSlot' | null
 export function zoneOf(battleState, uniqueID) {
   for (const name of ZONES) {
     if (battleState.zones[name].some(c => c.uniqueID === uniqueID)) return name;

@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册全部最小内容
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import {
-  REWARDS_PLACEHOLDER, spawnableCardPool, rollSkillChoices,
+  REWARDS_PLACEHOLDER, spawnableCardPool, rollSkillChoices, maxRewardTier,
   spawnRewards, chooseSkillReward, isRewardsClaimed,
 } from '../src/core/run/rewards.js';
+
+const TIER_RANK = { D: 0, C: 1, B: 2, A: 3 };
 
 describe('奖励卡池（RUN_DESIGN §2.1/§6.3 占位）', () => {
   it('卡池排除 S/Z 阶与 canSpawnAsReward=false', () => {
@@ -17,10 +19,37 @@ describe('奖励卡池（RUN_DESIGN §2.1/§6.3 占位）', () => {
     }
   });
 
+  it('等阶门禁：未进阶只出 D/C；灵脉 1 解锁 B、2 解锁 A', () => {
+    const run = createRun({ seed: 1 });
+    const tiersOf = (r) => new Set(spawnableCardPool(r).map(d => d.tier));
+    const maxRankOf = (r) => Math.max(...[...tiersOf(r)].map(t => TIER_RANK[t]));
+
+    expect(maxRewardTier(run)).toBe('C');
+    expect(tiersOf(run).has('B')).toBe(false);
+    expect(tiersOf(run).has('A')).toBe(false);
+    expect(maxRankOf(run)).toBe(TIER_RANK.C);
+
+    run.player.leino.fire = 1; // 首次进阶
+    expect(maxRewardTier(run)).toBe('B');
+    expect(tiersOf(run).has('B')).toBe(true);
+    expect(tiersOf(run).has('A')).toBe(false);
+
+    run.player.leino.body += 1; // 第二次进阶
+    expect(maxRewardTier(run)).toBe('A');
+    expect(tiersOf(run).has('A')).toBe(true);
+
+    // 抽取候选与门禁同源：未进阶 run 的 3 选 1 不含 B/A
+    const fresh = createRun({ seed: 7 });
+    for (const id of rollSkillChoices(fresh)) {
+      const def = spawnableCardPool(fresh).find(d => d.id === id);
+      expect(TIER_RANK[def.tier]).toBeLessThanOrEqual(TIER_RANK.C);
+    }
+  });
+
   it('3 选 1 候选：数量正确、不重复、全部来自卡池', () => {
     const run = createRun({ seed: 1 });
     const ids = rollSkillChoices(run);
-    const poolIds = spawnableCardPool().map(d => d.id);
+    const poolIds = spawnableCardPool(run).map(d => d.id);
     expect(ids.length).toBe(REWARDS_PLACEHOLDER.skillChoiceCount);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(poolIds).toContain(id);

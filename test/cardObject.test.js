@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CardObject } from '../src/stage/objects/CardObject.js';
+import { CardFxLayer } from '../src/stage/objects/CardFxLayer.js';
 
 function makeBake(hitRegions = []) {
   let calls = 0;
@@ -119,13 +120,46 @@ describe('CardObject 焚烧（焚毁离场演出）', () => {
     expect(burnt).toBe(1);
   });
 
-  it('startBurn 幂等；dispose 清理余烬资源', () => {
+  it('startBurn 幂等；焚毁接管熄灭叠加特效；dispose 清理余烬资源', () => {
     const card = new CardObject({ uniqueID: 'c2', bakeFace: makeBake() });
     card.setCard({});
-    card.startBurn({ durationMs: 100 });
+    card.fx.pulse({ color: 0xff0000 });
+    card.fx.setCooling('cooling');
+    card.startBurn({ durationMs: 100 }); // 焚毁接管牌面：脉冲/盖纱一并熄灭
+    expect(card.fx.pulseVisible).toBe(false);
+    expect(card.fx.coolingMode).toBeNull();
     card.startBurn({ durationMs: 999 }); // 重复点火无效
     expect(card._burn.duration).toBeCloseTo(0.1);
     card.dispose();
     expect(card._embers).toBeNull();
+  });
+});
+
+describe('CardFxLayer（卡面特效层）', () => {
+  it('pulse：点亮即显色，update 推进时间线，超时熄灭；重触发顶掉旧时间线', () => {
+    const fx = new CardFxLayer({ width: 20, height: 27 });
+    fx.pulse({ color: 0x66ff99 });
+    expect(fx.pulseVisible).toBe(true);
+    expect(fx.pulseColor).toBe(0x66ff99);
+    fx.update(0.1);
+    expect(fx.pulseVisible).toBe(true); // 时间线未走完
+    fx.pulse({ color: 0xc87070 }); // 重触发重置
+    expect(fx.pulseColor).toBe(0xc87070);
+    fx.update(0.25);
+    expect(fx.pulseVisible).toBe(false);
+  });
+
+  it('setCooling：模式幂等切换；clearTransient 一并熄灭', () => {
+    const fx = new CardFxLayer({ width: 20, height: 27 });
+    expect(fx.coolingMode).toBeNull();
+    fx.setCooling('cooling');
+    fx.setCooling('cooling'); // 幂等
+    expect(fx.coolingMode).toBe('cooling');
+    fx.setCooling('decayed');
+    expect(fx.coolingMode).toBe('decayed');
+    fx.pulse({ color: 0xffffff });
+    fx.clearTransient();
+    expect(fx.coolingMode).toBeNull();
+    expect(fx.pulseVisible).toBe(false);
   });
 });

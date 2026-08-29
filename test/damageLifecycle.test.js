@@ -147,6 +147,6 @@ describe('不灭：minHp 地板', () => {
     expect(d.player.getEffectStacks('undying')).toBe(1);
     d.endTurn(); // 1 → 0，注销（敌方行动：攻 3）
     expect(d.player.getEffect('undying')).toBeNull();
-    expect(d.player.hp).toBe(30 - 6); // 史莱姆攻/盾交替，只命中两次
+    expect(d.player.hp).toBe(30 - 12); // 史莱姆攻/盾交替，只命中两次
   });
 });

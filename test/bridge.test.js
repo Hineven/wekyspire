@@ -104,10 +104,11 @@ describe('Bridge：动画队列屏障与超时', () => {
       bridge.frontendBus.emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id: animLog.at(-1).id });
     }
     const types = animLog.map(a => a.type);
-    // 非 sync 节拍的严格次序：drawn → skillUsed → resource → damage → cardMoved
+    // 非 sync 节拍的严格次序：drawn → resource(回合开始魏启+1) → skillUsed → resource(扣费) → damage → cardMoved
     expect(types.filter(t => t !== EventNames.ANIM_STATE_SYNC)).toEqual([
-      EventNames.ANIM_CARD_DRAWN, EventNames.ANIM_SKILL_USED,
-      EventNames.ANIM_RESOURCE, EventNames.ANIM_DAMAGE,
+      EventNames.ANIM_CARD_DRAWN, EventNames.ANIM_RESOURCE,
+      EventNames.ANIM_SKILL_USED, EventNames.ANIM_RESOURCE,
+      EventNames.ANIM_DAMAGE,
       EventNames.ANIM_CARD_MOVED,
     ]);
     const at = (t) => types.indexOf(t);
@@ -168,7 +169,7 @@ describe('Bridge：状态投影', () => {
     expect(p0.player.hp).toBe(30);
     expect(p0.counts.deck).toBe(0);
     expect(p0.hand).toHaveLength(4);
-    expect(p0.hand[0].name).toBe('冲拳');
+    expect(p0.hand[0].name).toBe('拳');
     expect(p0.hand[0].text).toContain('6');
     expect(p0.swapCost).toBe(0);
     expect(p0.pendingInput).toBeNull();

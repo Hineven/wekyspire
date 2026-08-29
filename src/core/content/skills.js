@@ -19,7 +19,7 @@ export function resolvedDamageText(sctx, base) {
 
 // ① 纯伤害攻击牌
 registerSkill({
-  id: 'punch', name: '冲拳', type: 'normal', tier: 'D', series: 'punch',
+  id: 'punch', name: '拳', type: 'normal', tier: 'D', series: 'punch',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',

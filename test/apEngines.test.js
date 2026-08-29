@@ -102,7 +102,7 @@ describe('无量：每抽 11 张牌回 1 行动力', () => {
 
     d.endTurn(); // 回合 2 开始抽 3 张：10 + 3 = 13 → 回 1，余 2
     expect(wuliang.chantCount).toBe(2);
-    expect(d.player.actionPoints).toBe(3); // 回合重置为 3，+1 受上限截断
+    expect(d.player.actionPoints).toBe(4); // 回合重置为 3，+1 不受上限截断（battle.md §6）
   });
 });
 

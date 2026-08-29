@@ -20,7 +20,7 @@ const DEFAULTS = Object.freeze({
   speed: 20,        // 初速（世界单位/秒），逐粒子 0.5~1.3 随机
   ttl: 0.55,        // 寿命（秒），逐粒子 0.7~1.3 随机
   gravity: -30,
-  size: 0.9,        // PointsMaterial 点大小（世界单位）
+  size: 1.2,        // PointsMaterial 点大小（世界单位）
   z: 70,            // 粒子层高度（特效层）
 });
 
@@ -116,7 +116,9 @@ export class ParticleSystem {
       if (i == null) return; // 池满静默丢弃
       const angle = Math.random() * Math.PI * 2;
       const speed = o.speed * (0.5 + Math.random() * 0.8);
-      this._sizes[i] = o.size;
+      // 逐粒子亮度抖动（0.75~1.3）：单色加色爆发太均质，抖出明暗层次更醒目
+      const jitter = 0.75 + Math.random() * 0.55;
+      this._sizes[i] = o.size * (0.8 + Math.random() * 0.5); // 点径同步抖动
       this._pool.push({
         i, x, y,
         vx: Math.cos(angle) * speed,
@@ -124,7 +126,7 @@ export class ParticleSystem {
         life: 0,
         ttl: o.ttl * (0.7 + Math.random() * 0.6),
         gravity: o.gravity,
-        r: color.r, g: color.g, b: color.b,
+        r: Math.min(1, color.r * jitter), g: Math.min(1, color.g * jitter), b: Math.min(1, color.b * jitter),
         z: o.z,
       });
     }

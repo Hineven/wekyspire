@@ -120,7 +120,7 @@ describe('演出', () => {
     expect(stage.particles.activeSpriteCount).toBe(0); // 文本粒子同样寿命尽回收
   });
 
-  it('死亡：灰色粒子 + 缩小收殓', () => {
+  it('死亡：立牌倾倒扬尘 + 焚毁收殓（状态绘制隐藏、整体退场）', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
@@ -139,12 +139,13 @@ describe('演出', () => {
     bridge.intents.playCard(bridge.getProjection().hand[0].uniqueID);
     tween.completeAll();
     expect(slime.isDead()).toBe(true);
-    expect(stage.particles.activeCount).toBeGreaterThan(0);
+    expect(stage.particles.activeCount).toBeGreaterThan(0); // 落地扬尘 + 焚毁余烬
     const unit = stage._units.get(slime.uniqueID);
-    expect(unit.scale.x).toBeLessThan(0.1); // 收殓缩小
+    expect(unit.getObjectByName('hpBar').visible).toBe(false); // 焚毁前置：尸体不再读数
+    expect(unit.visible).toBe(false); // 焚毁收殓：整体隐藏退场（manual tween 无 onUpdate，倾倒角不推进，只验终态）
   });
 
-  it('冷却 tick：绿色 overlay 脉冲，立即回 finish 不占节拍', () => {
+  it('冷却 tick：正向=绿色脉冲；立即回 finish 不占节拍；updateFx 推进回程后熄灭', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
@@ -154,16 +155,36 @@ describe('演出', () => {
     const finishes = [];
     const onFinish = p => finishes.push(p.id);
     bridge.frontendBus.on(EventNames.ANIMATION_INSTRUCTION_FINISHED, onFinish);
-    stage._direct(EventNames.ANIM_COOLDOWN_TICK, { skill: { uniqueID: first.uniqueID }, _animId: 'cd1' });
+    stage._direct(EventNames.ANIM_COOLDOWN_TICK, { skill: { uniqueID: first.uniqueID }, delta: 1, _animId: 'cd1' });
     bridge.frontendBus.off(EventNames.ANIMATION_INSTRUCTION_FINISHED, onFinish);
 
-    // 立即 finish（non-blocking）+ overlay 已点亮（放大态，待 tween 收回）
+    // 立即 finish（non-blocking）+ 特效层脉冲已点亮（放大态，待 updateFx 推进收回）
     expect(finishes).toEqual(['cd1']);
-    expect(obj._overlay.visible).toBe(true);
-    expect(obj._overlay.material.color.getHex()).toBe(0x66ff99);
+    expect(obj.fx.pulseVisible).toBe(true);
+    expect(obj.fx.pulseColor).toBe(0x66ff99);
 
-    tween.completeAll(); // 脉冲收回后隐藏
-    expect(obj._overlay.visible).toBe(false);
+    obj.updateFx(0.25); // 超过脉冲时长（220ms），时间线走完即隐藏
+    expect(obj.fx.pulseVisible).toBe(false);
+  });
+
+  it('冷却 tick：衰败反向（delta<0）= 暗红脉冲（与 named 术语「衰败」同色）', () => {
+    const { bridge, stage, tween } = make();
+    bridge.start();
+    tween.completeAll();
+    const first = bridge.getProjection().hand[0];
+    const obj = stage._views.get(first.uniqueID);
+
+    const finishes = [];
+    const onFinish = p => finishes.push(p.id);
+    bridge.frontendBus.on(EventNames.ANIMATION_INSTRUCTION_FINISHED, onFinish);
+    stage._direct(EventNames.ANIM_COOLDOWN_TICK, { skill: { uniqueID: first.uniqueID }, delta: -1, _animId: 'cd2' });
+    bridge.frontendBus.off(EventNames.ANIMATION_INSTRUCTION_FINISHED, onFinish);
+
+    expect(finishes).toEqual(['cd2']); // 同样 non-blocking
+    expect(obj.fx.pulseVisible).toBe(true);
+    expect(obj.fx.pulseColor).toBe(0xc87070);
+    obj.updateFx(0.25);
+    expect(obj.fx.pulseVisible).toBe(false);
   });
 
   it('powerUp：威力提升的手牌触发金色脉冲（non-blocking）', () => {
@@ -179,9 +200,8 @@ describe('演出', () => {
     // 威力提升随 sync 节拍应用（状态差分驱动），金色脉冲 non-blocking
     tween.completeAll();
     const obj = stage._views.get(target.uniqueID);
-    expect(obj._overlay).toBeTruthy();
-    expect(obj._overlay.material.color.getHex()).toBe(0xffd34c);
-    // 脉冲 tween 收回后隐藏
-    expect(obj._overlay.visible).toBe(false);
+    expect(obj.fx.pulseColor).toBe(0xffd34c);
+    obj.updateFx(0.25); // 脉冲时间线走完即隐藏
+    expect(obj.fx.pulseVisible).toBe(false);
   });
 });

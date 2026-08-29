@@ -1,7 +1,8 @@
 // ShieldBadgeObject：盾形护盾徽章（概念图：头像右下角悬挂的蓝盾 + 白色盾值数字）。
 // 护盾无上限由徽章数值直接表达。美术资源到位后盾面整体换贴图。
-// 层级：徽章悬挂处与血环/盾环重叠，renderOrder 抬到环类之上——徽章必须盖住环，
-// 数字再盖住盾面（大号粗体白字 + 深描边，与血量数字同语言）。
+// 层级：徽章悬挂处与血环/盾环重叠——宿主把徽章组 z 抬到环类之上（盾徽必须盖住
+// 环），数字面片在组内再 z+0.5 盖住盾面（状态层法则：z painter 序即层级，
+// 见 PlayerStatusObject.statusifyPanel）。
 // 结构：Group
 //   ├─ shield: 盾形 plane（浏览器程序化烘焙：纹章盾形 + 蓝渐变 + 内亮描边；
 //   │          node 单测退化为圆角蓝方块色块）
@@ -34,7 +35,6 @@ export class ShieldBadgeObject extends THREE.Group {
     this._shieldMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
     this._shield = new THREE.Mesh(new THREE.PlaneGeometry(width, height), this._shieldMaterial);
     this._shield.name = 'shield';
-    this._shield.renderOrder = 40; // 盖住血环/盾环（环类 renderOrder 默认 0）
     if (baked) {
       this._shieldMaterial.map = baked;
       this._shieldMaterial.color.set(0xffffff);
@@ -47,8 +47,7 @@ export class ShieldBadgeObject extends THREE.Group {
     this._numMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
     this._num = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._numMaterial);
     this._num.name = 'num';
-    this._num.position.set(0, height * 0.05, 0.5);
-    this._num.renderOrder = 41; // 数字再盖盾面
+    this._num.position.set(0, height * 0.05, 0.5); // z+0.5：数字盖住盾面
     this.add(this._num);
 
     this._value = 0;

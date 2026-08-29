@@ -68,6 +68,16 @@ export class HandSprings {
     }
   }
 
+  /** 立即弃管：目标表与动态状态一并摘除。
+   *  卡离开手牌/咏唱（展示毕待离场 'held'、弃/焚/迁移）时必须**即刻**调用——
+   *  目标表只在 sync 节拍重算，若等下一次 _layoutAndTrack 才清，空窗期里
+   *  动画已结束（idle）的卡会被弹簧从展示位拉回手牌锚点（「打出 → 飞回手牌
+   *  → 再飞牌库」的回归病灶，已多次复发，勿再依赖 layout 重算兜底）。 */
+  release(id) {
+    this._targets.delete(id);
+    this._items.delete(id);
+  }
+
   clear() {
     this._items.clear();
     this._targets.clear();

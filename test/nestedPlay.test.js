@@ -12,17 +12,16 @@ import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 // 嵌套出牌不经 playerUseSkill 的可用性检查（合法性由技能逻辑负责），
 // 但费用/充能消耗与收尾 zone 迁移仍走 UseSkillInstruction 标准管线。
 
-// 万变拳：0 费，选一张其他手牌免费打出
+// 万变拳：0 费，选一张手牌免费打出（发动中自身已离手进 pending，剩余手牌皆候选）
 registerSkill({
   id: 'wildFist', name: '万变拳',
   cost: { mana: 0, actionPoint: 0 },
   use(sctx, stage) {
     if (stage === 0) {
-      const others = sctx.battleState.zones.hand
-        .filter(c => c.uniqueID !== sctx.self.uniqueID);
-      if (others.length === 0) return true;
+      const hand = sctx.battleState.zones.hand;
+      if (hand.length === 0) return true;
       sctx.self._input = new AwaitPlayerInputInstruction({
-        request: { kind: 'selectHandCard', count: 1, candidates: others.map(c => c.uniqueID) },
+        request: { kind: 'selectHandCard', count: 1, candidates: hand.map(c => c.uniqueID) },
       });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;
@@ -68,7 +67,7 @@ describe('万变拳：嵌套出牌 + 费用豁免', () => {
     const inflame = d.state.zones.hand.find(c => c.defId === 'inflame');
     d.respond([inflame.uniqueID]);
 
-    expect(d.player.mana).toBe(3);        // 费用全免
+    expect(d.player.mana).toBe(2);        // 费用全免（新魏启规则：开局半满1+回合恢复1）
     expect(d.player.actionPoints).toBe(3);
     expect(slime.hp).toBe(20 - 2);        // 点火效果照常
     expect(slime.getEffectStacks('burn')).toBe(2);

@@ -58,12 +58,17 @@ describe('cardFace', () => {
     expect(region.payload.name).toBe('燃烧');
   });
 
-  it('名称与费用被绘制', () => {
+  it('名称与开销被绘制：零开销不显示徽章，正开销各显', () => {
     const mock = createMockCanvas();
     bakeCardFace(CARD, { createCanvas: mock.factory, measure: (t) => t.length * 10 });
     expect(mock.texts).toContain('冲拳');
-    expect(mock.texts).toContain('0'); // mana 徽章
-    expect(mock.texts).toContain('1'); // AP 徽章
+    expect(mock.texts).not.toContain('0'); // mana=0：零开销不显示（用户定）
+    expect(mock.texts).toContain('1');     // AP=1 徽章
+
+    const mock2 = createMockCanvas();
+    bakeCardFace({ ...CARD, cost: { mana: 2, actionPoint: 0 } }, { createCanvas: mock2.factory, measure: (t) => t.length * 10 });
+    expect(mock2.texts).toContain('2');    // mana=2 徽章
+    expect(mock2.texts).not.toContain('0'); // AP=0 不显示
   });
 
   it('品阶徽章字母被绘制', () => {
@@ -123,6 +128,21 @@ describe('cardFace', () => {
     const regions = r.hitRegions.filter(h => h.type === 'effect');
     expect(regions.length).toBe(2);
     expect(regions.every(h => h.payload.name === '燃烧')).toBe(true);
+  });
+
+  it('/named{} 渲染：术语文本 + 命名热区（payload 携带完整引用名供 tooltip 反查）', () => {
+    const mock = createMockCanvas();
+    const r = bakeCardFace({ ...CARD, text: '16伤害，/named{衰败1}，/named{斩}' }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    // 术语文本（含尾缀参数）绘制在卡面
+    expect(mock.texts).toContain('衰');
+    expect(mock.texts).toContain('败');
+    expect(mock.texts).toContain('1');
+    expect(mock.texts).toContain('斩');
+    // 两段命名热区：衰败1（带参数）与 斩
+    const regions = r.hitRegions.filter(h => h.type === 'named');
+    expect(regions.map(h => h.payload.name).sort()).toEqual(['斩', '衰败1']);
   });
 
   it('无卡图 → 系列字形占位水印（series 优先，回落 type，未知回落「技」）', () => {

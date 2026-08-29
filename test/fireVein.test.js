@@ -24,13 +24,12 @@ registerSkill({
   },
 });
 
-// 焚烬术：焚掉手牌最左的一张其他牌，造成 10 伤害
+// 焚烬术：焚掉手牌最左的一张牌，造成 10 伤害（发动中自身已离手，hand[0] 即最左其他牌）
 registerSkill({
   id: 'pyreRite', name: '焚烬术',
   cost: { mana: 1, actionPoint: 1 },
   use(sctx) {
-    const victim = sctx.battleState.zones.hand
-      .find(c => c.uniqueID !== sctx.self.uniqueID);
+    const victim = sctx.battleState.zones.hand[0];
     if (victim) {
       sctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: victim.uniqueID }));
     }
@@ -56,11 +55,11 @@ describe('火灵脉：陨落星炎（自伤叠燃烧）', () => {
     expect(d.player.hp).toBe(30);
 
     d.endTurn(); // 敌方回合：史莱姆打 3 → 回合 2 开始：燃烧跳 2 穿透
-    expect(d.player.hp).toBe(30 - 3 - 2);
+    expect(d.player.hp).toBe(30 - 6 - 2);
     expect(d.player.getEffectStacks('burn')).toBe(1);
 
     d.endTurn(); // 史莱姆第二动是开盾（无伤害）→ 回合 3 开始：燃烧跳 1，层数扣尽
-    expect(d.player.hp).toBe(30 - 3 - 2 - 1);
+    expect(d.player.hp).toBe(30 - 6 - 2 - 1);
     expect(d.player.getEffectStacks('burn')).toBe(0);
     expect(d.player.getEffect('burn')).toBeNull();
   });

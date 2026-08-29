@@ -1,8 +1,9 @@
 import { registerEffect } from '../effects/registry.js';
-import { TurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
-import { DealDamageInstruction } from '../instructions/combat.js';
+import { TurnStartInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
+import { GainManaInstruction } from '../instructions/resources.js';
 
 // 燃烧：自己阵营回合开始时受到等于层数的伤害（穿透），然后层数 -1。
 // 行为完全由订阅表达，结算指令里无任何"燃烧"特判。
@@ -78,4 +79,103 @@ registerEffect({
         new AddEffectInstruction({ target: unit, effectId: 'stall', stacks: -1 }), instr),
     },
   ],
+});
+
+// 纳气：玩家回合开始时获得层数点魏启，层数归零（一次性整取，非逐层递减——
+// 汲取系卡的"存气"语言：入罐 → 下回合开闸）。魏启获取走上限截断管线。
+registerEffect({
+  id: 'naqi',
+  type: 'buff',
+  stacking: 'count',
+  name: '纳气',
+  description: '回合开始时获得层数点魏启，然后层数归零。',
+  icon: '🌀',
+  color: 'blue',
+  subscriptions: (unit) => [{
+    when: PlayerTurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === 'player' && !unit.isDead() && unit.getEffectStacks('naqi') > 0,
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('naqi');
+      ctx.kernel.submitInstruction(new GainManaInstruction({ amount: stacks }), instr);
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'naqi', stacks: -stacks }), instr);
+    },
+  }],
+});
+
+// 荆棘：受到攻击时，攻击来源受到层数点穿透伤害（无来源的环境伤害不反）。
+// 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。
+registerEffect({
+  id: 'thorns',
+  type: 'buff',
+  stacking: 'count',
+  name: '荆棘',
+  description: '受到攻击时，对攻击者造成层数点伤害。',
+  icon: '🌵',
+  color: 'green',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    filter: (instr) => instr.target === unit && instr.source && !instr.source.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('thorns');
+      if (stacks <= 0) return;
+      ctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: instr.source, amount: stacks, pierce: true, tags: ['thorns'],
+      }), instr);
+    },
+  }],
+});
+
+// 蓄势：每层攻击 +1（纯读轨标记，滚雪球压力源——暗影刺客等蓄力型敌人用）。
+registerEffect({
+  id: 'focus',
+  type: 'buff',
+  stacking: 'count',
+  statModifiers: {
+    attack: (stacks) => stacks,
+  },
+  name: '蓄势',
+  description: '每层使攻击提高 1 点。',
+  icon: '⚡',
+  color: 'yellow',
+});
+
+// 虚弱：每层攻击 -1（可把攻击压到负——伤害算式对负面板天然衰减，减半/加成仍对称生效）。
+registerEffect({
+  id: 'weaken',
+  type: 'debuff',
+  stacking: 'count',
+  statModifiers: {
+    attack: (stacks) => -stacks,
+  },
+  name: '虚弱',
+  description: '每层使攻击降低 1 点。',
+  icon: '📉',
+  color: 'purple',
+});
+
+// 再生：回合开始恢复层数点生命，然后层数 -1（EFFECTS.md 目录既有定义的正式落地）。
+registerEffect({
+  id: 'regen',
+  type: 'buff',
+  stacking: 'count',
+  name: '再生',
+  description: '回合开始时恢复层数点生命，然后层数减少 1。',
+  icon: '💚',
+  color: 'green',
+  subscriptions: (unit) => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead() && unit.getEffectStacks('regen') > 0,
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('regen');
+      ctx.kernel.submitInstruction(new ApplyHealInstruction({
+        target: unit, amount: stacks,
+      }), instr);
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'regen', stacks: -1 }), instr);
+    },
+  }],
 });

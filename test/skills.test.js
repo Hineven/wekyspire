@@ -10,6 +10,7 @@ import { registerSkill, clearSkillRegistry } from '../src/core/skills/registry.j
 import { canUseSkill, registerSkillSubscriptions } from '../src/core/skills/helpers.js';
 import {
   UseSkillInstruction, ManualStopChantInstruction, SkillCooldownInstruction,
+  SweepSkillCooldownInstruction,
 } from '../src/core/instructions/skill.js';
 import { DrawCardsInstruction } from '../src/core/instructions/cards.js';
 import { ConsumeManaInstruction } from '../src/core/instructions/resources.js';
@@ -211,22 +212,63 @@ describe('技能触发订阅（zone 限定）', () => {
   });
 });
 
-describe('SkillCooldownInstruction：冷却推进', () => {
-  it('按 cooldownTurns 推进并充能；仅冷却 cooldownZones 内的技能', () => {
+describe('SweepSkillCooldownInstruction：自然冷却扫掠（展开为定向推进）', () => {
+  it('按 cooldownZones 推进并充能；焚毁区（不在默认 zones）不冷却', () => {
     const { ctx } = setup();
     // heavy 在手牌中，模拟已用尽
     const h = putInHand(ctx, 'heavy', { remainingUses: 0, currentCooldown: 2 });
-    ctx.kernel.run(new SkillCooldownInstruction(), ctx);
+    ctx.kernel.run(new SweepSkillCooldownInstruction(), ctx);
     expect(h.currentCooldown).toBe(1);
     expect(h.remainingUses).toBe(0);
-    ctx.kernel.run(new SkillCooldownInstruction(), ctx);
+    ctx.kernel.run(new SweepSkillCooldownInstruction(), ctx);
     expect(h.currentCooldown).toBe(0);
     expect(h.remainingUses).toBe(1);
 
     // 焚毁区（不在默认 cooldownZones）的技能不冷却
     const h2 = createSkillRuntime('heavy', { remainingUses: 0, currentCooldown: 2 });
     ctx.battleState.zones.burnt.push(h2);
-    ctx.kernel.run(new SkillCooldownInstruction(), ctx);
+    ctx.kernel.run(new SweepSkillCooldownInstruction(), ctx);
     expect(h2.remainingUses).toBe(0);
+  });
+
+  it('扫掠展开的定向推进可被 PRE 逐卡 veto：只拦那一张，其余照常', () => {
+    const { ctx } = setup();
+    const h = putInHand(ctx, 'heavy', { remainingUses: 0, currentCooldown: 2 });
+    const d = createSkillRuntime('heavy', { remainingUses: 0, currentCooldown: 2 });
+    ctx.battleState.zones.deck.push(d);
+    ctx.kernel.addSubscription({
+      when: SkillCooldownInstruction, phase: 'pre',
+      filter: (instr) => instr.skill === h,
+      react: (instr, kctx) => kctx.kernel.veto(instr, '测试拦截'),
+    });
+    ctx.kernel.run(new SweepSkillCooldownInstruction(), ctx);
+    expect(h.currentCooldown).toBe(2);      // 被拦
+    expect(d.currentCooldown).toBe(1);      // 不受影响
+  });
+});
+
+describe('SkillCooldownInstruction：定向推进（加速/衰败统一路径）', () => {
+  it('正向推进与归零回充；满充能时正向落空且不播报', () => {
+    const { ctx } = setup();
+    const h = putInHand(ctx, 'heavy', { remainingUses: 0, currentCooldown: 1 });
+    ctx.kernel.run(new SkillCooldownInstruction({ skill: h, delta: 1 }), ctx);
+    expect(h.currentCooldown).toBe(0);
+    expect(h.remainingUses).toBe(1); // 回充
+    const ticks = ctx.presenter.calls.filter(c => c.method === 'cooldownTick').length;
+    ctx.kernel.run(new SkillCooldownInstruction({ skill: h, delta: 1 }), ctx); // 满充能：无处推进
+    expect(h.remainingUses).toBe(1);
+    expect(ctx.presenter.calls.filter(c => c.method === 'cooldownTick').length).toBe(ticks); // 不播报
+  });
+
+  it('负向衰败推进计时并播报负 delta；满充能衰败不生效', () => {
+    const { ctx } = setup();
+    const h = putInHand(ctx, 'heavy', { remainingUses: 0, currentCooldown: 2 });
+    ctx.kernel.run(new SkillCooldownInstruction({ skill: h, delta: -1 }), ctx);
+    expect(h.currentCooldown).toBe(3);
+    expect(ctx.presenter.calls).toContainEqual({ method: 'cooldownTick', args: [{ skill: h, delta: -1 }] });
+
+    h.remainingUses = 1; h.currentCooldown = 0; // 满充能：无处分反
+    ctx.kernel.run(new SkillCooldownInstruction({ skill: h, delta: -1 }), ctx);
+    expect(h.currentCooldown).toBe(0);
   });
 });

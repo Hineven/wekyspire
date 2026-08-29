@@ -1,5 +1,6 @@
 import Player from '../state/player.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
+import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
 import {
@@ -28,7 +29,7 @@ export class RunDriver {
     seed = 1,
     profile = null,
     totalFloors,                 // 覆盖塔高（故事模式/测试；缺省 44）
-    deck = ['punch', 'punch', 'guard', 'inflame', 'focusChant'],
+    deck = [...BODY_STARTER_DECK], // 缺省=现行初始卡组（bodySkills 导出，随平衡改动同步）
     abilities = ['battleFocus'],
     player = {},                 // Player 构造参数覆盖
     battlePolicy = null,         // (battle) => skillRuntime | null（缺省=打第一张可出的牌）

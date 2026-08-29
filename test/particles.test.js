@@ -115,13 +115,19 @@ describe('ParticleSystem', () => {
     expect(ps.activeSpriteCount).toBe(1);
   });
 
-  it('逐粒子尺寸：spawn 的 size 写入 aSize 属性，缺省跟随构造 pointSize', () => {
+  it('逐粒子尺寸：spawn 的 size 写入 aSize 属性（±幅度抖动），缺省跟随构造 pointSize', () => {
     const ps = new ParticleSystem({ max: 8, pointSize: 2 });
     ps.spawn(0, 0, { count: 2, size: 5, ttl: 10 });
     ps.spawn(0, 0, { count: 1, ttl: 10 }); // 缺省 = pointSize
     const sizes = ps.points.geometry.attributes.aSize.array;
     const alive = ps._pool.map(p => sizes[p.i]).sort((a, b) => a - b);
-    expect(alive).toEqual([2, 5, 5]);
+    // 逐粒子点径抖动 ×0.8~1.3：显式 5 → [4, 6.5]，缺省 2 → [1.6, 2.6]
+    expect(alive[0]).toBeGreaterThanOrEqual(1.6);
+    expect(alive[0]).toBeLessThanOrEqual(2.6);
+    for (const s of alive.slice(1)) {
+      expect(s).toBeGreaterThanOrEqual(4);
+      expect(s).toBeLessThanOrEqual(6.5);
+    }
     // 材质全局 size 留 1（实际尺寸全在属性里），且 shader 已打 aSize 补丁
     expect(ps.points.material.size).toBe(1);
     expect(typeof ps.points.material.onBeforeCompile).toBe('function');

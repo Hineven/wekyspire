@@ -1,8 +1,12 @@
-// 牌面烘焙器：一张卡的完整视觉（底板/边框/费用徽章/名称/卡图/正文/关键词）→ 单张纹理 + hit map。
+// 牌面烘焙器：一张卡的完整视觉（底板/边框/开销徽章/名称/卡图/正文/关键词）→ 单张纹理 + hit map。
 // 布局盒固定 200x270（10px = 1 世界单位，对应 20x27 牌面 plane）。
 // 视觉语言：
-//   系列（type）→ 主题色：底板着色 + 斜纹饰面 + 名称分隔线（体修灰/火红/木绿…）；
-//   等阶（tier）→ style：边框色与粗细，B 及以上加内描边与箔金渐变描边、边中点饰钉；
+//   灵脉（series 归口，见 cardTheme）→ 主题色：底板着色 + 边框 + 斜纹饰面 + 名称分隔线 + 页脚
+//     ——整卡色相只认灵脉，一眼区分系别（用户定）；
+//   等阶（tier）→ 只有等阶标记（左上菱形徽章）随等阶着色；边框粗细/内描边/箔金是等阶的
+//     「形」，色相仍属灵脉；
+//   开销徽章（右上，右对齐）：魏启=蓝 + 水晶素材（options.manaCrystal，缺省蓝色圆回落）、
+//     行动点=黄圆；初始为 0 的开销不显示；
 //   卡图（options.art，浏览器端由 CardArtCache 供 canvas）→ 名称下方图区，有图时正文区下移；
 //   无卡图 → 程序化占位：系列字形水印 + 中心辉光（版面与有图完全一致）；
 //   系列装饰图层（options.decor，CardArtCache.getDecor 供 decor-{系列}.png）→ 最上层整面贴图，
@@ -14,6 +18,7 @@ import { parseRichText } from './parser.js';
 import { layoutRichText, DEFAULT_COLOR_TABLE } from './layout.js';
 import { drawPlacements, createCanvasMeasurer, defaultDrawIcon } from './texture.js';
 import { allEffects } from '../../core/effects/registry.js';
+import { getNamedTerm } from '../../core/skills/namedTerms.js';
 
 // 效果外观解析（markup 里是效果显示名，按 name 反查定义；Stage→Core 查表是允许方向）。
 // 特征色：def.color 是 richtext 颜色名，经颜色表转 css；未注册/无色 → null（回落正文色）
@@ -45,7 +50,7 @@ export const CARD_FACE_SIZE = Object.freeze({ width: 200, height: 270 });
 const TIER_COLORS = Object.freeze({
   D: '#8a8f9d', C: '#5aa2e8', B: '#a06ee8', A: '#e8b34c', S: '#e85a5a', Z: '#4a3a5a',
 });
-// 系列主题色（体修=灰，火=红，木=绿…）；未知系列回落体修灰
+// 系列类型色（旧主题源，现作 series 未归口时的回落）；未知回落体修灰
 const TYPE_COLORS = Object.freeze({
   normal: '#8a8f9d',
   fire: '#e85a5a',
@@ -56,6 +61,26 @@ const TYPE_COLORS = Object.freeze({
   light: '#e8e0c0',
   dark: '#7a5aa8',
 });
+// 灵脉主题色（大体系）：卡面整体色调（底板/边框/斜纹/分隔线/页脚）跟随灵脉——
+// 一眼区分系别（用户定）。等阶只保留在等阶标记上（徽章色 + 边框粗细/箔金），
+// 不再左右整卡色相。
+const LEINO_THEME = Object.freeze({
+  body: '#8a8f9d',  // 体修：岩灰
+  fire: '#e85a5a',  // 火
+  wood: '#4aa56e',  // 木
+  air: '#7ad0e8',   // 风
+});
+// series（技能家族）→ 灵脉归口：新体系内容落定后在此补一行；未归口回落类型色
+const SERIES_LEINO = Object.freeze({
+  fist: 'body', block: 'body', blade: 'body', punch: 'body', focusChant: 'body',
+  inflame: 'fire',
+});
+/** 卡面主题色：灵脉（series 归口）优先 → 类型色回落 → 体修灰。 */
+export function cardTheme(card) {
+  const leino = SERIES_LEINO[card?.series];
+  if (leino && LEINO_THEME[leino]) return LEINO_THEME[leino];
+  return TYPE_COLORS[card?.type] ?? TYPE_COLORS.normal;
+}
 // 等阶 style：边框宽度 + 是否内描边（B 及以上）
 const TIER_FRAME = Object.freeze({
   D: { width: 2.5, inner: false },
@@ -89,15 +114,6 @@ export function mixHex(a, b, t) {
   return rgbToHex(ca.map((v, i) => v + (cb[i] - v) * t));
 }
 
-export function typeColor(type) {
-  return TYPE_COLORS[type] ?? TYPE_COLORS.normal;
-}
-
-/** 等阶主题色（Vue 面板与战场卡面共用同一套等阶色，保证同卡同貌）。 */
-export function tierColor(tier) {
-  return TIER_COLORS[tier] ?? TIER_COLORS.D;
-}
-
 // 系列字形（无卡图时的占位水印字）；新系列登记定义后在此补一行
 const SERIES_GLYPHS = Object.freeze({
   fist: '拳', blade: '刃', block: '盾',
@@ -121,6 +137,7 @@ function hexA(hex, a) {
  *   scale = 2, createCanvas, measure, drawIcon —— 同 texture.js（单测全注入）
  *   art = CanvasImageSource | null —— 卡面图案（已加载完成的图像/canvas），缺省无图（画程序化占位）
  *   decor = CanvasImageSource | null —— 系列装饰图层（整面贴图、自带透明镂空），缺省跳过
+ *   manaCrystal = CanvasImageSource | null —— 魏启开销徽章的水晶素材（缺省蓝色圆回落）
  */
 export function bakeCardFace(card, options = {}) {
   const {
@@ -135,6 +152,7 @@ export function bakeCardFace(card, options = {}) {
     drawIcon = drawCardIcon,
     art = null,
     decor = null,
+    manaCrystal = null,
   } = options;
 
   const canvas = createCanvas(CARD_FACE_SIZE.width * scale, CARD_FACE_SIZE.height * scale);
@@ -142,7 +160,7 @@ export function bakeCardFace(card, options = {}) {
   ctx.scale(scale, scale);
 
   drawFrame(ctx, card);
-  drawHeader(ctx, card);
+  drawHeader(ctx, card, manaCrystal);
   if (art) drawArt(ctx, art, card);
   else drawArtPlaceholder(ctx, card);
 
@@ -156,6 +174,11 @@ export function bakeCardFace(card, options = {}) {
     resolveEffect: options.resolveEffect ?? ((name) => {
       const { color } = effectLook(name);
       return color ? { color } : {};
+    }),
+    // named 术语特征色（斩/衰败等，core/skills/namedTerms.js 供表）
+    resolveNamed: options.resolveNamed ?? ((name) => {
+      const term = getNamedTerm(name);
+      return term?.color ? { color: term.color } : {};
     }),
   });
   drawPlacements(ctx, layout.placements, { style: BODY_FONT, drawIcon, offsetX: 12, offsetY: bodyTop });
@@ -206,10 +229,11 @@ function drawFrame(ctx, card) {
   const tier = card.tier ?? 'D';
   const tColor = TIER_COLORS[tier] || TIER_COLORS.D;
   const frame = TIER_FRAME[tier] || TIER_FRAME.D;
-  const theme = typeColor(card.type);
+  const theme = cardTheme(card);
 
-  // 底板：深色底混入系列主题色（越高品阶主题色越浓），顶部提亮、底部压暗的纵向渐变
-  const themeT = { D: 0.12, C: 0.18, B: 0.24, A: 0.30, S: 0.36 }[tier] ?? 0.12;
+  // 底板：深色底混入灵脉主题色（固定浓度——品阶浓度差已随「主题只认灵脉」废除），
+  // 顶部提亮、底部压暗的纵向渐变
+  const themeT = 0.22;
   roundedRect(ctx, 1, 1, W - 2, H - 2, 10);
   ctx.fillStyle = mixHex('#232634', theme, themeT);
   ctx.fill();
@@ -220,7 +244,7 @@ function drawFrame(ctx, card) {
   ctx.fillStyle = wash;
   ctx.fill();
 
-  // 系列色斜纹饰面（低透明，压在底板上、卡图/正文之下）
+  // 灵脉色斜纹饰面（低透明，压在底板上、卡图/正文之下）
   drawHatch(ctx, theme);
 
   // 正文区内衬
@@ -228,37 +252,39 @@ function drawFrame(ctx, card) {
   ctx.fillStyle = mixHex('#1a1c26', theme, themeT * 0.5);
   ctx.fill();
 
-  // 边框：品阶色，宽度随等阶；B 及以上加细内描边，描边走箔金渐变（高品阶更闪）
+  // 边框：灵脉主题色，粗细随等阶；B 及以上加细内描边，描边走主题色箔金渐变
+  // （色相属灵脉，等阶只体现在宽度与是否有内描边——用户定）
   roundedRect(ctx, 1 + frame.width / 2, 1 + frame.width / 2, W - 2 - frame.width, H - 2 - frame.width, 9);
   ctx.lineWidth = frame.width;
-  ctx.strokeStyle = borderStyle(ctx, tier, tColor, W, H);
+  ctx.strokeStyle = borderStyle(ctx, tier, theme, W, H);
   ctx.stroke();
   if (frame.inner) {
     roundedRect(ctx, 4 + frame.width, 4 + frame.width, W - 8 - frame.width * 2, H - 8 - frame.width * 2, 7);
     ctx.lineWidth = 1.2;
     ctx.stroke();
   }
-  // 最外圈发丝线（提亮轮廓）
+  // 最外圈发丝线（提亮轮廓，灵脉色）
   ctx.save();
   ctx.globalAlpha = 0.45;
   roundedRect(ctx, 0.5, 0.5, W - 1, H - 1, 10.5);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = tColor;
+  ctx.strokeStyle = theme;
   ctx.stroke();
   ctx.restore();
-  // 四边中点饰钉（品阶色小菱形）
-  drawEdgeStuds(ctx, tColor);
-  // 品阶徽章：左上角菱形 + 字母
-  drawTierBadge(ctx, 16, 16, tier, tColor);
+  // 四边中点饰钉（灵脉色小菱形）
+  drawEdgeStuds(ctx, theme);
+  // 等阶标记：左上角菱形 + 字母——卡面上唯一随等阶着色的元素，
+  // 中心与标题基线对齐（标题 textBaseline=middle @y26）
+  drawTierBadge(ctx, 16, 26, tier, tColor);
 }
 
-// 高品阶（B+）边框走 tier 色 ↔ 提白的箔金渐变，低品阶保持实色
-function borderStyle(ctx, tier, tColor, W, H) {
-  if (!(tier in TIER_FRAME) || !TIER_FRAME[tier].inner) return tColor;
+// 高品阶（B+）边框走主题色 ↔ 提白的箔金渐变，低品阶保持实色
+function borderStyle(ctx, tier, color, W, H) {
+  if (!(tier in TIER_FRAME) || !TIER_FRAME[tier].inner) return color;
   const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, mixHex(tColor, '#ffffff', 0.42));
-  grad.addColorStop(0.5, tColor);
-  grad.addColorStop(1, mixHex(tColor, '#ffffff', 0.24));
+  grad.addColorStop(0, mixHex(color, '#ffffff', 0.42));
+  grad.addColorStop(0.5, color);
+  grad.addColorStop(1, mixHex(color, '#ffffff', 0.24));
   return grad;
 }
 
@@ -319,9 +345,9 @@ function drawTierBadge(ctx, cx, cy, tier, color) {
   ctx.textAlign = 'left';
 }
 
-function drawHeader(ctx, card) {
-  const theme = typeColor(card.type);
-  // 名称（左移让出品阶徽章）
+function drawHeader(ctx, card, manaCrystal) {
+  const theme = cardTheme(card);
+  // 名称（左移让出等阶标记）
   ctx.font = 'bold 22px sans-serif';
   ctx.fillStyle = '#f2f4fa';
   ctx.textBaseline = 'middle';
@@ -338,10 +364,15 @@ function drawHeader(ctx, card) {
   ctx.fillStyle = theme;
   ctx.fillRect(12, 40, CARD_FACE_SIZE.width - 24, 1.2);
   drawDiamond(ctx, CARD_FACE_SIZE.width / 2, 40.6, 3, theme);
-  // 费用徽章（右上：蓝=mana，绿=AP）
-  const cost = card.cost ?? { mana: 0, actionPoint: 0 };
-  drawCostBadge(ctx, 162, 26, cost.mana, '#3c6ee8');
-  drawCostBadge(ctx, 186, 26, cost.actionPoint, '#3ca55c');
+  // 开销徽章（右上，右对齐向左排）：魏启=蓝/水晶素材，行动点=黄圆；
+  // 初始为 0 的开销不显示（用户定——零开销是常态，摆 0 徽章只有噪音）
+  const cost = card.cost ?? {};
+  let bx = 186;
+  if ((cost.mana ?? 0) > 0) {
+    drawCostBadge(ctx, bx, 26, cost.mana, 'mana', manaCrystal);
+    bx -= 25;
+  }
+  if ((cost.actionPoint ?? 0) > 0) drawCostBadge(ctx, bx, 26, cost.actionPoint, 'ap', null);
   ctx.textAlign = 'left';
 }
 
@@ -357,27 +388,50 @@ function drawDiamond(ctx, cx, cy, r, color) {
   ctx.fill();
 }
 
-function drawCostBadge(ctx, cx, cy, value, color) {
-  // 外圈暗环衬底 → 主色圆 → 高光弧 → 白描边 → 数值
+// 开销徽章：kind='mana'（魏启，蓝主题 + 水晶素材，无素材回落蓝色圆）| 'ap'（行动点，黄圆）。
+// 数值一律白字 + 深描边（黄底/水晶亮面上裸白字会糊）
+function drawCostBadge(ctx, cx, cy, value, kind, crystalImg) {
+  const color = kind === 'mana' ? '#4a7df0' : '#f0c040';
+  // 外圈暗环衬底（压住卡图/标题区，保证任何底上可读）
   ctx.beginPath();
   ctx.arc(cx, cy, 12.5, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(8, 10, 16, 0.55)';
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx, cy, 11, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#ffffff';
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(cx, cy, 7.5, -2.4, -1.2);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-  ctx.stroke();
-  ctx.font = 'bold 15px sans-serif';
-  ctx.fillStyle = '#ffffff';
+  if (kind === 'mana' && crystalImg) {
+    // 水晶素材：cover 式填进徽章圆（稍上下溢出圆界，晶尖感）
+    const bw = 22, bh = 26;
+    const iw = crystalImg.width || bw;
+    const ih = crystalImg.height || bh;
+    const s = Math.max(bw / iw, bh / ih);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(crystalImg, cx - (iw * s) / 2, cy - (ih * s) / 2, iw * s, ih * s);
+    ctx.restore();
+  } else {
+    // 圆徽章：主色圆 + 白描边 + 高光弧
+    ctx.beginPath();
+    ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7.5, -2.4, -1.2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.stroke();
+  }
+  ctx.font = 'bold 14px sans-serif';
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(5, 8, 14, 0.85)';
+  ctx.strokeText(String(value), cx, cy + 1);
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(String(value), cx, cy + 1);
   ctx.textAlign = 'left';
 }
@@ -390,7 +444,7 @@ function drawArt(ctx, art, card) {
   const scale = Math.max(w / iw, h / ih);
   const dw = iw * scale;
   const dh = ih * scale;
-  const theme = typeColor(card.type);
+  const theme = cardTheme(card);
   ctx.save();
   roundedRect(ctx, x, y, w, h, 6);
   ctx.clip();
@@ -421,7 +475,7 @@ function drawArt(ctx, art, card) {
 // 无卡图占位：槽底 + 系列色中心辉光 + 系列字形水印 + 细内框（版面与有图一致）
 function drawArtPlaceholder(ctx, card) {
   const { x, y, w, h } = ART_RECT;
-  const theme = typeColor(card.type);
+  const theme = cardTheme(card);
   roundedRect(ctx, x, y, w, h, 6);
   ctx.fillStyle = mixHex('#151a29', theme, 0.10);
   ctx.fill();
@@ -454,7 +508,7 @@ function drawFooter(ctx, card) {
   if (card.charges && card.charges.max !== Infinity) bits.push(`充能${card.charges.max}`);
   if (bits.length === 0) return;
   ctx.font = '13px sans-serif';
-  ctx.fillStyle = typeColor(card.type);
+  ctx.fillStyle = cardTheme(card);
   ctx.textBaseline = 'middle';
   ctx.fillText(bits.join(' · '), 12, CARD_FACE_SIZE.height - 18);
 }

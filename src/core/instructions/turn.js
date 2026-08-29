@@ -1,7 +1,8 @@
 import BattleInstruction, { WAIT } from '../kernel/BattleInstruction.js';
 import { resetTurnHistory, aliveAllies, aliveEnemies } from '../state/battleState.js';
 import { DrawCardsInstruction } from './cards.js';
-import { SkillCooldownInstruction } from './skill.js';
+import { SweepSkillCooldownInstruction } from './skill.js';
+import { GainManaInstruction } from './resources.js';
 import AIActInstruction from './aiAct.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
@@ -56,12 +57,13 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.battleState.turn.count += 1;
         resetTurnHistory(ctx.battleState);
         ctx.player.shield = 0;    // 护盾在自己回合开始清零（持续整个敌方回合）
-        // 魏启无自然恢复：跨战斗持久存量资源，回合开始不回满
         ctx.player.actionPoints = ctx.player.maxActionPoints;
+        // 魏启自然恢复：每回合开始 +1（battle.md §6；走指令——上限截断与 PRE 修饰同管线）
+        ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), this);
         ctx.kernel.submitInstruction(new PlayerTurnStartInstruction(), this);
         return false;
       case 1:
-        ctx.kernel.submitInstruction(new SkillCooldownInstruction(), this);
+        ctx.kernel.submitInstruction(new SweepSkillCooldownInstruction(), this);
         return false;
       case 2:
         // 首回合不抽牌：起手牌由 PreBattle 的 initialDraw 发放
@@ -108,7 +110,7 @@ export class EnemyTurnInstruction extends BattleInstruction {
       case 2:
         for (const e of aliveEnemies(ctx.battleState)) {
           const def = getEnemyDefinition(e.defId);
-          e.intention = def.getIntention ? def.getIntention(e) : null;
+          e.intention = def.getIntention ? def.getIntention(e) : { kinds: ['unknown'] };
         }
         ctx.kernel.submitInstruction(new EnemyTurnEndInstruction(), this);
         return false;
