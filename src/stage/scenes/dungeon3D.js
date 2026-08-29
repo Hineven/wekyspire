@@ -25,6 +25,8 @@
 import * as THREE from 'three';
 import { buildSkydome } from './skydome.js';
 import { buildMoonDust } from './moonDust.js';
+import { familyMaterial } from './kit/materials.js';
+import { P, shade } from './kit/palette.js';
 
 // 水平地板高度（世界坐标）：单位站位/牌桌UI 都以此为地面参照
 export const FLOOR_Y = -30;
@@ -40,22 +42,8 @@ const CHANDELIER_LIGHT_BASE = 800;
 const MOONLIGHT_BASE = 2.2;    // 月光平行光强度（穿窗投影的主角：窗形光池要读得出来）
 const FLAME_RATE = 12;          // 每幽火火焰粒子 /秒
 
-// 冷调调色板（蓝白紫：石材蓝灰泛紫 + 蓝紫/冷白幽火 + 冷月色；绿只留一丝在幽火芯）
-const COL = {
-  floor: 0x404042,   // 石板地面：灰
-  slab: 0x48484a,    // 错位石板：略亮一档
-  wall: 0x404042,    // 墙：灰
-  brick: 0x48484a,   // 砖块补丁：比墙面亮半档
-  stone: 0x3a415c,   // 柱/框/扶壁
-  rock: 0x3d4358,    // 碎石
-  iron: 0x4a4e64,    // 铁件
-  bannerA: 0x5a4f40, // 破幡：红（暗墙上要读得出）
-  bannerB: 0x3a5a6e, // 破幡：青绿
-  night: 0x060a1a,   // 夜空色（窄缝窗/门洞等"通往塔外/深处"的暗槽）
-  flameOut: 0xeef2ff, // 幽火外焰：冷白
-  flameIn: 0xeef2ff,  // 幽火内焰：冷白
-  flameLight: 0x7474a0,
-};
+// 冷调调色板（蓝白紫：石材蓝灰泛紫 + 蓝紫/冷白幽火 + 冷月色；绿只留一丝）——
+// 颜色常量已迁 kit/palette.js 的 dungeon 主题（逐值对齐，禁再散装定义）。
 
 // 地板高度（水平面，常数；保留函数形供贴地物件调用）
 function floorY(_z) {
@@ -81,15 +69,18 @@ export function buildDungeon3D() {
   const torches = [];
   const banners = [];
 
-  // ---- 材质（低多边形平色，靠灯光出氛围） ----
-  const matFloor = new THREE.MeshStandardMaterial({ color: COL.floor, roughness: 0.95, flatShading: true });
-  const matSlab = new THREE.MeshStandardMaterial({ color: COL.slab, roughness: 0.95, flatShading: true });
-  const matWall = new THREE.MeshStandardMaterial({ color: COL.wall, roughness: 0.98, flatShading: true });
-  const matBrick = new THREE.MeshStandardMaterial({ color: COL.brick, roughness: 0.95, flatShading: true });
-  const matStone = new THREE.MeshStandardMaterial({ color: COL.stone, roughness: 0.92, flatShading: true });
-  const matRock = new THREE.MeshStandardMaterial({ color: COL.rock, roughness: 1, flatShading: true });
-  const matIron = new THREE.MeshStandardMaterial({ color: COL.iron, roughness: 0.6, metalness: 0.4, flatShading: true });
-  const matNight = new THREE.MeshBasicMaterial({ color: COL.night, fog: false });
+  // ---- 材质：kit 族参数收敛（WORKFLOW §2.2）----
+  // stone 族承接全部石材/砖/地板（旧散装 roughness 0.92~1.0 的微差并入族值 0.95，
+  // 暗场不可辨）；铁件走 metal 族、暗槽/火苗走 unlit 族、幡布走 cloth 族。
+  const matFloor = familyMaterial('stone', { color: P.floor });
+  const matSlab = familyMaterial('stone', { color: P.slab });
+  const matWall = familyMaterial('stone', { color: P.wall });
+  const matBrick = familyMaterial('stone', { color: P.brick });
+  const matStone = familyMaterial('stone', { color: P.stone });
+  const matRock = familyMaterial('stone', { color: P.rock });
+  const matIron = familyMaterial('metal', { color: P.iron });
+  const matNight = familyMaterial('unlit', { color: P.night });
+  const matFlame = familyMaterial('unlit', { color: P.flameCore });
 
   // ---- 地板：水平面（左端止于左墙内侧面；接月光阴影） ----
   const floorLeft = LEFT_WALL_X + LEFT_WALL_TH / 2;
@@ -231,8 +222,7 @@ export function buildDungeon3D() {
   const doorX = 30;
   const doorW = 13;
   const doorH = 22;
-  const doorVoid = new THREE.Mesh(new THREE.ShapeGeometry(pointedArch(doorW, doorH)),
-    new THREE.MeshBasicMaterial({ color: 0x04060e, fog: false }));
+  const doorVoid = new THREE.Mesh(new THREE.ShapeGeometry(pointedArch(doorW, doorH)), matNight);
   doorVoid.position.set(doorX, FLOOR_Y, FLOOR_FAR_Z + 0.4);
   group.add(doorVoid);
   const doorFrameShape = pointedArch(doorW + 3, doorH + 3);
@@ -258,13 +248,11 @@ export function buildDungeon3D() {
 
   // 破幡 ×2（挂扶壁，一紫一青蓝；update 里轻摆）
   const bannerDefs = [
-    { x: -30, phase: 0, color: COL.bannerA },
-    { x: 80, phase: 1.7, color: COL.bannerB },
+    { x: -30, phase: 0, color: P.bannerRed },
+    { x: 80, phase: 1.7, color: P.bannerBlue },
   ];
   for (const bn of bannerDefs) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: bn.color, roughness: 1, flatShading: true, side: THREE.DoubleSide,
-    });
+    const mat = familyMaterial('cloth', { color: bn.color });
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(5, 19), mat);
     banner.geometry.translate(0, -9.5, 2); // 顶边锚定（摆动绕悬挂点）
     banner.position.set(bn.x, FLOOR_Y + 52, FLOOR_FAR_Z + 3.4);
@@ -283,7 +271,7 @@ export function buildDungeon3D() {
   chain.position.y = 17;
   chain.rotation.z = 0.05;
   chandelier.add(chain);
-  const candleMat = new THREE.MeshBasicMaterial({ color: COL.flameIn, fog: false });
+  const candleMat = familyMaterial('unlit', { color: P.flameCore });
   const candleFlames = [];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
@@ -360,7 +348,7 @@ export function buildDungeon3D() {
     const arc = Math.PI * 0.62;
     const rib = new THREE.Mesh(
       new THREE.TorusGeometry(70, 2.2, 5, 14, arc),
-      new THREE.MeshStandardMaterial({ color: COL.stone, roughness: 0.95, flatShading: true }),
+      matStone,
     );
     rib.rotation.z = (Math.PI - arc) / 2; // 弧段关于顶点对称
     rib.position.set(0, FLOOR_Y + 22, rz); // 弧端 y≈-30+22+70·cos(56°)≈+31（柱帽上方）
@@ -405,15 +393,13 @@ export function buildDungeon3D() {
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 1.4, 1.8, 7), matIron);
     bowl.position.set(spot.x, y, spot.z);
     group.add(bowl);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(1.2, 4.8, 6),
-      new THREE.MeshBasicMaterial({ color: COL.flameOut, fog: false }));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(1.2, 4.8, 6), matFlame);
     flame.position.set(spot.x, y + 3.6, spot.z);
     group.add(flame);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.0, 5),
-      new THREE.MeshBasicMaterial({ color: COL.flameIn, fog: false }));
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.0, 5), matFlame);
     inner.position.set(spot.x, y + 2.1, spot.z);
     group.add(inner);
-    const light = new THREE.PointLight(COL.flameLight, TORCH_LIGHT_BASE * 0.8, 70, 1.8);
+    const light = new THREE.PointLight(P.fireLight, TORCH_LIGHT_BASE * 0.8, 70, 1.8);
     light.position.set(spot.x, y + 3, spot.z + 2);
     group.add(light);
     torches.push({
@@ -451,7 +437,7 @@ export function buildDungeon3D() {
   for (let i = 0; i < 3; i++) {
     const step = new THREE.Mesh(
       new THREE.BoxGeometry(doorW - 2 - i * 1.6, 1.1, 2.2),
-      new THREE.MeshBasicMaterial({ color: 0x0a0e1c + i * 0x030408, fog: false }),
+      familyMaterial('unlit', { color: shade(P.night, 0.1 + i * 0.07) }), // 逐级微亮
     );
     step.position.set(doorX, FLOOR_Y - 0.4 - i * 1.2, FLOOR_FAR_Z + 1.2 + i * 1.8);
     group.add(step);
@@ -493,16 +479,14 @@ export function buildDungeon3D() {
     bowl.position.set(spot.x, y + 0.2, spot.z + 1);
     group.add(bowl);
 
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(1, 4.2, 6),
-      new THREE.MeshBasicMaterial({ color: COL.flameOut, fog: false }));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(1, 4.2, 6), matFlame);
     flame.position.set(spot.x, y + 3.5, spot.z + 1);
     group.add(flame);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.6, 5),
-      new THREE.MeshBasicMaterial({ color: COL.flameIn, fog: false }));
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.6, 5), matFlame);
     inner.position.set(spot.x, y + 2.2, spot.z + 1);
     group.add(inner);
 
-    const light = new THREE.PointLight(COL.flameLight, TORCH_LIGHT_BASE, 78, 1.8);
+    const light = new THREE.PointLight(P.fireLight, TORCH_LIGHT_BASE, 78, 1.8);
     light.position.set(spot.x, y + 3, spot.z + 4);
     group.add(light);
 
