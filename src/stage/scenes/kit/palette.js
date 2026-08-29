@@ -30,8 +30,8 @@ const THEMES = {
     clayDark: 0x524638,
     wax: 0xcfd4e0,       // 蜡烛/烛泪
     gold: 0x8a7d4a,      // 金币/铁箍包金（冷金）
-    moss: 0x4a5c48,
-    mossDark: 0x3a4636,
+    moss: 0x496e50,
+    mossDark: 0x37543e,
     bone: 0x9aa0ac,
     boneDark: 0x767c88,
     blood: 0x5a2830,
@@ -65,8 +65,8 @@ const THEMES = {
     clayDark: 0x483428,
     wax: 0xd8ccd0,
     gold: 0x8a7048,
-    moss: 0x42503e,
-    mossDark: 0x333f30,
+    moss: 0x3f6448,
+    mossDark: 0x2f4c38,
     bone: 0xa8a0a4,
     boneDark: 0x7c7478,
     blood: 0x6a2028,
