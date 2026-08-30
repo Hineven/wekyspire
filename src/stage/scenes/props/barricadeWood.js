@@ -4,6 +4,7 @@
 // 低位再加一道锁脚横档；档上斜插一圈防御尖桩（外倾交错、高 ~4.5）。
 // 变体走 build(opts)：桩架副数（2~4）/尖桩数（4~8）/桩脚撇角。
 
+import * as THREE from 'three';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -14,7 +15,7 @@ export default {
   footprint: { x: 8, z: 3.4 },
   behaviors: [],
   build({ frames = 3, spikes = 6, splay = 0.45, rng } = {}) {
-    const g = K.grp();
+    const g = new THREE.Group();
     const r = rng ?? K.createRng('barricadeWood');
     const nf = Math.min(Math.max(frames, 2), 4);
     const ns = Math.min(Math.max(spikes, 4), 8);

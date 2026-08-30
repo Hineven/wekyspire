@@ -4,6 +4,7 @@
 // 压扁球盔 + 宽檐 + 鼻柱 + unlit 眼缝暗线横贯脸前，整盔侧倾读「歪戴」。
 // 变体走 build(opts)：横臂倾角/盔歪角/锤凹数（0~3）。
 
+import * as THREE from 'three';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -14,7 +15,7 @@ export default {
   footprint: { x: 4, z: 2.6 },
   behaviors: [],
   build({ arm = 0.07, helm = 0.24, dents = 2, rng } = {}) {
-    const g = K.grp();
+    const g = new THREE.Group();
     const r = rng ?? K.createRng('trainingDummy');
     // 鼓座 + 防滑垫板承独桩
     g.add(K.put(K.box({ color: P.woodDark, size: [2.7, 0.26, 0.72], family: 'wood' }), 0, 0.13, 0));
