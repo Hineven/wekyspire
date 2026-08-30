@@ -81,7 +81,7 @@ tags 中带且仅带一个区带 tag：`prison`（监牢）/ `barrack`（军营�
 | 38 | oilLampStand | 油灯立架 | floor | 细杆悬油碗+芯焰 | metal,lightSource,fire,quarters | S |
 | 39 | candleAltarCircle | 祭坛烛阵 | floor | 一圈矮烛+中央高烛 | wax,lightSource,fire,chapel | M |
 | 40 | hearthStone | 小火塘 | floor | 石砌矮圈+炭堆余温 | stone,lightSource,fire,kitchen | M |
-| 41 | bonfireRemnant | 篝火余烬 | floor | 交叉柴+炭堆+一点残焰 | wood,lightSource,fire,camp | M |
+| 41 | bonfireRemnant | 篝火余烬 | floor | 交叉柴+炭堆+一点残焰 | wood,lightSource,fire,generic | M |
 | 42 | brazierDish | 矮盆油灯 | floor | 石盆+芯焰+沿口焦色 | stone,lightSource,fire,chapel | S |
 | 43 | candelabraTable | 桌面五枝烛台 | ['floor','smallWallTop'] | 矮座展枝五烛 | metal,lightSource,fire,quarters | S |
 | 44 | crystalLamp | 晶石灯 | ['floor','smallWallTop'] | 座上晶簇幽光（glowCyan） | stone,lightSource,arcane | S |

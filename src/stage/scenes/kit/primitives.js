@@ -153,6 +153,17 @@ export function scaleXYZ(obj, sx, sy, sz) {
   return obj;
 }
 
+/**
+ * 轴角对向：把对象 +Y 轴指向 dir 方向（quaternion 直设）。
+ * 躺倒/斜靠件别用 tilt 叠 rx+ry（rx 会钉死 ry 的旋转轴，产物沿错误轴躺平）——
+ * 任意朝向一律走本修饰器。
+ */
+export function aim(obj, dx, dy, dz) {
+  const dir = new THREE.Vector3(dx, dy, dz).normalize();
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  return obj;
+}
+
 /** 设位置并返回原对象（链式组装糖）。 */
 export function put(obj, x, y, z) {
   obj.position.set(x, y, z);
