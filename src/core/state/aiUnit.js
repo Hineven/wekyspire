@@ -9,7 +9,8 @@ export default class AIUnit extends Unit {
     this.defId = opts.defId ?? null;
     // 意图模型（battle.md 意图分类）：kinds 为基础意图集合，最多两两组合——
     // 'attack'（附带 hits/damage，预告 = 实际数值）| 'defend' | 'buff'（自我/友军增强）
-    // | 'debuff'（赋予对方削弱）；无 getIntention 的敌人兜底 { kinds: ['unknown'] }。
+    // | 'debuff'（赋予对方削弱）| 'summon'（召唤援军）；无 getIntention 的敌人
+    // 兜底 { kinds: ['unknown'] }。
     this.intention = null;
     this.actionIndex = 0;       // 固定行动序列游标（状态）；推进逻辑在定义/指令侧
   }

@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { CardFxLayer } from './CardFxLayer.js';
+import { hitTestRegions } from '../richtext/layout.js';
 
 // 余烬色板（加色混合，r/g/b 0~1）：火线喷出的火星从深橙到亮黄
 const EMBER_COLORS = [
@@ -102,11 +103,7 @@ export class CardObject extends THREE.Group {
   }
 
   hitTestLocal(lx, ly) {
-    for (const region of this._hitRegions) {
-      const r = region.rect;
-      if (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) return region;
-    }
-    return null;
+    return hitTestRegions(this._hitRegions, lx, ly); // 与 DOM 预览同一实现（layout.js）
   }
 
   /** 状态视觉占位：normal | disabled（淡灰白=暂不可发动） | highlighted。shader 版实现时保持此接口。 */

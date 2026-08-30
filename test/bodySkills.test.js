@@ -192,7 +192,8 @@ describe('拆组合：格挡（block 效果）', () => {
     });
     d.start();
     d.play('defenseStance');
-    expect(d.state.chant.slots).toHaveLength(1);
+    const stance = d.state.zones.hand.find(c => c.defId === 'defenseStance');
+    expect(stance.isActivated).toBe(true); // 发动：留手牌点亮（咏唱2 占位）
     d.endTurn(); // 敌方回合 → 我方回合开始 +1 格挡
     expect(d.player.getEffectStacks('block')).toBe(1);
   });

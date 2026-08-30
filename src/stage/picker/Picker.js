@@ -1,7 +1,12 @@
 // Picker（§4.7）：raycast 拾取 + hit map 二级查询 + hover 事件。
 // 优先级铁律：token 热区 > 整卡 > 场景按钮 > 背景。
+// token 热区 = 任意对象挂 userData.token（{ type, payload, rect 不要求 }，与卡面
+// hitRegion 同构）——单位效果行/意图条等场景侧热区都走这个通用挂钩。
+// 命中链可见性守卫：three 的 raycast 不检查 visible（r185 实测隐藏面片照常
+// 命中），统一在拾取层向上遍历——隐藏对象（死亡收殓的血条行、空意图条）不可
+// 命中，token 源不必各自「隐藏时摘 userData」。
 // 命中 token 热区 → 发 tooltip:*（Shell 消费）；卡面 token（富文本/S 标）同时
-// 维持所属卡的 hover（悬浮到关键词上不该让手牌退出撑开态）；单位效果行 token
+// 维持所属卡的 hover（悬浮到关键词上不该让手牌退出撑开态）；单位 token
 // 照旧离卡（单位无卡悬浮概念）。
 // 拖拽由 BattleStage 在 Picker 的 card 命中基础上驱动（射线与牌桌平面求交），不在本模块内。
 //
@@ -11,6 +16,14 @@
 
 import * as THREE from 'three';
 import { EventNames } from '../../bridge/events.js';
+
+// 命中链可见性：任一祖先 invisible 即视为不可命中（raycast 只查 layers 不查 visible）
+function visibleUp(object) {
+  for (let cur = object; cur; cur = cur.parent) {
+    if (!cur.visible) return false;
+  }
+  return true;
+}
 
 export class Picker {
   /**
@@ -60,14 +73,15 @@ export class Picker {
       this._raycaster.setFromCamera(ndc, camera);
       const hits = this._raycaster.intersectObjects(entries.map(([, p]) => p.object3D), true);
       for (const hit of hits) {
+        if (!visibleUp(hit.object)) continue; // 隐藏对象不可命中（幽灵 token 统一防线）
         const owner = this._findPickable(hit.object);
         if (!owner) continue;
-        // 单位效果行二级查询（行网格 userData.effectRow 与卡面 hitRegion 同构）：
+        // 单位 token 二级查询（userData.token 与卡面 hitRegion 同构）：
         // 悬停（无 kinds 过滤）→ 返回 token 命中走 tooltip:* 协议；
-        // 拖牌/瞄准（kinds 指定 unit）→ 仍返回整单位，行区域也是合法出牌落点
-        if (owner.entry.kind === 'unit' && hit.object.userData?.effectRow
+        // 拖牌/瞄准（kinds 指定 unit）→ 仍返回整单位，token 区域也是合法出牌落点
+        if (owner.entry.kind === 'unit' && hit.object.userData?.token
           && (!kinds || kinds.includes('token'))) {
-          return { kind: 'token', id: owner.id, region: hit.object.userData.effectRow };
+          return { kind: 'token', id: owner.id, region: hit.object.userData.token };
         }
         // 整卡命中后做 hit map 二级查询（仅卡面面片）
         if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {
@@ -91,11 +105,10 @@ export class Picker {
       else this._leaveCard();
       if (!same) {
         this._hoverToken = { id: hit.id, region: hit.region };
+        // 载荷即热区契约本体：{ kind, payload }（tooltipModel 按此解析）+ 指针坐标
         this._bus.emit(EventNames.TOOLTIP_SHOW, {
           kind: hit.region.type,
-          name: hit.region.payload.name,
-          powerDelta: hit.region.payload.powerDelta,
-          payload: hit.region.payload, // 热区完整载荷（如意图释义的 intention 数据）
+          payload: hit.region.payload,
           x: screenX,
           y: screenY,
         });

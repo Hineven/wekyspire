@@ -96,7 +96,7 @@ describe('Picker', () => {
       EventNames.TOOLTIP_HIDE,
       EventNames.CARD_LEAVE,
     ]);
-    expect(events[1].payload).toMatchObject({ kind: 'named', name: '瑞米' });
+    expect(events[1].payload).toMatchObject({ kind: 'named', payload: { name: '瑞米' } });
     expect(events[0].payload).toEqual({ uniqueID: 'c1' });
   });
 
@@ -121,19 +121,19 @@ describe('Picker', () => {
     expect(events.at(-1).payload).toEqual({ uniqueID: 'b' });
   });
 
-  it('单位效果行：hover 走 token tooltip 协议；kinds:[unit] 过滤时仍返回整单位', () => {
+  it('单位 token：hover 走 tooltip 协议（载荷即热区契约）；kinds:[unit] 过滤时仍返回整单位', () => {
     const { sm, picker, scene, events } = make();
-    // 单位组 + 效果行网格（userData.effectRow 与卡面 hitRegion 同构）
+    // 单位组 + 效果行网格（userData.token 与卡面 hitRegion 同构）
     const unit = new THREE.Group();
     const row = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshBasicMaterial());
-    row.userData.effectRow = { type: 'effect', payload: { name: '燃烧' } };
+    row.userData.token = { type: 'effect', payload: { effectId: 'burn', name: '燃烧' } };
     row.position.set(0, 6, 0.1);
     unit.add(row);
     unit.updateMatrixWorld(true);
     scene.add(unit);
     picker.addPickable('u1', unit, { kind: 'unit' });
 
-    // hover 效果行 → tooltip show（kind:'effect'）→ 行内移动 move → 离开 hide
+    // hover 效果行 → tooltip show（{kind, payload} 即契约本体）→ 行内移动 move → 离开 hide
     const rowPos = toScreen(sm, 0, 6);
     picker.hover(rowPos.x, rowPos.y);
     picker.hover(rowPos.x + 3, rowPos.y);
@@ -141,12 +141,35 @@ describe('Picker', () => {
     expect(events.map(e => e.name)).toEqual([
       EventNames.TOOLTIP_SHOW, EventNames.TOOLTIP_MOVE, EventNames.TOOLTIP_HIDE,
     ]);
-    expect(events[0].payload).toMatchObject({ kind: 'effect', name: '燃烧' });
-    // 热区完整载荷随事件透传（意图释义等需要结构化数据的消费方）
-    expect(events[0].payload.payload).toEqual({ name: '燃烧' });
+    expect(events[0].payload).toMatchObject({ kind: 'effect', payload: { effectId: 'burn', name: '燃烧' } });
 
-    // 拖牌/瞄准路径（kinds:['unit']）：效果行区域仍算单位落点，不弹 token
+    // 拖牌/瞄准路径（kinds:['unit']）：token 区域仍算单位落点，不弹 tooltip
     const hit = picker.pick(rowPos.x, rowPos.y, { kinds: ['unit'] });
     expect(hit).toEqual({ kind: 'unit', id: 'u1' });
+  });
+
+  it('可见性守卫：自身或祖先隐藏的面片不可命中（raycast 不查 visible，守卫兜底）', () => {
+    const { sm, picker, scene, events } = make();
+    const unit = new THREE.Group();
+    const row = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshBasicMaterial());
+    row.userData.token = { type: 'effect', payload: { effectId: 'burn', name: '燃烧' } };
+    row.position.set(0, 6, 0.1);
+    unit.add(row);
+    unit.updateMatrixWorld(true);
+    scene.add(unit);
+    picker.addPickable('u1', unit, { kind: 'unit' });
+    const at = toScreen(sm, 0, 6);
+
+    row.visible = false; // 面片自身隐藏（如隐藏态意图条）：无 token 幽灵命中
+    expect(picker.pick(at.x, at.y)).toEqual({ kind: 'background' });
+    row.visible = true;
+    unit.visible = false; // 祖先组隐藏（如死亡收殓的血条行）：整链不可命中
+    expect(picker.pick(at.x, at.y)).toEqual({ kind: 'background' });
+
+    unit.visible = true;
+    expect(picker.pick(at.x, at.y))
+      .toEqual({ kind: 'token', id: 'u1', region: row.userData.token });
+    picker.hover(at.x, at.y); // 可见时正常走 tooltip 协议
+    expect(events[0].name).toBe(EventNames.TOOLTIP_SHOW);
   });
 });

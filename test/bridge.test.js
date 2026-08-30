@@ -203,7 +203,7 @@ describe('Bridge：状态投影', () => {
 });
 
 describe('Bridge：意图层与可用性', () => {
-  it('canPlayCard/playCard/swapCard/stopChant 行为与置灰一致', () => {
+  it('canPlayCard/playCard/swapCard 行为与置灰一致', () => {
     const bridge = makeBridge({ deck: ['focusChant', 'punch', 'punch', 'punch'] });
     autoFinish(bridge);
     bridge.start();
@@ -222,12 +222,13 @@ describe('Bridge：意图层与可用性', () => {
     expect(bridge.intents.swapCard(next.uniqueID)).toBe(true);
     expect(bridge.getProjection().player.actionPoints).toBe(2); // 出牌 1 + 换牌 0
 
-    // 停咏唱
+    // 咏唱双态：发动（付费，留手牌激活）→ 再次打出（免费解除，回牌库）
     bridge.intents.playCard(chant.uniqueID);
-    expect(bridge.getProjection().chant.slots).toHaveLength(1);
-    expect(bridge.intents.canStopChant(chant.uniqueID)).toBe(true);
-    expect(bridge.intents.stopChant(chant.uniqueID)).toBe(true);
-    expect(bridge.getProjection().chant.slots).toHaveLength(0);
+    const chantProj = bridge.getProjection().hand.find(c => c.uniqueID === chant.uniqueID);
+    expect(chantProj.isActivated).toBe(true);
+    expect(bridge.intents.canPlayCard(chant.uniqueID)).toBe(true); // 免费解除可用
+    bridge.intents.playCard(chant.uniqueID);
+    expect(bridge.getProjection().hand.some(c => c.uniqueID === chant.uniqueID)).toBe(false); // 已回牌库
 
     expect(bridge.intents.canEndTurn()).toBe(true);
     expect(bridge.intents.endTurn()).toBe(true);

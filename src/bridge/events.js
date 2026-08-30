@@ -19,10 +19,9 @@ export const EventNames = {
   ANIM_RESOURCE: 'anim:resource',
   ANIM_EFFECT: 'anim:effect',
   ANIM_UNIT_DEATH: 'anim:unit-death',
+  ANIM_UNIT_SPAWN: 'anim:unit-spawn',     // 单位入场（召唤）：billboard 立起 + 扬尘 + 摇晃站稳
   ANIM_SKILL_USED: 'anim:skill-used',
-  ANIM_CHANT_STARTED: 'anim:chant-started',
-  ANIM_CHANT_STOPPED: 'anim:chant-stopped',
-  ANIM_CHANT_STOP_FAILED: 'anim:chant-stop-failed',
+  ANIM_CHANT_TOGGLED: 'anim:chant-toggled', // 咏唱双态翻转（on: 发动点亮 / off: 关停或离手熄灭）
   ANIM_COOLDOWN_TICK: 'anim:cooldown-tick',
   ANIM_CARD_DRAWN: 'anim:card-drawn',
   ANIM_CARD_DISCARDED: 'anim:card-discarded',
@@ -35,16 +34,16 @@ export const EventNames = {
   // 精髓（老版设计）：后端状态与前端显示状态是两套状态；显示状态不随后端即时变，
   // 而由本指令在动画队列中按节拍应用——因此"先播受伤动画再扣血""卡牌飞进坟堆数字才+1"
   // 这类时序由 sync 指令与动画指令的相对入队位置表达：
-  //   效果类（伤害/治疗/护盾/资源/特效/死亡）→ 先动画节拍，后 sync（演完再变数字）
-  //   入场类（抽牌/造牌/转化/咏唱入槽）→ 先 sync，后动画节拍（先转移再播动画）
-  //   离场类（弃/焚/迁移/停咏唱）→ 先离场飞行动画节拍，后 sync（飞进坟堆数字才+1）
+//   效果类（伤害/治疗/护盾/资源/特效/死亡）→ 先动画节拍，后 sync（演完再变数字）
+//   入场类（抽牌/造牌/转化/咏唱发动）→ 先 sync，后动画节拍（先转移再播动画）
+//   离场类（弃/焚/迁移）→ 先离场飞行动画节拍，后 sync（飞进坟堆数字才+1）
   ANIM_STATE_SYNC: 'anim:state-sync',
 
   // ---- frontendBus：动画完成回调（Stage → sequencer，协议名保持旧仓库兼容） ----
   ANIMATION_INSTRUCTION_FINISHED: 'animation-instruction-finished', // { id }
 
   // ---- UI 协议（Stage Picker → Shell 消费） ----
-  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'skill'|'effect'|'intention', name, powerDelta?, payload?, x, y }（x/y 为屏幕像素；payload 为热区完整载荷）
+  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'skill'|'effect'|'intention'|'shift', payload, x, y }（x/y 为 canvas 内像素；payload 即热区契约，见 shell/tooltip.js）
   TOOLTIP_MOVE: 'tooltip:move',   // { x, y }
   TOOLTIP_HIDE: 'tooltip:hide',   // {}
   CARD_HOVER: 'card:hover',       // { uniqueID } 整卡悬浮（token 未命中时）
@@ -63,10 +62,9 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_RESOURCE]: 2000,
   [EventNames.ANIM_EFFECT]: 2000,
   [EventNames.ANIM_UNIT_DEATH]: 6000,   // 倾倒470+回弹220+焚毁430 ≈1.1s，按 ≥5 倍余量
+  [EventNames.ANIM_UNIT_SPAWN]: 3000,   // 立起~350+摇晃站稳~750，按 ≥2.5 倍余量
   [EventNames.ANIM_SKILL_USED]: 5000,   // 发动展示（飞中放大180+停留380）+ 充分余量
-  [EventNames.ANIM_CHANT_STARTED]: 2500,
-  [EventNames.ANIM_CHANT_STOPPED]: 2500,
-  [EventNames.ANIM_CHANT_STOP_FAILED]: 2000,
+  [EventNames.ANIM_CHANT_TOGGLED]: 2500,
   [EventNames.ANIM_COOLDOWN_TICK]: 2000,
   [EventNames.ANIM_CARD_DRAWN]: 2500,
   [EventNames.ANIM_CARD_DISCARDED]: 2500,

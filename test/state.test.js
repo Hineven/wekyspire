@@ -95,13 +95,13 @@ describe('battleState：zones 模型', () => {
     return { bs, a, b, c };
   }
 
-  it('zoneOf 反查各区域含咏唱槽', () => {
+  it('zoneOf 反查各区域', () => {
     const { bs, a, b } = setup();
     expect(zoneOf(bs, a.uniqueID)).toBe('hand');
     moveCard(bs, a.uniqueID, 'deck');
     expect(zoneOf(bs, a.uniqueID)).toBe('deck');
-    moveCard(bs, b.uniqueID, 'chantSlot'); // 正解：移动而非 push，数组唯一事实源
-    expect(zoneOf(bs, b.uniqueID)).toBe('chantSlot');
+    moveCard(bs, b.uniqueID, 'discard'); // 正解：移动而非 push，数组唯一事实源
+    expect(zoneOf(bs, b.uniqueID)).toBe('discard');
     expect(zoneOf(bs, 'nonexistent')).toBeNull();
   });
 

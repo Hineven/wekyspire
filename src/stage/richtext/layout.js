@@ -138,3 +138,16 @@ export function layoutRichText(tokens, options) {
     hitRegions,
   };
 }
+
+/**
+ * 热区命中查询（布局局部坐标，与烘焙分辨率无关）：返回首个包含 (lx,ly) 的热区。
+ * 唯一实现，两类消费方共用：卡面 3D 拾取（CardObject.hitTestUV 反算局部坐标后
+ * 委托）与 DOM 预览（CardFacePreview 把 img 显示像素换算成布局坐标后委托）。
+ */
+export function hitTestRegions(regions, lx, ly) {
+  for (const region of regions) {
+    const r = region.rect;
+    if (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) return region;
+  }
+  return null;
+}

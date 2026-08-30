@@ -21,6 +21,7 @@ import AscensionPanel from './components/AscensionPanel.vue';
 import EndPanel from './components/EndPanel.vue';
 import MenuPopup from './components/MenuPopup.vue';
 import MenuDialog from './components/MenuDialog.vue';
+import TooltipOverlay from './components/TooltipOverlay.vue';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
@@ -177,6 +178,8 @@ onBeforeUnmount(() => {
     <MenuPopup :toasts="menuToasts" @close="dismissMenuToast" />
     <!-- 菜单级全局模态弹窗（confirm / confirmCancel / input，语义见 menuDialog.js） -->
     <MenuDialog />
+    <!-- tooltip 唯一渲染宿主：塔楼/房间两层共享（状态机见 tooltipHub.js） -->
+    <TooltipOverlay />
   </div>
 </template>
 

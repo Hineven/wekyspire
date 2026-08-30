@@ -8,7 +8,8 @@
 //   │   │   ├─ shieldGroup: 护盾层（shield>0 时可见）——蓝色保护框包裹血条
 //   │   │   │  + 左侧盾徽数值 chip（数值变更时放缩跳动，牌库脉冲同语言）
 //   │   │   └─ fxRows: 血条上方左对齐效果行（矢量图标 + 特征色名称 + 层数，
-//   │   │      buff 层数绿 / debuff 层数红；行网格带 userData.effectRow，
+//   │   │      buff 层数绿 / debuff 层数红；行网格带 userData.token
+//   │   │      （{ type:'effect', payload:{ effectId, name } }，与卡面热区同构），
 //   │   │      Picker 二级查询返回 token 命中 → tooltip 协议与卡面热区同构）
 //   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
 //   └─ ring:    目标标注金环（平贴地板）
@@ -184,8 +185,9 @@ export class UnitObject extends THREE.Group {
 
     // 意图图标条（敌方专属）：头顶预告下一手——五基础意图（剑/盾/升/降/?）
     // 两两组合横排，仅攻击附 N×M 数字。呼吸浮动由 update 驱动（与 idle 呼吸
-    // 同语言，死亡即停）。图标条带 userData token（type:'intention'，Picker
-    // 通用热区挂钩与效果行/卡面热区同构）——悬浮走 tooltip:* 协议释义。
+    // 同语言，死亡即停）。图标条带 userData.token（type:'intention'，与效果行/
+    // 卡面热区同构的通用挂钩）——悬浮走 tooltip:* 协议释义；隐藏态由 Picker 的
+    // 命中链可见性守卫兜底（raycast 不查 visible，守卫统一在拾取层）。
     this._intentionMaterial = new THREE.MeshBasicMaterial({ transparent: true, fog: false });
     this._intention = statusify(new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1), this._intentionMaterial), 7);
@@ -292,9 +294,9 @@ export class UnitObject extends THREE.Group {
    * kinds 最多两两组合（battle.md 意图分类）。仅攻击附数字文本（hits>1 显
    * 「N×M」，否则只显伤害值），其余种类纯图标；{ kinds:['unknown'] } 显「?」。
    * 签名驱动重烘，死亡/空意图即隐。
-   * 可见图标条挂 userData token（type:'intention'）——Picker 悬浮二级查询
-   * 走 tooltip 协议释义；raycaster 不检查 visible，隐藏时必须摘掉 token
-   * （否则隐性面片仍会命中）。
+   * 可见图标条挂 userData.token（type:'intention'，payload 携带意图投影数据 +
+   * 单位名）——Picker 悬浮二级查询走 tooltip 协议释义；隐藏态无需摘 token
+   * （Picker 可见性守卫拦截）。
    */
   _syncIntention(intention, isDead) {
     const sig = intention && !isDead ? JSON.stringify(intention) : null;
@@ -302,7 +304,6 @@ export class UnitObject extends THREE.Group {
     this._intentionSig = sig;
     if (!sig) {
       this._intention.visible = false;
-      this._intention.userData.effectRow = null;
       return;
     }
     const { texture, width, height } = bakeIntentionStrip(intention, this._ppw, this._anisotropy);
@@ -315,9 +316,9 @@ export class UnitObject extends THREE.Group {
     this._intention.geometry.dispose();
     this._intention.geometry = new THREE.PlaneGeometry(w, h);
     this._intention.visible = true;
-    this._intention.userData.effectRow = {
+    this._intention.userData.token = {
       type: 'intention',
-      payload: { name: this._name, intention },
+      payload: { intention, unitName: this._name },
     };
   }
 
@@ -325,7 +326,6 @@ export class UnitObject extends THREE.Group {
   hideIntention() {
     this._intentionSig = null;
     this._intention.visible = false;
-    this._intention.userData.effectRow = null;
   }
 
   /** 盾徽数值重烘：文本变才动（setUnit 签名已过滤）；左锚定接在盾徽右侧。 */
@@ -347,8 +347,9 @@ export class UnitObject extends THREE.Group {
    * 烘焙文本（特征色名称 + 层数，buff 层数绿 / debuff 层数红）。
    * 图标不走文本烘焙——emoji 位图彩字经 mip 缩小采样发糊，改程序化矢量绘制
    * （bakeEffectGlyph，与意图条同语言）。
-   * 行网格带 userData.effectRow（{ type:'effect', payload:{ name } }，与卡面热区
-   * hitRegion 同构）——Picker 二级查询返回 token 命中，tooltip 走既有 tooltip:* 协议。
+   * 行网格带 userData.token（{ type:'effect', payload:{ effectId, name } }，与卡面
+   * hitRegion 同构；effectId 供 tooltip 按 id 反查，name 为未注册效果的兜底显示）
+   * ——Picker 二级查询返回 token 命中，tooltip 走既有 tooltip:* 协议。
    */
   _syncEffectRows(effects) {
     const sig = JSON.stringify(effects);
@@ -367,24 +368,24 @@ export class UnitObject extends THREE.Group {
       const bh = Math.max(th, ih) + 0.5;
       const row = new THREE.Group();
       row.name = `fx:${e.effectId}`;
-      const pick = { type: 'effect', payload: { name: e.name } };
+      const pick = { type: 'effect', payload: { effectId: e.effectId, name: e.name } };
       const bg = statusify(new THREE.Mesh(
         new THREE.PlaneGeometry(bw, bh),
         new THREE.MeshBasicMaterial({ color: FX_ROW_BG, transparent: true, opacity: 0.62, depthWrite: false, fog: false }),
       ), 5);
-      bg.userData.effectRow = pick;
+      bg.userData.token = pick;
       const iconMesh = statusify(new THREE.Mesh(
         new THREE.PlaneGeometry(iw, ih),
         new THREE.MeshBasicMaterial({ map: icon.texture, transparent: true, fog: false }),
       ), 6);
       iconMesh.position.set(-bw / 2 + FX_ROW_PAD + iw / 2, 0, 0.02);
-      iconMesh.userData.effectRow = pick;
+      iconMesh.userData.token = pick;
       const textMesh = statusify(new THREE.Mesh(
         new THREE.PlaneGeometry(tw, th),
         new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, fog: false }), // 真 alpha 混合保 AA（同主标签）
       ), 6);
       textMesh.position.set(-bw / 2 + FX_ROW_PAD + iw + FX_ICON_GAP + tw / 2, 0, 0.02);
-      textMesh.userData.effectRow = pick;
+      textMesh.userData.token = pick;
       row.add(bg, iconMesh, textMesh);
       // 左对齐：背板左缘对齐血条左缘；行自下而上堆叠（第一个效果最贴近血条）
       row.position.set(-HP_BAR_WIDTH / 2 + bw / 2, y + bh / 2, 0.1);
@@ -563,7 +564,7 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const kinds = (intention?.kinds?.length ? intention.kinds : ['unknown']).slice(0, 2);
   const H = INTENTION_STRIP_H * ppw; // 逻辑像素高
   const gap = INTENTION_GAP * ppw;
-  const fontPx = H * 0.8;
+  const fontPx = H * 0.6; // 数字字号 = 图标高的 60%（图标不变，2026-08 用户定缩 25%）
   const attackText = kinds.includes('attack') && intention.damage != null
     ? `${intention.hits > 1 ? `${intention.hits}×` : ''}${intention.damage}`
     : null;
@@ -665,6 +666,31 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       // 削弱：紫色降双箭头
       drawChevron(ctx, x, y, s, 0.84, '#b26ee8', true);
       drawChevron(ctx, x, y, s, 0.48, '#b26ee8', true);
+      break;
+    }
+    case 'summon': {
+      // 召唤：青绿四芒星光（中心亮核，援助入场的通用符号）
+      const cx = x + s / 2;
+      const cy = y + s * 0.52;
+      const R = s * 0.42;
+      const r = s * 0.13;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 2;
+        ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+        const a2 = a + Math.PI / 4;
+        ctx.lineTo(cx + Math.cos(a2) * r, cy + Math.sin(a2) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#4cc9c0';
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.4, s * 0.04);
+      ctx.strokeStyle = 'rgba(8, 26, 24, 0.85)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.09, 0, Math.PI * 2);
+      ctx.fillStyle = '#eafffb';
+      ctx.fill();
       break;
     }
     default: {

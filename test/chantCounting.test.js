@@ -58,31 +58,31 @@ describe('太极：每打 3 张牌抽 1 张', () => {
     });
     d.start();
 
-    d.play('taiji'); // 入咏唱槽，不计入计数
-    const taiji = d.state.chant.slots[0];
-    expect(taiji.defId).toBe('taiji');
+    d.play('taiji'); // 发动：留手牌点亮（无槽），不计入计数
+    const taiji = d.state.zones.hand.find(c => c.defId === 'taiji');
+    expect(taiji.isActivated).toBe(true);
     expect(taiji.chantCount ?? 0).toBe(0);
 
     // 第 1、2 张不触发
     d.play('punch');
     d.play('punch');
-    expect(d.state.zones.hand).toHaveLength(2);
+    expect(d.state.zones.hand).toHaveLength(3); // 太极驻手 + 2 拳
     expect(taiji.chantCount).toBe(2);
 
     // 第 3 张触发：牌库空 → 洗回弃牌 → 抽 1
     d.play('punch');
     expect(taiji.chantCount).toBe(3);
-    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+    expect(d.state.zones.hand).toHaveLength(3); // 3 - 1 + 1
 
     // 跨回合：计数不清零，第 6 张再次触发
     d.endTurn(); // 敌方回合 → 回合 2 抽牌（牌库 2 张，抽 2 后弃牌堆空即止）
-    expect(d.state.zones.hand).toHaveLength(4);
+    expect(d.state.zones.hand).toHaveLength(5); // 太极 + 2 拳 + 抽 2
     d.play('punch');
     d.play('punch');
-    expect(d.state.zones.hand).toHaveLength(2);
+    expect(d.state.zones.hand).toHaveLength(3);
     d.play('punch'); // 第 6 张
     expect(taiji.chantCount).toBe(6);
-    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+    expect(d.state.zones.hand).toHaveLength(3); // 3 - 1 + 1
   });
 });
 
@@ -94,29 +94,31 @@ describe('混元：每弃 3 张牌抽 1 张', () => {
     });
     d.start();
 
-    d.play('hunyuan');
-    const hunyuan = d.state.chant.slots[0];
-    expect(d.state.zones.hand).toHaveLength(4);
+    d.play('hunyuan'); // 发动：留手牌点亮（无槽）
+    const hunyuan = d.state.zones.hand.find(c => c.defId === 'hunyuan');
+    expect(hunyuan.isActivated).toBe(true);
+    expect(d.state.zones.hand).toHaveLength(5); // 混元驻手 + 4 拳
 
+    // 弃牌只弃拳（混元驻手：它本身也是合法弃牌目标，此处规避把被测卡弃掉）
     const discardOne = () => {
-      const card = d.state.zones.hand[0];
+      const card = d.state.zones.hand.find(c => c.defId === 'punch');
       d.dispatch(new DiscardCardInstruction({ uniqueID: card.uniqueID }));
     };
 
     discardOne();
     discardOne();
-    expect(d.state.zones.hand).toHaveLength(2);
+    expect(d.state.zones.hand).toHaveLength(3);
     discardOne(); // 第 3 弃 → 抽 1
     expect(hunyuan.chantCount).toBe(3);
-    expect(d.state.zones.hand).toHaveLength(2); // 2 - 1 + 1
+    expect(d.state.zones.hand).toHaveLength(3); // 3 - 1 + 1
 
     // 跨回合累积到 6 再次触发
     d.endTurn();
-    expect(d.state.zones.hand).toHaveLength(4); // 回合 2 抽牌（牌库 2 张）
+    expect(d.state.zones.hand).toHaveLength(5); // 回合 2 抽牌（牌库 2 张）
     discardOne();
     discardOne();
     discardOne();
     expect(hunyuan.chantCount).toBe(6);
-    expect(d.state.zones.hand).toHaveLength(2); // 4 - 3 + 1
+    expect(d.state.zones.hand).toHaveLength(3); // 5 - 3 + 1
   });
 });

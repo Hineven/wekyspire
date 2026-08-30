@@ -17,9 +17,12 @@ const ART_URLS = Object.fromEntries(
 );
 
 // defId → 立牌文件名；玩家（side==='player'）无 defId，固定 unit_player.png
+// defId → 立牌文件名；玩家（side==='player'）无 defId，固定 unit_player.png
+// bigSlime 复用史莱姆立绘：同种不同体型（身高系数放大），暂无专属素材
 const UNIT_ART_FILES = Object.freeze({
   remi: 'unit_remi.png',
   slime: 'unit_slime.png',
+  bigSlime: 'unit_slime.png',
   pyro: 'unit_warlock.png',
 });
 
@@ -29,6 +32,7 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   player: 0.92,
   remi: 0.62,
   slime: 0.6,
+  bigSlime: 0.95,
   pyro: 0.85,
 });
 

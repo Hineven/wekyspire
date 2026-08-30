@@ -112,11 +112,15 @@ export class BattleStage {
       return out;
     });
     // 单位 billboard 文本（HP 数值/效果行/盾徽 chip）专用大字号烘焙：敌排在
-    // z≈-50 视距下屏幕像素密度仅 ~9px/wu，16px 字号的屏上高度只有 ~17px 且被
-    // mip 大幅缩小采样——视觉发糊。单位侧提到 22px + scale4（ppw 不变 → 世界
-    // 尺寸放大 ~37%、纹理密度 ×1.8）；玩家状态栏/顶栏仍走 16px 通用烘焙不动。
+    // z≈-50 视距下屏幕像素密度仅 ~9px/wu，22px 字号屏上仅 ~20px 高——纹理密度
+    // 已是屏上 4 倍（scale4），瓶颈不在分辨率而在小字号的 mip 缩小采样发灰：
+    // 深描边（bakeBoldText 同语言，宽 = 20% 字号）保对比度。玩家状态栏/顶栏
+    // 走 16px 通用烘焙（近景视距，不加描边）。
     this._bakeUnitLabel = bakeLabel || ((text) => {
-      const out = renderRichTextBlock(text, { maxWidth: 320, scale: 4, style: { fontSize: 22, lineHeight: 28 } });
+      const out = renderRichTextBlock(text, {
+        maxWidth: 320, scale: 4, style: { fontSize: 22, lineHeight: 28 },
+        textStroke: { width: 4.4, color: 'rgba(5, 7, 12, 0.9)' },
+      });
       out.texture.anisotropy = Math.min(8, this._smMaxAnisotropy());
       return out;
     });
@@ -145,7 +149,7 @@ export class BattleStage {
     // 右让牌库/坟墓图标（x ∈ [75,85]）；baseY 压低让下缘可越出屏底（-65），与重叠、
     // 外倾共同压缩满 10 张所需空间。机制参数（挤开/提拉放大/z 抬升）见 LayoutEngine。
     this.layout.registerContainer('hand', {
-      minX: -46, maxX: 64,            // 横界不变：避让左下状态栏 / 右侧牌库坟墓
+      minX: -40.5, maxX: 58.5,        // 横界 2026-08 缩 10%：满手外缘不再压牌库/坟墓图标（中心 9 不变）
       baseY: -51.3,                   // 随卡高放大（保持已验收的下潜比例 ≈9% 卡高）
       minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3：重叠率与旧版一致（≈52% 可见）
       radius: 95,
@@ -153,9 +157,7 @@ export class BattleStage {
       arcDegMin: 5, arcGrowFrom: 4, arcDegFull: 52,
       liftY: HAND_LIFT_Y,              // 悬浮提拉：整牌入屏（见常量推导，随卡高自适应）
     });
-    // 咏唱槽：屏幕左侧固定纵列，z 区间低于手牌（不遮挡、不抢层级）。
-    // topY 受正交取景上限约束：可视顶 y=35，卡半高 17.55 → topY≤17.4 才不被上缘裁掉
-    this.layout.registerContainer('chant', { centerX: -74, topY: 16, cardHeight: CARD_HEIGHT, gap: 3, zBase: 4 });
+    // 咏唱无槽区：咏唱卡住手牌扇形（激活态 = isActivated 边缘流光），与普通卡同布局。
     this.layout.setNamedAnchor('deck', PILE_POSITIONS.deck);
     this.layout.setNamedAnchor('discard', PILE_POSITIONS.discard);
 
@@ -187,7 +189,6 @@ export class BattleStage {
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
     this._aiming = null;       // 选目标卡（targetMode 'enemy'）瞄准中 { id }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
-    this._pressChant = null;   // 咏唱卡点按候选 { id }（up 在同卡 = 停止咏唱）
     this._inputSelection = [];
     // 区域查看器（点牌库/坟墓图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
     this._viewer = new CardGalleryObject({
@@ -393,7 +394,6 @@ export class BattleStage {
   _syncCardZones(proj) {
     const lists = {
       hand: proj.hand.map(c => c.uniqueID),
-      chant: proj.chant.slots.map(c => c.uniqueID),
       deck: proj.zones.deck.map(c => c.uniqueID),
       discard: proj.zones.discard.map(c => c.uniqueID),
     };
@@ -423,22 +423,23 @@ export class BattleStage {
   }
 
   // zone 迁移：模型推进（状态权威）+ 视图随动。进牌库/坟堆 = 隐形停车 +
-  // 摘除拾取；进手牌/咏唱的显形与烘面在 _syncCardContents（惰性）。
+  // 摘除拾取；进手牌的显形与烘面在 _syncCardContents（惰性）。
   _setCardZone(id, zone) {
     // 'held'（展示毕待离场）是 hand 的显示位精化：sync 对账不得解除停留，
-    // 解除只属于离场节拍（届时写入真正的去向 zone）——否则折返跟踪复活
+    // 解除只属于离场节拍（届时写入真正的去向 zone）或咏唱回手节拍
+    // （ANIM_CHANT_TOGGLED——卡结算后回手牌，非离场）——否则折返跟踪复活
     if (this.model.getZone(id) === 'held' && zone === 'hand') return;
     const change = this.model.setZone(id, zone);
     const view = this._ensureView(id);
     if (!change) return;
-    if (zone !== 'hand' && zone !== 'chant') {
+    if (zone !== 'hand') {
       // 离手即摘弹簧目标（同 _skillDisplay 的 held 分支）：目标表只在 sync 节拍
       // 重算，不即刻摘除的话空窗期 idle 卡会被拉回手牌锚点（回归病灶）
       this.springs.release(id);
       view.visible = false;
       this.picker.removePickable(id);
     } else if (change.from !== 'held') {
-      // 入场（牌库/坟堆 → 手牌/咏唱）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
+      // 入场（牌库/坟堆 → 手牌）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
       this._entering.add(id);
     }
   }
@@ -472,11 +473,10 @@ export class BattleStage {
     view.dispose();
   }
 
-  // 在场卡（手牌/咏唱）内容同步：显形 + 惰性烘面 + 拾取注册 + 激活流光 + 威力脉冲 + 冷却盖纱
+  // 在场卡（手牌）内容同步：显形 + 惰性烘面 + 拾取注册 + 激活流光 + 威力脉冲 + 冷却盖纱
   _syncCardContents(proj) {
     const present = new Map();
     for (const c of proj.hand) present.set(c.uniqueID, { card: c, zone: 'hand' });
-    for (const c of proj.chant.slots) present.set(c.uniqueID, { card: c, zone: 'chant' });
 
     for (const [id, { card, zone }] of present) {
       const entry = this.model.get(id);
@@ -494,8 +494,8 @@ export class BattleStage {
         }
       }
       entry.prevPower = card.power ?? 0;
-      // 咏唱已激活 → 边缘流光（幂等）
-      view.setActiveGlow(zone === 'chant' && !!card.isActivated);
+      // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
+      view.setActiveGlow(zone === 'hand' && !!card.isActivated);
       // 冷却态盖纱（特效层持久指示）：充能未满=冷却中青纱；冷却被衰败推深（超定义基准）=衰败红纱
       const max = card.charges?.max ?? Infinity;
       const cooling = card.remainingUses < max;
@@ -761,12 +761,10 @@ export class BattleStage {
     const proj = this._snapshot;
     if (!proj) return;
     const orderedHand = proj.hand.map(c => c.uniqueID).filter(id => this._views.has(id));
-    const orderedChant = proj.chant.slots.map(c => c.uniqueID).filter(id => this._views.has(id));
-    const onStage = new Set([...orderedHand, ...orderedChant]);
+    const onStage = new Set(orderedHand);
     // 瞄准中的卡视作"被撑开"对象：位置不变但抬升放大、两侧排开（瞄准时不响应 hover 切换）
     const spreadId = this._aiming?.id ?? this._hoveredCardId;
     this.layout.layoutHand('hand', orderedHand, spreadId);
-    this.layout.layoutColumn('chant', orderedChant);
     // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）
     const targets = new Map();
     for (const id of onStage) {
@@ -836,10 +834,10 @@ export class BattleStage {
       return finish();
     }
 
-    // 卡牌离场节拍（弃/焚/迁移/停咏唱）：播放该卡的离场飞行并阻塞本节拍——
+    // 卡牌离场节拍（弃/焚/迁移）：播放该卡的离场飞行并阻塞本节拍——
     // 离场时序完全由 sequencer 编排（sync 节拍排在离场之后，坟堆数字飞进才+1）
     if (type === EventNames.ANIM_CARD_DISCARDED || type === EventNames.ANIM_CARD_BURNT
-      || type === EventNames.ANIM_CARD_MOVED || type === EventNames.ANIM_CHANT_STOPPED) {
+      || type === EventNames.ANIM_CARD_MOVED) {
       const id = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID ?? null;
       return this._departureBeat(id, type, payload, finish);
     }
@@ -855,9 +853,17 @@ export class BattleStage {
       return this._pulsePile('discard', finish);
     }
     if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
-    // 咏唱激活：不播 scale 脉冲——会打断入槽的跟踪飞行把卡晾在半路；
-    // 激活表达由边缘流光（状态差分）承担，这里只打节拍
-    if (type === EventNames.ANIM_CHANT_STARTED) return finish();
+    // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
+    // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
+    // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）
+    if (type === EventNames.ANIM_CHANT_TOGGLED) {
+      const id = payload?.skill?.uniqueID ?? null;
+      if (id != null && this.model.getZone(id) === 'held' && this._views.has(id)) {
+        this.model.setZone(id, 'hand');
+        this._entering.add(id); // 从展示位飞回扇形锚点
+      }
+      return finish();
+    }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
     // 立即 finish——non-blocking，不占队列节拍
     if (type === EventNames.ANIM_COOLDOWN_TICK) {
@@ -869,6 +875,7 @@ export class BattleStage {
     const target = this._findAnimTarget(payload);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
     if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, finish);
+    if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
     // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
     // 治疗追加 +N 绿色文本粒子（无重力上飘）
     if (target && (type === EventNames.ANIM_HEAL || type === EventNames.ANIM_SHIELD || type === EventNames.ANIM_EFFECT)) {
@@ -902,7 +909,7 @@ export class BattleStage {
       durationMs: 150,
         onComplete: () => {
           const zone = this.model.getZone(targetId);
-          if (zone === 'hand' || zone === 'chant') {
+          if (zone === 'hand') {
             finish(); // 弹簧层自动收养（动画已落定回 idle），从脉冲位滑回锚点
           } else {
             this.animator.animate(targetId, { scale: bs }, { durationMs: 120, onComplete: finish });
@@ -915,7 +922,7 @@ export class BattleStage {
   // 卡本体从当前位置（手牌/松手点）飞到中央放大 → 停留 → 节拍 finish。
   // 收尾分两路：已有离场节拍在排队（正常打出/焚毁）或卡已进结算区（pending，
   // 结算期输入挂起、离场节拍尚未产生）→ 停留展示位等收（不回手牌——它已不是手牌）；
-  // 否则（咏唱入槽等）→ 回锚点跟踪
+  // 否则（咏唱回手等）→ 回锚点跟踪
   _skillDisplay(payload, finish) {
     const id = payload?.skill?.uniqueID;
     const view = id != null ? this._views.get(id) : null;
@@ -942,12 +949,12 @@ export class BattleStage {
     });
   }
 
-  // 队列中是否已有该卡的离场节拍（弃/焚/迁移/停咏唱）——读队列编排计划，不读后端状态
+  // 队列中是否已有该卡的离场节拍（弃/焚/迁移）——读队列编排计划，不读后端状态
   _hasDepartureBeatQueued(id) {
     return !!this.bridge.sequencer.findPending(ins => {
       const { event, payload } = ins.meta ?? {};
       if (event !== EventNames.ANIM_CARD_DISCARDED && event !== EventNames.ANIM_CARD_BURNT
-        && event !== EventNames.ANIM_CARD_MOVED && event !== EventNames.ANIM_CHANT_STOPPED) return false;
+        && event !== EventNames.ANIM_CARD_MOVED) return false;
       const pid = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID;
       return pid === id;
     });
@@ -1047,6 +1054,52 @@ export class BattleStage {
     }
     // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
     this.animator.animate(unit.uniqueID, {}, { delayMs: 220, onComplete: finish });
+  }
+
+  // 单位入场演出（召唤，用户定 2026-08）：与死亡倾倒同轴的语言反演——
+  // billboard「以脚为轴」从平躺立起（squash-stretch：立起过程中纵向压扁再弹开，
+  // 果冻感）→ 立定瞬间落地扬尘（与死亡落尘同粒子语言）→ 两次衰减摇晃站稳
+  // （sin 包络 × (1-t)，绕脚底前后微倾）→ 归位 finish。
+  // 前置 sync 已把视图建到槽位（入场类次序：sync 先 anim 后），此处只动
+  // billboard 局部姿态——place() 的 position/scale 不受干扰，演出后无残留。
+  _unitSpawnBeat(unit, finish) {
+    const billboard = unit.billboard;
+    const px = unit.position.x;
+    const py = unit.position.y;
+    const pz = unit.position.z;
+    const TIP = THREE.MathUtils.degToRad(78); // 起始倾角：近平躺（与死亡的 82° 呼应）
+
+    // ① 立起（~0.38s，power3.out：起得急、临直立减速——「挣起来」的发力感）
+    this.animator.animateCustom(unit.uniqueID, {
+      durationMs: 380,
+      ease: 'power3.out',
+      onUpdate: (t) => {
+        billboard.rotation.x = -TIP * (1 - t);
+        // 果冻展开：前 40% 纵向压扁（贴地铺开），后 60% 弹回全高
+        const squash = t < 0.4 ? 0.55 + t : 1 - 0.28 * Math.sin(Math.PI * (t - 0.4) / 0.6);
+        billboard.scale.y = squash;
+      },
+      onComplete: () => {
+        billboard.rotation.x = 0;
+        billboard.scale.y = 1;
+        // 落地扬尘：近处低速大颗粒 + 外围溅尘（死亡落尘同语言）
+        this.particles.spawn(px, py + 0.8, { count: 16, color: 0xb59a72, speed: 9, ttl: 0.7, gravity: -6, size: 2.2, z: pz });
+        this.particles.spawn(px, py + 0.5, { count: 10, color: 0x857358, speed: 15, ttl: 0.45, gravity: -12, size: 1.4, z: pz });
+        // ② 摇晃站稳（~0.75s）：两次前后摆（sin 两周期 × 指数衰减），摆幅 ≈4.5°
+        this.animator.animateCustom(unit.uniqueID, {
+          durationMs: 750,
+          ease: 'none',
+          onUpdate: (t) => {
+            const decay = Math.exp(-3.2 * t);
+            billboard.rotation.x = THREE.MathUtils.degToRad(4.5) * Math.sin(t * Math.PI * 4) * decay;
+          },
+          onComplete: () => {
+            billboard.rotation.x = 0;
+            finish();
+          },
+        });
+      },
+    });
   }
 
   // 单位死亡演出（用户定 2026-08）：立牌「以脚为轴」向后倾倒（重力加速）→
@@ -1262,9 +1315,8 @@ export class BattleStage {
           this._dragging = { id: hit.id, moved: false };
           this.animator.enterDragging(hit.id);
         }
-      } else if (this.model.getZone(hit.id) === 'chant' && this.bridge.intents.canStopChant(hit.id)) {
-        this._pressChant = { id: hit.id }; // 咏唱卡点按候选（up 在同一卡上 = 停止咏唱）
       }
+      // 咏唱卡无特殊点按语义：双态开关统一走出牌（拖拽过线 = 发动/免费解除）
     }
   }
 
@@ -1305,17 +1357,6 @@ export class BattleStage {
       const played = displayPlayable && (targetId || world.y > PLAY_LINE_Y)
         && this.bridge.intents.playCard(id, targetId);
       if (!played) this.animator.enterIdle(id); // 弹簧收养：从松手位平滑滑回锚点
-      return;
-    }
-
-    if (this._pressChant) {
-      const { id } = this._pressChant;
-      this._pressChant = null;
-      const hit = this.picker.pick(x, y);
-      // 点按落在同一咏唱卡上（整卡或卡面 token）→ 停止咏唱
-      if (hit.id === id && (hit.kind === 'card' || hit.kind === 'token')) {
-        this.bridge.intents.stopChant(id);
-      }
       return;
     }
 

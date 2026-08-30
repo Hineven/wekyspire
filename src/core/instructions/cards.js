@@ -1,15 +1,21 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import { moveCard, swapCostOf, zoneOf } from '../state/battleState.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
-import { enterBattle, leaveBattle } from '../skills/helpers.js';
+import {
+  enterBattle, leaveBattle, deactivateChant, effectiveHandCount, handLimitOf,
+} from '../skills/helpers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
 
 // 卡牌指令族。约定：牌库顶 = 数组 index 0。一切 zone 迁移走 moveCard（数组唯一事实源）。
+// 咏唱离手不变量：激活的咏唱卡离开手牌（弃/焚/移/转化）必先熄灭（deactivateChant：
+// onDisable + 摘旗 + 注销订阅 + 播报）——「激活只在手牌中成立」由指令层统一保证。
 
 // 抽牌：白名单 ['count']（PRE 可改抽牌数）。
 // from: 'top'（默认）| 'bottom'（回旋斩"牌库末抽牌"类机制）。
 // reason: 抽牌缘由标记（'turnStart' = 回合开始抽牌），供 filter 区分
 // "回合开始抽牌数修正"（龟守/神龟姿态）与技能抽牌。
+// 满手判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一，用户定）：
+// 手满后不再抽，未抽的卡留在牌库原位。
 // 牌库抽空时把弃牌堆洗回牌库（rng 可复现）。
 export class DrawCardsInstruction extends BattleInstruction {
   constructor({ count = 1, from = 'top', reason = null }, opts = {}) {
@@ -27,6 +33,7 @@ export class DrawCardsInstruction extends BattleInstruction {
     const { zones, rng } = ctx.battleState;
     const drawn = [];
     for (let i = 0; i < this.payload.count; i++) {
+      if (effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) break; // 加权满手：不抽
       if (zones.deck.length === 0) {
         if (zones.discard.length === 0) break;
         zones.deck = rng.shuffle(zones.discard);
@@ -45,7 +52,7 @@ export class DrawCardsInstruction extends BattleInstruction {
   }
 }
 
-// 焚牌：任意 zone → 焚毁区。
+// 焚牌：任意 zone → 焚毁区。手牌中的激活咏唱先熄灭（离手不变量，含焚毁——用户定）。
 export class BurnCardInstruction extends BattleInstruction {
   constructor({ uniqueID }, opts = {}) {
     super(opts);
@@ -53,6 +60,9 @@ export class BurnCardInstruction extends BattleInstruction {
   }
 
   execute(ctx) {
+    if (zoneOf(ctx.battleState, this.uniqueID) === 'hand') {
+      deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
+    }
     const card = moveCard(ctx.battleState, this.uniqueID, 'burnt');
     this.result = { card };
     ctx.battleState.history.turn.burnt += 1;
@@ -76,6 +86,7 @@ export class DiscardCardInstruction extends BattleInstruction {
       this.result = { card: null };
       return true;
     }
+    deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
     const card = moveCard(ctx.battleState, this.uniqueID, 'discard');
     this.result = { card };
     ctx.battleState.history.turn.discarded += 1;
@@ -96,6 +107,9 @@ export class MoveCardInstruction extends BattleInstruction {
   }
 
   execute(ctx) {
+    if (zoneOf(ctx.battleState, this.uniqueID) === 'hand') {
+      deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
+    }
     const card = moveCard(ctx.battleState, this.uniqueID, this.toZone, { index: this.index });
     this.result = { card, toZone: this.toZone };
     ctx.presenter?.cardMoved?.({ card, toZone: this.toZone });
@@ -116,9 +130,7 @@ export class AddCardInstruction extends BattleInstruction {
 
   execute(ctx) {
     const card = createSkillRuntime(this.defId, this.overrides);
-    const arr = this.toZone === 'chantSlot'
-      ? ctx.battleState.chant.slots
-      : ctx.battleState.zones[this.toZone];
+    const arr = ctx.battleState.zones[this.toZone];
     let at = this.index;
     if (at === 'random') at = ctx.battleState.rng.int(0, arr.length);
     if (at === null) arr.push(card);
@@ -179,9 +191,11 @@ export class TransformCardInstruction extends BattleInstruction {
   execute(ctx) {
     const zone = zoneOf(ctx.battleState, this.uniqueID);
     if (!zone) throw new Error(`卡牌 ${this.uniqueID} 不在任何 zone，无法转化`);
-    const arr = zone === 'chantSlot' ? ctx.battleState.chant.slots : ctx.battleState.zones[zone];
+    const arr = ctx.battleState.zones[zone];
     const card = arr.find(c => c.uniqueID === this.uniqueID);
 
+    // 手牌中的激活咏唱先熄灭（旧 def 的 activated 能力随转化终止）
+    if (zone === 'hand') deactivateChant(ctx, card, 'leave-hand');
     const fromDefId = card.defId;
     leaveBattle(ctx, this.uniqueID);
     card.defId = this.payload.toDefId;

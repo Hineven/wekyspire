@@ -36,6 +36,8 @@ export function createCanvasMeasurer(style = {}) {
  *                                      牌面等需要稳定 hit map 坐标系的场景必传
  *   createCanvas: (w, h) => canvas     缺省 document.createElement
  *   drawIcon: (ctx, {iconType, name, x, y, size, scale}) => void  图标绘制器（缺省画占位框）
+ *   textStroke: { width, color } = null  文本深描边（与 bakeBoldText 同语言）：小字号
+ *     billboard 文本缩小采样后发灰，描边保对比度；null 关闭（卡面等大字号不用）
  * @returns {{ texture: THREE.CanvasTexture, hitRegions: Array, width: number, height: number }}
  *   width/height 为排版局部坐标尺寸（plane 几何直接用），texture 内部为 scale 倍分辨率。
  */
@@ -59,7 +61,7 @@ export function renderRichTextBlock(text, options = {}) {
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
-  drawPlacements(ctx, layout.placements, { style: options.style, drawIcon });
+  drawPlacements(ctx, layout.placements, { style: options.style, drawIcon, textStroke: options.textStroke });
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearMipmapLinearFilter; // 按最大尺寸烘焙 + mipmap（§8.4 风险条款）
@@ -72,13 +74,25 @@ export function renderRichTextBlock(text, options = {}) {
 /**
  * 把排版结果画到任意 2d context（可指定偏移，供 cardFace 等复合烘焙复用）。
  * 调用方负责 ctx.scale；offset 单位为排版局部坐标。
+ * textStroke 开启时两遍绘制：先描边全部字形、再填充——圆角描边外扩 ~width/2，
+ * 逐字 stroke-then-fill 会让后字的描边咬掉前字填充的边缘。
  */
-export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawIcon, offsetX = 0, offsetY = 0 } = {}) {
+export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawIcon, offsetX = 0, offsetY = 0, textStroke = null }) {
   const st = { ...DEFAULT_TEXT_STYLE, ...(style || {}) };
+  const glyphFont = (s) => `${s.fontWeight && s.fontWeight !== 'normal' ? `${s.fontWeight} ` : ''}${s.fontSize}px sans-serif`;
+  if (textStroke) {
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = textStroke.width ?? 3;
+    ctx.strokeStyle = textStroke.color ?? 'rgba(5, 7, 12, 0.85)';
+    for (const p of placements) {
+      if (p.kind !== 'glyph') continue;
+      ctx.font = glyphFont(p.style);
+      ctx.strokeText(p.char, offsetX + p.x, offsetY + p.y + st.lineHeight / 2);
+    }
+  }
   for (const p of placements) {
     if (p.kind === 'glyph') {
-      const weight = p.style.fontWeight && p.style.fontWeight !== 'normal' ? `${p.style.fontWeight} ` : '';
-      ctx.font = `${weight}${p.style.fontSize}px sans-serif`;
+      ctx.font = glyphFont(p.style);
       ctx.fillStyle = p.style.color;
       ctx.textBaseline = 'middle';
       ctx.fillText(p.char, offsetX + p.x, offsetY + p.y + st.lineHeight / 2);

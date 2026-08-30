@@ -1,19 +1,22 @@
-import { registerEnemy } from '../enemies/registry.js';
+import { registerEnemy, getEnemyDefinition } from '../enemies/registry.js';
 import Enemy from '../state/enemy.js';
 import {
   DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction,
 } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
+import { UnitSpawnInstruction } from '../instructions/units.js';
+import { aliveEnemies } from '../state/battleState.js';
 
 // 敌人定义总集。约定：
 //   * 行动序列固定循环，按 unit.actionIndex 取模分支；行动即提交指令，无特判；
 //   * 攻击数值一律走「基数 + unit.attack 面板」（battle.md F1 同源算式）——
 //     floorEnemyGenerator 按楼层抬高 attack 面板即可全场统一缩放，
 //     getIntention 的 damage 用同一算式（意图预告 = 实际数值，所见即所算）；
-//   * getIntention 返回 { kinds, hits?, damage? }：kinds 是基础意图集合（最多
-//     两两组合）——'attack'（附 hits×damage，hits=1 时前端省略次数）/ 'defend' /
-//     'buff'（自我/友军增强，含再生/荆棘/蓄势/自愈）/ 'debuff'（赋予玩家削弱，
-//     含燃烧/虚弱/滞气）。前端只按种类画图标，不写详细信息。
+//   * getIntention(unit, battleState) 返回 { kinds, hits?, damage? }：kinds 是基础
+//     意图集合（最多两两组合）——'attack'（附 hits×damage，hits=1 时前端省略次数）/
+//     'defend' / 'buff'（自我/友军增强，含再生/荆棘/蓄势/自愈）/ 'debuff'（赋予
+//     玩家削弱，含燃烧/虚弱/滞气）/ 'summon'（召唤援军，附 unitSpawned）。
+//     前端只按种类画图标，不写详细信息。
 
 // ① 固定行动序列杂鱼：攻 6 → 盾 4 循环
 registerEnemy({
@@ -31,6 +34,39 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }
     : { kinds: ['defend'] }),
+});
+
+// ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（enemies 未满
+// config.maxEnemies，与前端槽位数对齐）、且上一回合没召唤过（lastSummonTurn
+// 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），满足三条才召唤；否则攻 10 + 盾 5。
+// 召唤出的史莱姆尾插 enemies（本回合行动循环快照已取，下回合起参战）。
+function bigSlimeCanSummon(unit, battleState) {
+  const noSlime = !aliveEnemies(battleState).some(e => e.defId === 'slime');
+  const hasSlot = battleState.enemies.length < (battleState.config?.maxEnemies ?? 4);
+  const notSummonedLastTurn = unit.lastSummonTurn !== battleState.turn.count - 1;
+  return noSlime && hasSlot && notSummonedLastTurn;
+}
+registerEnemy({
+  id: 'bigSlime', name: '大史莱姆',
+  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 44 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    if (bigSlimeCanSummon(unit, bs)) {
+      unit.lastSummonTurn = bs.turn.count;
+      actx.kernel.submitInstruction(new UnitSpawnInstruction({
+        unit: getEnemyDefinition('slime').createUnit(),
+        source: unit,
+      }));
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player, amount: 10 + unit.getStat('attack'),
+    }));
+    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 5 }));
+  },
+  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState)
+    ? { kinds: ['summon'] }
+    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
 // ② 带效果联动的小 Boss：每第三次行动给玩家上 2 层燃烧，其余时间攻 10

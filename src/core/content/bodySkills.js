@@ -528,12 +528,14 @@ registerSkill({
 });
 
 // 防御姿态（龟守链 C）：咏唱，回合开始 +1 层格挡（C 位无上限/无代价，
-// 守护/龟守的上限与代价随 B/A 等阶引入）。
+// 守护/龟守的上限与代价随 B/A 等阶引入）。咏唱双态：发动后住手牌持续生效，
+// 按咏唱值占手牌压力（咏唱2 = 激活时计 2 张手牌）；再次打出免费解除并回牌库。
 registerSkill({
   id: 'defenseStance', name: '防御姿态', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant',
+  chantWeight: 2,
   use() { return true; },
   activated: {
     subscriptions: () => [{
@@ -545,7 +547,10 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱：回合开始时/effect{格挡}1',
+  describe: () => '咏唱2：回合开始时/effect{格挡}1；再次打出（免费）解除并回牌库',
+  battleDescribe: (sctx) => (sctx.self.isActivated
+    ? '已激活：回合开始时/effect{格挡}1；再次打出（免费）解除并回牌库'
+    : '咏唱2：回合开始时/effect{格挡}1；再次打出（免费）解除并回牌库'),
 });
 
 // 肾上腺素（体修套牌 C）：0 开销消耗卡——获得 1AP 并抽 1 牌。应急节奏阀，

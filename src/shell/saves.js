@@ -54,7 +54,7 @@ export function snapshotRun(run) {
       leino: { ...p.leino },
       trainingCount: p.trainingCount,
       ascensionCount: p.ascensionCount,
-      chantSlotBase: p.chantSlotBase,
+      maxHandSize: p.maxHandSize,
     },
     remi: { ...run.remi, unlockedSupports: [...run.remi.unlockedSupports] },
   };

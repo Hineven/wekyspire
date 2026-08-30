@@ -130,10 +130,10 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     // 左对齐：row 中心 x = -6 + 11.55/2 = -0.225；第一行底缘 = 0.75 + 0.4 → 中心 y = 1.15 + 1.25 = 2.4
     expect(row.position.x).toBeCloseTo(-0.225, 5);
     expect(row.position.y).toBeCloseTo(2.4, 5);
-    // 行挂在 hpBar 内（随 billboard 转向），网格带 tooltip 拾取数据
+    // 行挂在 hpBar 内（随 billboard 转向），网格带 tooltip 拾取 token
     expect(row.parent).toBe(unit._hpBar);
     for (const mesh of row.children) {
-      expect(mesh.userData.effectRow).toEqual({ type: 'effect', payload: { name: '燃烧' } });
+      expect(mesh.userData.token).toEqual({ type: 'effect', payload: { effectId: 'burn', name: '燃烧' } });
       expect(mesh.material.depthTest).toBe(false);
       expect(mesh.renderOrder).toBeGreaterThanOrEqual(60);
       expect(mesh.renderOrder).toBeLessThan(70);
@@ -164,11 +164,27 @@ describe('UnitObject 效果行（血条上方左对齐纵列）', () => {
     expect(rowTexture.disposed).toBe(true); // 纹理已随行销毁
   });
 
-  it('层数变化：签名驱动整列重建（tooltip 拾取数据同步更新）', () => {
+  it('层数变化：签名驱动整列重建（tooltip 拾取 token 同步更新）', () => {
     const { unit, baked } = makeUnit();
     unit.setUnit(proj({ effects: [burn(3)] }));
     unit.setUnit(proj({ effects: [burn(2)] }));
     expect(baked[baked.length - 1]).toBe('/red{燃烧} /red{ 2}');
-    expect(unit._fxRows[0].children[0].userData.effectRow.payload.name).toBe('燃烧');
+    expect(unit._fxRows[0].children[0].userData.token.payload)
+      .toEqual({ effectId: 'burn', name: '燃烧' });
+  });
+
+  it('意图条 token：payload 携带意图投影 + 单位名；隐藏态不摘 token（守卫在 Picker）', () => {
+    const { unit } = makeUnit();
+    unit.setUnit(proj({ name: '针鼠', intention: { kinds: ['attack'], hits: 2, damage: 5 } }));
+    expect(unit._intention.visible).toBe(true);
+    expect(unit._intention.userData.token).toEqual({
+      type: 'intention',
+      payload: { intention: { kinds: ['attack'], hits: 2, damage: 5 }, unitName: '针鼠' },
+    });
+    // 隐藏（死亡/空意图）只隐面片不摘 token：raycast 不查 visible，
+    // 幽灵命中由 Picker 的命中链可见性守卫统一拦截
+    unit.hideIntention();
+    expect(unit._intention.visible).toBe(false);
+    expect(unit._intention.userData.token).not.toBeNull();
   });
 });

@@ -4,8 +4,8 @@ import { BattleDriver } from '../src/core/sdk/driver.js';
 import { registerSkill } from '../src/core/skills/registry.js';
 import { registerAbility } from '../src/core/abilities/registry.js';
 import { zoneOf, moveCard, swapCostOf } from '../src/core/state/battleState.js';
-import { ManualStopChantInstruction } from '../src/core/instructions/skill.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
+import { DrawCardsInstruction } from '../src/core/instructions/cards.js';
 import { PlayerTurnStartInstruction } from '../src/core/instructions/turn.js';
 
 // ---- 换牌流程 / 咏唱槽扩容 / 锚定咏唱原型 ----
@@ -18,10 +18,11 @@ registerAbility({
   onBattleStart: (ctx) => { ctx.battleState.swapCostCap = 3; },
 });
 
-// 精英能力·武神：获得一个咏唱槽
+// 精英能力·心宽：手牌上限 +2（咏唱槽时代「武神加槽」的继任者——咏唱压力统一进
+// 手牌上限，扩容 = 更多咏唱空间）
 registerAbility({
-  id: 'warGod', name: '武神',
-  onBattleStart: (ctx) => { ctx.battleState.chant.capacity += 1; },
+  id: 'vastMind', name: '心宽',
+  onBattleStart: (ctx) => { ctx.player.maxHandSize += 2; },
 });
 
 // 归元秘术（消耗性）：重置换牌行动力消耗
@@ -139,57 +140,92 @@ describe('归元秘术：重置换牌费用', () => {
   });
 });
 
-describe('武神：咏唱槽扩容', () => {
-  it('双咏唱槽可同挂两张咏唱；无能力时第二张被拒', () => {
+describe('咏唱：手牌压力统一（无激活数上限）', () => {
+  it('发动合法性：激活后加权手牌数 ≤ 手牌上限，不足被拒；无数量上限可多张并存', () => {
     const d = new BattleDriver({
-      deck: ['focusChant', 'focusChant', 'punch', 'punch'],
-      enemies: ['slime'], abilities: ['warGod'], seed: 5, config: { initialDraw: 4 },
-      player: { maxMana: 5 },
+      deck: ['focusChant', 'focusChant', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], seed: 5, config: { initialDraw: 5 },
+      player: { maxMana: 5, maxHandSize: 8 },
     });
     d.start();
-    expect(d.state.chant.capacity).toBe(2);
-
+    // 手 5 张（含咏唱3×2、加权 5）：激活一张 → 5+2 = 7 ≤ 8 可行
     d.play('focusChant');
-    d.play('focusChant'); // 第二槽
-    expect(d.state.chant.slots).toHaveLength(2);
+    expect(d.state.zones.hand.filter(c => c.isActivated)).toHaveLength(1);
+    // 再激活第二张（咏唱3）：7+2 = 9 > 8 被拒——压力阀门在手牌上限，不在咏唱数量
+    //（play 按名解析会命中已激活那张 = 免费解除，须按 uniqueID 指定未激活者）
+    const second = d.state.zones.hand.find(c => c.defId === 'focusChant' && !c.isActivated);
+    expect(() => d.play(second.uniqueID)).toThrow(/无法出牌|出牌失败/);
+    // 出一张拳（加权 6）后：6+2 = 8 ≤ 8 第二张也可发动（双咏唱并存）
+    d.play('punch');
+    d.play(second.uniqueID);
+    expect(d.state.zones.hand.filter(c => c.isActivated)).toHaveLength(2);
+    expect(d.state.zones.hand.filter(c => c.defId === 'focusChant')).toHaveLength(2); // 都住手牌
+  });
 
-    const d2 = new BattleDriver({
-      deck: ['focusChant', 'focusChant', 'punch', 'punch'],
-      enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
-      player: { maxMana: 5 },
+  it('加权满手：激活咏唱占位阻断抽牌；免费解除回牌库释放压力', () => {
+    const d = new BattleDriver({
+      deck: ['focusChant', ...Array(6).fill('punch')],
+      enemies: ['slime'], seed: 5, config: { initialDraw: 4, drawPerTurn: 0 },
+      player: { maxMana: 5, maxHandSize: 6 },
     });
+    d.start(); // 手 4 张：咏唱 + 3 拳
+    d.play('punch'); // 手 3（加权 3）
+    d.play('focusChant'); // 激活（咏唱3）：加权 3+2 = 5
+    d.dispatch(new DrawCardsInstruction({ count: 3 })); // 5+1 = 6 到上限 → 只抽 1
+    expect(d.state.zones.hand).toHaveLength(4);
+    d.dispatch(new DrawCardsInstruction({ count: 1 })); // 加权 6 满：不抽
+    expect(d.state.zones.hand).toHaveLength(4);
+
+    // 再次打出（免费）→ 解除并回牌库：压力随离手释放，抽牌恢复
+    const mana0 = d.player.mana;
+    const ap0 = d.player.actionPoints;
+    const chant = d.state.zones.hand.find(c => c.defId === 'focusChant');
+    d.play('focusChant');
+    expect(chant.isActivated).toBe(false);
+    expect(zoneOf(d.state, chant.uniqueID)).toBe('deck');
+    expect(d.player.mana).toBe(mana0); // 免费解除
+    expect(d.player.actionPoints).toBe(ap0);
+    d.dispatch(new DrawCardsInstruction({ count: 2 })); // 手 3（加权 3）→ 可抽 2
+    expect(d.state.zones.hand).toHaveLength(5);
+  });
+
+  it('扩容能力（心宽）：上限 +2 → 同局面下原本被拒的发动可行', () => {
+    const base = {
+      deck: ['focusChant', 'punch', 'punch', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], seed: 5, config: { initialDraw: 5, drawPerTurn: 0 },
+    };
+    const d = new BattleDriver({ ...base, player: { maxMana: 5, maxHandSize: 5 } });
+    d.start(); // 手 5（加权 5）：激活咏唱3 → 5+2 = 7 > 5 被拒
+    expect(() => d.play('focusChant')).toThrow('无法出牌');
+
+    const d2 = new BattleDriver({ ...base, abilities: ['vastMind'], player: { maxMana: 5, maxHandSize: 5 } });
     d2.start();
-    expect(d2.state.chant.capacity).toBe(1);
-    d2.play('focusChant');
-    expect(() => d2.play('focusChant')).toThrow('无法出牌'); // 槽满
+    expect(d2.player.maxHandSize).toBe(7); // 能力生效
+    d2.play('focusChant'); // 5+2 = 7 ≤ 7 可行
+    expect(d2.state.zones.hand.find(c => c.defId === 'focusChant').isActivated).toBe(true);
   });
 });
 
-describe('燃心决：无法撤下（anchored）', () => {
-  it('ManualStopChant 被守卫拒绝，咏唱留在槽中且订阅存活', () => {
+describe('燃心决：锁定（anchored）不可主动解除', () => {
+  it('已激活的 anchored 咏唱不可再打出；被弃（离手）时照常熄灭', () => {
     const d = new BattleDriver({
-      deck: ['burnHeartMantra', 'focusChant', 'punch', 'punch'],
-      enemies: ['slime'], abilities: ['warGod'], seed: 5, config: { initialDraw: 4 },
-      player: { maxMana: 5 },
+      deck: ['burnHeartMantra', 'punch', 'punch', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
     });
     d.start();
-    bringToHand(d, 'burnHeartMantra');
-
     d.play('burnHeartMantra');
-    d.play('focusChant');
-    const mantra = d.state.chant.slots.find(c => c.defId === 'burnHeartMantra');
+    const mantra = d.state.zones.hand.find(c => c.defId === 'burnHeartMantra');
+    expect(mantra.isActivated).toBe(true); // 发动：留手牌点亮
     const owned = () => d.kernel.subscriptions.filter(s => s.owner === mantra.uniqueID);
     expect(owned().length).toBeGreaterThan(0);
 
-    d.dispatch(new ManualStopChantInstruction({ uniqueID: mantra.uniqueID }));
-    expect(d.calls('chantStopFailed')).toHaveLength(1);
-    expect(zoneOf(d.state, mantra.uniqueID)).toBe('chantSlot'); // 撤不下
-    expect(mantra.isActivated).toBe(true);
-    expect(owned().length).toBeGreaterThan(0); // 订阅存活
+    // 锁定：连免费解除（再次打出）都不可用
+    expect(() => d.play('burnHeartMantra')).toThrow('无法出牌');
 
-    // 对照：普通咏唱可撤
-    const chant = d.state.chant.slots.find(c => c.defId === 'focusChant');
-    d.dispatch(new ManualStopChantInstruction({ uniqueID: chant.uniqueID }));
-    expect(zoneOf(d.state, chant.uniqueID)).toBe('discard');
+    // 离手（换牌弃掉）：物理熄灭——订阅注销、效果终止（锁定只挡主动解除）
+    d.swap(mantra.uniqueID);
+    expect(mantra.isActivated).toBe(false);
+    expect(zoneOf(d.state, mantra.uniqueID)).toBe('discard');
+    expect(owned()).toHaveLength(0);
   });
 });

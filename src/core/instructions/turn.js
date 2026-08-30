@@ -110,7 +110,7 @@ export class EnemyTurnInstruction extends BattleInstruction {
       case 2:
         for (const e of aliveEnemies(ctx.battleState)) {
           const def = getEnemyDefinition(e.defId);
-          e.intention = def.getIntention ? def.getIntention(e) : { kinds: ['unknown'] };
+          e.intention = def.getIntention ? def.getIntention(e, ctx.battleState) : { kinds: ['unknown'] };
         }
         ctx.kernel.submitInstruction(new EnemyTurnEndInstruction(), this);
         return false;

@@ -515,30 +515,25 @@ describe('BattleStage 无头联调', () => {
     expect(fresh.bridge.getProjection().turn.count).toBe(1); // 未推进回合
   });
 
-  it('咏唱卡：左侧纵列锚点 + z 低于手牌 + 激活边缘流光', () => {
+  it('咏唱卡：发动回手 + 手牌内激活边缘流光；免费解除离场飞行回牌库', () => {
     const { bridge, stage } = make(['focusChant', 'punch', 'punch', 'punch']);
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const chant = bridge.getProjection().hand.find(c => c.defId === 'focusChant');
     bridge.intents.playCard(chant.uniqueID);
 
+    // 发动：卡回手牌（无槽区），激活 → 边缘流光（特效层），随帧推进
     const view = stage._views.get(chant.uniqueID);
-    expect(stage.model.getZone(chant.uniqueID)).toBe('chant');
-    const anchor = stage.layout.getAnchor(chant.uniqueID);
-    expect(anchor.x).toBe(-74);          // 屏幕左侧固定列
-    expect(anchor.y).toBe(16);           // 列顶（受正交取景上限 y=35 与卡半高 17.55 约束）
-    expect(anchor.z).toBeLessThan(10);   // z 区间低于手牌
-
-    // 已激活 → 边缘流光开启（特效层），且随帧推进
+    expect(stage.model.getZone(chant.uniqueID)).toBe('hand');
     expect(view.hasActiveGlow).toBe(true);
     const dot = view.fx.edgeDot;
     const p0 = { x: dot.position.x, y: dot.position.y };
     view.updateFx(0.4);
     expect(dot.position.x !== p0.x || dot.position.y !== p0.y).toBe(true);
 
-    // 停止咏唱 → 卡离场飞行入坟（持久模型：停车不销毁）
-    bridge.intents.stopChant(chant.uniqueID);
-    expect(stage.model.getZone(chant.uniqueID)).toBe('discard');
+    // 再次打出（免费解除）→ 离场飞行回牌库（持久模型：停车不销毁）
+    bridge.intents.playCard(chant.uniqueID);
+    expect(stage.model.getZone(chant.uniqueID)).toBe('deck');
   });
 
   it('资源显示（概念图语言）：AP 金币数字 + 魏启单水晶徽章，随消耗切换', () => {
@@ -575,28 +570,6 @@ describe('BattleStage 无头联调', () => {
     for (let i = 0; i < 3; i++) bridge.intents.playCard(hand[i].uniqueID);
     bridge.frontendBus.emit(EventNames.CARD_HOVER, { uniqueID: hand[3].uniqueID });
     expect(stage._resources.ap.mode).toBe('insufficient');
-  });
-
-  it('点按咏唱卡 = 停止咏唱（卡进坟墓）；点到别处不触发', () => {
-    const { bridge, stage } = make(['focusChant', 'punch', 'punch', 'punch']);
-    bridge.start();
-    settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
-    const chant = bridge.getProjection().hand.find(c => c.defId === 'focusChant');
-    bridge.intents.playCard(chant.uniqueID);
-    expect(bridge.getProjection().chant.slots).toHaveLength(1);
-    settleHand(stage); // 咏唱卡弹簧滑到左列锚点（旧 enterTracking 瞬时归位的替代步进）
-
-    // 按下在咏唱卡上、松手在别处 → 不触发
-    const down = toScreenUI(stage, -74, 18, 4); // 咏唱列 z≈4（UI 空间）
-    const away = toScreenUI(stage, 0, -45);
-    stage.handlePointerDown(down.x, down.y);
-    stage.handlePointerUp(away.x, away.y);
-    expect(bridge.getProjection().chant.slots).toHaveLength(1);
-
-    // 同一卡上点按 → 停止咏唱，卡进坟墓
-    click(stage, [-74, 18, 4]);
-    expect(bridge.getProjection().chant.slots).toHaveLength(0);
-    expect(bridge.getProjection().counts.discard).toBe(1);
   });
 
   it('打出 → 发动展示 → 敌人受伤 → 离场飞行：离场节拍排在效果之后', () => {

@@ -3,7 +3,6 @@ import { createBattleState, aliveEnemies, swapCostOf } from '../state/battleStat
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { ManualStopChantInstruction } from '../instructions/skill.js';
 import { SwapCardInstruction } from '../instructions/cards.js';
 import { PlayerTurnInstruction, TurnLoopInstruction } from '../instructions/turn.js';
 import {
@@ -19,11 +18,8 @@ import {
 export function createBattle({
   runState, enemies = [], allies = [], seed = 1, presenter = null, config = {},
 }) {
-  const battleState = createBattleState({
-    enemies, allies, seed,
-    chantCapacity: runState.player.chantSlotBase,
-  });
-  battleState.config = { initialDraw: 4, drawPerTurn: 2, swapBaseCost: 0, ...config };
+  const battleState = createBattleState({ enemies, allies, seed });
+  battleState.config = { initialDraw: 4, drawPerTurn: 2, swapBaseCost: 0, maxEnemies: 4, ...config };
   battleState.result = null;
 
   const kernel = new BattleKernel({
@@ -114,16 +110,6 @@ export function playerSwapCard(battle, uniqueID) {
   if (!canSwapCard(battle, uniqueID)) return false;
   const turn = currentPlayerTurn(battle);
   battle.kernel.submitInstruction(new SwapCardInstruction({ uniqueID }), turn);
-  battle.kernel.resume(turn, battle.ctx);
-  return true;
-}
-
-// 玩家手动停止咏唱（anchored 守卫在指令内，此处只管提交）
-export function playerStopChant(battle, uniqueID) {
-  const turn = currentPlayerTurn(battle);
-  if (!turn || !turn._waiting || turn.endRequested) return false;
-  if (!battle.battleState.chant.slots.some(s => s.uniqueID === uniqueID)) return false;
-  battle.kernel.submitInstruction(new ManualStopChantInstruction({ uniqueID }), turn);
   battle.kernel.resume(turn, battle.ctx);
   return true;
 }

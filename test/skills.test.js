@@ -9,10 +9,10 @@ import { createRecordingPresenter } from '../src/core/presenter.js';
 import { registerSkill, clearSkillRegistry } from '../src/core/skills/registry.js';
 import { canUseSkill, registerSkillSubscriptions } from '../src/core/skills/helpers.js';
 import {
-  UseSkillInstruction, ManualStopChantInstruction, SkillCooldownInstruction,
+  UseSkillInstruction, SkillCooldownInstruction,
   SweepSkillCooldownInstruction,
 } from '../src/core/instructions/skill.js';
-import { DrawCardsInstruction } from '../src/core/instructions/cards.js';
+import { DrawCardsInstruction, DiscardCardInstruction } from '../src/core/instructions/cards.js';
 import { ConsumeManaInstruction } from '../src/core/instructions/resources.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 
@@ -127,8 +127,10 @@ describe('canUseSkill：可用性检查', () => {
     expect(canUseSkill(ctx, p)).toBe(false);
 
     const c = putInHand(ctx, 'chanter', { remainingUses: 1 });
-    ctx.battleState.chant.capacity = 0; // 无空槽
+    // 咏唱发动合法性：激活后（默认咏唱值 2）加权手牌数超上限 → 不可发动
+    ctx.player.maxHandSize = 1; // 手中已有这张咏唱（计 1），激活后计 2 > 1
     expect(canUseSkill(ctx, c)).toBe(false);
+    ctx.player.maxHandSize = 10;
   });
 });
 
@@ -165,15 +167,19 @@ describe('UseSkillInstruction：完整流程', () => {
   });
 });
 
-describe('咏唱卡生命周期', () => {
-  it('入槽激活、订阅生效；手动停止注销订阅并弃牌', () => {
+describe('咏唱卡生命周期（双态开关）', () => {
+  it('发动：付费回手点亮；再次打出：免费解除并回牌库；订阅随熄灭注销', () => {
     const { ctx } = setup();
     const c = putInHand(ctx, 'chanter');
     ctx.kernel.run(new UseSkillInstruction({ skill: c }), ctx);
 
-    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('chantSlot');
+    // 发动：卡留手牌、点亮激活、onEnable 生效、费用照付（3 蓝 −1 = 2）
+    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('hand');
     expect(c.isActivated).toBe(true);
     expect(chantFlags.enabled).toBe(true);
+    expect(ctx.player.mana).toBe(2);
+    expect(ctx.player.actionPoints).toBe(2);
+    expect(ctx.presenter.calls.some(x => x.method === 'chantToggled' && x.args[0].on === true)).toBe(true);
 
     // 激活订阅：抽牌回蓝
     ctx.battleState.zones.deck.push(createSkillRuntime('punch'));
@@ -181,16 +187,34 @@ describe('咏唱卡生命周期', () => {
     ctx.kernel.run(new DrawCardsInstruction({ count: 1 }), ctx);
     expect(ctx.player.mana).toBe(1);
 
-    // 手动停止
-    ctx.kernel.run(new ManualStopChantInstruction({ uniqueID: c.uniqueID }), ctx);
-    expect(chantFlags.disabledReason).toBe('manual');
+    // 再次打出（已激活）：免费解除 → onDisable('played')、回牌库、费用不动
+    const mana0 = ctx.player.mana;
+    const ap0 = ctx.player.actionPoints;
+    ctx.kernel.run(new UseSkillInstruction({ skill: c }), ctx);
+    expect(chantFlags.disabledReason).toBe('played');
     expect(c.isActivated).toBe(false);
-    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('discard');
+    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('deck');
+    expect(ctx.player.mana).toBe(mana0);
+    expect(ctx.player.actionPoints).toBe(ap0);
 
     // 订阅已注销：再抽牌不回蓝
     ctx.battleState.zones.deck.push(createSkillRuntime('punch'));
+    ctx.player.mana = 0;
     ctx.kernel.run(new DrawCardsInstruction({ count: 1 }), ctx);
-    expect(ctx.player.mana).toBe(1);
+    expect(ctx.player.mana).toBe(0);
+  });
+
+  it('离手不变量：弃牌熄灭咏唱（onDisable + 注销 + 播报）', () => {
+    const { ctx } = setup();
+    const c = putInHand(ctx, 'chanter');
+    ctx.kernel.run(new UseSkillInstruction({ skill: c }), ctx);
+    expect(c.isActivated).toBe(true);
+
+    ctx.kernel.run(new DiscardCardInstruction({ uniqueID: c.uniqueID }), ctx);
+    expect(c.isActivated).toBe(false);
+    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('discard');
+    expect(chantFlags.disabledReason).toBe('leave-hand');
+    expect(ctx.presenter.calls.some(x => x.method === 'chantToggled' && x.args[0].on === false)).toBe(true);
   });
 });
 

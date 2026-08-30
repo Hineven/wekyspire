@@ -17,12 +17,12 @@ import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from 
 const BAND_POOLS = [
   // 第 1 章（1-11）：基础机制（攻防循环 / 荆棘 / 虚弱）
   ['slime', 'hedgehog', 'wraith'],
-  // 第 2 章（12-22）：+ 滚雪球 / 汲血节奏
-  ['slime', 'hedgehog', 'wraith', 'shadowblade', 'nightbat'],
+  // 第 2 章（12-22）：+ 滚雪球 / 汲血节奏 / 召唤
+  ['slime', 'hedgehog', 'wraith', 'shadowblade', 'nightbat', 'bigSlime'],
   // 第 3 章（23-33）：+ 防御压迫
-  ['hedgehog', 'wraith', 'shadowblade', 'nightbat', 'rockshell'],
+  ['hedgehog', 'wraith', 'shadowblade', 'nightbat', 'rockshell', 'bigSlime'],
   // 第 4 章（34-44）：全池高压
-  ['slime', 'shadowblade', 'nightbat', 'rockshell', 'gargoyle'],
+  ['slime', 'shadowblade', 'nightbat', 'rockshell', 'gargoyle', 'bigSlime'],
 ];
 // Boss 层占位（正式 Boss 内容待补）：燃焰术士吃 Boss 强化
 const BOSS_ID = 'pyro';

@@ -68,14 +68,15 @@ describe('无量：每抽 11 张牌回 1 行动力', () => {
       deck: ['wuliang', ...Array(24).fill('punch')],
       enemies: [bigSlime()], seed: 5,
       config: { initialDraw: 5, drawPerTurn: 0 },
+      player: { maxHandSize: 30 }, // 抽牌计数需越过默认上限 10（咏唱占位语义不参与本用例）
     });
     d.start();
     // 起手 5 张已抽（计数从激活后开始，不含起手）
     bringToHand(d, 'wuliang');
 
-    d.play('wuliang'); // 3 AP → 2 AP，入咏唱槽
+    d.play('wuliang'); // 3 AP → 2 AP，发动（留手牌点亮）
     expect(d.player.actionPoints).toBe(2);
-    const wuliang = d.state.chant.slots[0];
+    const wuliang = d.state.zones.hand.find(c => c.defId === 'wuliang');
 
     d.dispatch(new DrawCardsInstruction({ count: 6 }));
     expect(wuliang.chantCount).toBe(6);
@@ -91,12 +92,13 @@ describe('无量：每抽 11 张牌回 1 行动力', () => {
       deck: ['wuliang', ...Array(24).fill('punch')],
       enemies: [bigSlime()], seed: 5,
       config: { initialDraw: 5, drawPerTurn: 3 },
+      player: { maxHandSize: 30 },
     });
     d.start();
 
     bringToHand(d, 'wuliang');
     d.play('wuliang');
-    const wuliang = d.state.chant.slots[0];
+    const wuliang = d.state.zones.hand.find(c => c.defId === 'wuliang');
     d.dispatch(new DrawCardsInstruction({ count: 10 }));
     expect(wuliang.chantCount).toBe(10);
 
@@ -153,7 +155,7 @@ describe('拳王：每回合第 5、8 张卡各回 1 行动力', () => {
       deck: Array(10).fill('punch'),
       enemies: [bigSlime()], abilities: ['champion'], seed: 5,
       config: { initialDraw: 10 },
-      player: { maxActionPoints: 7 },
+      player: { maxActionPoints: 7, maxHandSize: 10 }, // 一回合连打 9 张：起手需越过默认上限 7
     });
     const slime = d.state.enemies[0];
     d.start();

@@ -15,6 +15,8 @@ export default class Player extends Unit {
     this.deck = [];                 // run 级卡组：[skillRuntime]
     this.abilities = [];            // [abilityId]
     this.leino = {};                // 灵脉等级 { fire: 1, ... }
-    this.chantSlotBase = opts.chantSlotBase ?? 1;  // 基础咏唱槽数（能力可加槽）
+    // 手牌上限（加权口径：激活的咏唱卡按咏唱值 chantWeight 计多张——咏唱与手牌
+    // 压力统一为同一资源）。旧档无此字段时读取侧 ?? 10 兜底。
+    this.maxHandSize = opts.maxHandSize ?? 7;
   }
 }

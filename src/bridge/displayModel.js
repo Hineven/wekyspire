@@ -15,7 +15,7 @@ import mitt from 'mitt';
 // 纯数据 + 迁移方法，不 import three；视图经事件订阅或由场景导演直接驱动
 // （节拍 = 模型迁移 + 视图演出，当前阶段走后者，事件留给跨层视图与测试）。
 //
-// zone ∈ 'hand' | 'chant' | 'deck' | 'discard'
+// zone ∈ 'hand' | 'deck' | 'discard'
 //      | 'held'（发动展示毕、等待离场节拍的停留位——布局跟踪让位）
 // sequencer 串行保证：sync 应用时该卡的离场飞行必已落地，"飞行途中同 id 重生"
 // 在结构上不可能发生。

@@ -1,44 +1,64 @@
-// tooltip 内容（Shell BattleHud 与 debug 页共用）：tooltip:* 协议载荷 → HTML。
-// effect/skill 经注册表反查定义补信息（markup 里是显示名，按 name 匹配）；
-// named（/named{} 热区）经 namedTerms 术语表反查描述（斩/衰败等通用机制词）；
-// intention（意图图标条）按投影意图数据直译短句（UnitObject 意图条同语言）。
+// tooltip 内容契约（塔楼/房间层共享的唯一解析器）：tooltipModel(kind, payload) →
+// 结构化模型 { title, delta?, body, tint? }，渲染统一走 TooltipOverlay（App.vue
+// 挂载的唯一样式宿主），本模块不产 HTML。
+//
+// token 源（Picker 3D 热区 / CardFacePreview DOM 热区 / 意图图标条）只产
+// { kind, payload }，内容解析全部集中在此：
+//   effect   优先 effectId 反查（单位效果行——投影自带 id，注册表按 id 命中）；
+//            缺省按显示名反查（卡面富文本 markup 以显示名为载体——烘焙即快照，
+//            名字匹配与卡面上印的文本天然一致，这是有意为之的快照语义）
+//   skill    markup 快照语义，按显示名反查 + powerDelta 增量
+//   named    术语文档（namedTerms，键即术语名，含参数如「衰败2」）
+//   intention 意图投影数据直译短句（与 UnitObject 意图条图标一一对应）
+//   shift    Shift 详情方标（文案由热区携带）
 
-import { allEffects } from '../core/effects/registry.js';
+import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
 import { allSkills } from '../core/skills/registry.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
 
-export function tooltipHtml({ kind, name, powerDelta, payload }) {
-  if (kind === 'effect') {
-    const def = allEffects().find(d => d.name === name);
-    return def ? `<b>${def.icon ?? ''}${def.name}</b><br>${def.description ?? ''}` : `[effect] ${name}`;
+export function tooltipModel(kind, payload = {}) {
+  switch (kind) {
+    case 'effect': return effectModel(payload);
+    case 'skill': return skillModel(payload);
+    case 'named': return namedModel(payload);
+    case 'intention': return intentionModel(payload);
+    case 'shift': return { title: payload.name ?? '', body: '' };
+    default: return { title: `[${kind}] ${payload.name ?? ''}`, body: '' };
   }
-  if (kind === 'skill') {
-    const def = allSkills().find(d => d.name === name);
-    const delta = powerDelta ? `（威力 ${powerDelta > 0 ? '+' : ''}${powerDelta}）` : '';
-    if (!def) return `[skill] ${name}${delta}`;
-    const cost = def.cost ? `费${def.cost.mana} AP${def.cost.actionPoint}` : '';
-    return `<b>${def.name}</b>${delta}<br><span style="color:#8af">${cost}</span>`;
-  }
-  if (kind === 'named') {
-    const term = getNamedTerm(name);
-    return term ? `<b>${term.name}${term.param ?? ''}</b><br>${term.text}` : `<b>${name}</b>`;
-  }
-  if (kind === 'intention') {
-    const p = payload ?? {};
-    const title = p.name ? `<b>${p.name}的意图</b><br>` : '';
-    return `${title}${intentionSentence(p.intention)}`;
-  }
-  // Shift 详情方标（卡牌详情卡面右下角）：提示文案由热区 payload 携带
-  if (kind === 'shift') return `<b>${name}</b>`;
-  return `[${kind}] ${name}`;
+}
+
+function effectModel({ effectId, name }) {
+  const def = (effectId != null ? getEffectDefinition(effectId) : null)
+    ?? allEffects().find(d => d.name === name);
+  if (!def) return { title: `[effect] ${name ?? effectId}`, body: '' };
+  return { title: `${def.icon ?? ''}${def.name}`, body: def.description ?? '' };
+}
+
+function skillModel({ name, powerDelta }) {
+  const def = allSkills().find(d => d.name === name);
+  if (!def) return { title: `[skill] ${name ?? ''}`, body: '' };
+  const cost = def.cost ? `费${def.cost.mana} AP${def.cost.actionPoint}` : '';
+  return { title: def.name, delta: powerDelta || null, body: cost, tint: '#8af' };
+}
+
+function namedModel({ name }) {
+  const term = getNamedTerm(name);
+  return term
+    ? { title: `${term.name}${term.param ?? ''}`, body: term.text }
+    : { title: name ?? '', body: '' };
+}
+
+function intentionModel({ intention, unitName }) {
+  return { title: unitName ? `${unitName}的意图` : '意图', body: intentionSentence(intention) };
 }
 
 // 意图释义短句：kinds 最多两两组合 → 「下回合将…，…」；攻击附 N×M（多发带总量），
-// 未知意图单独成句。文案与 UnitObject 意图条图标一一对应（剑/盾/升/降/?）。
+// 未知意图单独成句。文案与 UnitObject 意图条图标一一对应（剑/盾/升/降/星光/?）。
 const INTENTION_ACTS = Object.freeze({
   defend: '获得护盾',
   buff: '强化自身',
   debuff: '赋予负面效果',
+  summon: '召唤援军',
 });
 
 function intentionSentence(intention) {

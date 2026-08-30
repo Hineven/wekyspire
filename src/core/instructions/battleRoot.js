@@ -56,10 +56,10 @@ export class PreBattleInstruction extends BattleInstruction {
         }
       }
 
-      // 初始意图预览
+      // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）
       for (const e of battleState.enemies) {
         const def = getEnemyDefinition(e.defId);
-        e.intention = def.getIntention ? def.getIntention(e) : { kinds: ['unknown'] };
+        e.intention = def.getIntention ? def.getIntention(e, battleState) : { kinds: ['unknown'] };
       }
 
       ctx.presenter?.battleStart?.({ battleState, runState });

@@ -77,7 +77,7 @@ describe('万变拳：嵌套出牌 + 费用豁免', () => {
     expect(d.isWaiting()).toBe(true);
   });
 
-  it('嵌套打咏唱卡：入槽激活，订阅生效', () => {
+  it('嵌套打咏唱卡：回手点亮激活，订阅生效', () => {
     const d = new BattleDriver({
       deck: ['wildFist', 'focusChant', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
@@ -89,9 +89,9 @@ describe('万变拳：嵌套出牌 + 费用豁免', () => {
     const chant = d.state.zones.hand.find(c => c.defId === 'focusChant');
     d.respond([chant.uniqueID]);
 
-    expect(d.state.chant.slots).toHaveLength(1);
-    expect(d.state.chant.slots[0].defId).toBe('focusChant');
-    expect(d.state.chant.slots[0].isActivated).toBe(true);
+    const chanted = d.state.zones.hand.find(c => c.defId === 'focusChant');
+    expect(chanted.isActivated).toBe(true); // 嵌套发动：回手点亮（无槽，住手牌）
+    expect(zoneOf(d.state, chanted.uniqueID)).toBe('hand');
   });
 
   it('嵌套打充能卡：照常消耗充能并启动冷却', () => {

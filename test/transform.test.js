@@ -202,7 +202,7 @@ describe('转化：结算期输入集成（点化）', () => {
 });
 
 describe('转化：激活中的咏唱卡', () => {
-  it('转化后 activated 订阅一并注销，isActivated 复位，卡留在咏唱槽', () => {
+  it('转化后 activated 订阅一并注销，isActivated 复位，卡留手牌', () => {
     const d = new BattleDriver({
       deck: ['focusChant', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
@@ -211,7 +211,7 @@ describe('转化：激活中的咏唱卡', () => {
     bringToHand(d, 'focusChant');
 
     d.play('focusChant');
-    const chant = d.state.chant.slots[0];
+    const chant = d.state.zones.hand.find(c => c.defId === 'focusChant');
     expect(chant.isActivated).toBe(true);
     const owned = () => d.kernel.subscriptions.filter(s => s.owner === chant.uniqueID);
     expect(owned().length).toBeGreaterThan(0);
@@ -220,6 +220,6 @@ describe('转化：激活中的咏唱卡', () => {
     expect(chant.defId).toBe('punch');
     expect(chant.isActivated).toBe(false);
     expect(owned()).toHaveLength(0); // activated 与常驻同 owner，一并注销
-    expect(zoneOf(d.state, chant.uniqueID)).toBe('chantSlot'); // zone 不动（由技能逻辑负责）
+    expect(zoneOf(d.state, chant.uniqueID)).toBe('hand'); // zone 不动（由技能逻辑负责）
   });
 });

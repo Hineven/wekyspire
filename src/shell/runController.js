@@ -58,7 +58,7 @@ function restoreFromSave(run, save) {
   p.leino = { ...sp.leino };
   p.trainingCount = sp.trainingCount;
   p.ascensionCount = sp.ascensionCount;
-  p.chantSlotBase = sp.chantSlotBase;
+  p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
   run.relicUses = { ...save.relicUses };

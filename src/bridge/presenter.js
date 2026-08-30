@@ -98,15 +98,21 @@ export function createBridgePresenter({
       log(`${p.unit.name} 被击败！`, 'combat');
     },
 
+    // 单位生成（召唤）：入场类——先 sync（视图/槽位就位）再播「立起」演出
+    unitSpawned: (p) => {
+      syncState();
+      anim(EventNames.ANIM_UNIT_SPAWN, p);
+      log(p.source ? `${p.source.name} 召唤了 ${p.unit.name}！` : `${p.unit.name} 现身！`, 'combat');
+    },
+
     // ---- 入场/信息类：先 sync，后动画（先转移再播动画） ----
     skillUsed: (p) => {
       syncState();
       anim(EventNames.ANIM_SKILL_USED, p);
       log(`使用 ${p.def?.name ?? p.skill.defId}`, 'skill');
     },
-    chantStarted: (p) => { syncState(); anim(EventNames.ANIM_CHANT_STARTED, p); },
+    chantToggled: (p) => { syncState(); anim(EventNames.ANIM_CHANT_TOGGLED, p); },
     cooldownTick: (p) => { syncState(); anim(EventNames.ANIM_COOLDOWN_TICK, p); },
-    chantStopFailed: (p) => { syncState(); anim(EventNames.ANIM_CHANT_STOP_FAILED, p); },
 
     cardDrawn: (p) => { syncState(); anim(EventNames.ANIM_CARD_DRAWN, p); },
     // 造牌按落区分流：入库（toZone 'deck'）= 离场次序（先演出后 sync）——
@@ -128,7 +134,6 @@ export function createBridgePresenter({
     cardBurnt: (p) => { anim(EventNames.ANIM_CARD_BURNT, p); syncState(); },
     cardMoved: (p) => { anim(EventNames.ANIM_CARD_MOVED, p); syncState(); },
     cardSwapped: (p) => { anim(EventNames.ANIM_CARD_SWAPPED, p); syncState(); },
-    chantStopped: (p) => { anim(EventNames.ANIM_CHANT_STOPPED, p); syncState(); },
 
     // 结算期输入请求：先 sync（玩家决策前显示状态必须最新），
     // 请求本身不进动画队列，直接交仲裁器（战斗已挂起，等的是玩家不是动画）

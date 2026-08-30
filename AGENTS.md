@@ -57,8 +57,8 @@ MapStage 与 BattleStage 共享同一 canvas，由 `StageManager` 切换。run �
 ### Core（`src/core/`）
 
 - **`kernel/`** — 结算内核：`BattleKernel` 是「指令树 DFS 泵 + 订阅注册表 + 取消三动词（veto/abort/inspect）」。订阅 `{when, phase('pre'|'post'), filter, window('battle'|'turn'|'once'), priority, react, owner}`。铁律：POST 反应作为已完成节点的子节点提交；被 veto 的节点不触发任何 POST；取消入口只在内核。
-- **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct。
-- **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/discard/burnt + chant 槽）、种子 rng、`skillRuntime`（定义/运行时分离）。
+- **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位：`UnitSpawnInstruction` 尾插 enemies/allies，本回合行动循环快照已取、下回合起参战；敌方意图 kinds 含 'summon'）。
+- **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/discard/burnt/pending；咏唱无槽——卡住五区，激活态在 skillRuntime.isActivated，压力走手牌上限加权口径）、种子 rng、`skillRuntime`（定义/运行时分离）。
 - **`flow/battle.js`** — 战斗装配：`createBattle/startBattle/playerUseSkill/playerEndTurn/respondInput`。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
 - **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK）、rewards / ascension / prep、rooms/（camp、event、slotMachine、training）。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 工厂产出同构注册表：skills/、abilities/、enemies/、allies/、relics/、effects/。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
@@ -72,7 +72,7 @@ MapStage 与 BattleStage 共享同一 canvas，由 `StageManager` 切换。run �
 
 ### Stage（`src/stage/`）
 
-Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环）、`stages/`（MapStage、BattleStage）、`scenes/`（skydome、dungeon3D、volumetricMoon 等场景件）、`objects/`（CardObject、UnitObject、ZonePileObject、TargetingArrowObject 等）、`richtext/`（卡面富文本解析/排版/纹理）、`animator/`、`layout/`、`picker/`（拾取）、`particles/`、`art/`（立绘/卡图缓存 unitArt·cardArtCache、战斗预取 preload、全量清单 assetManifest——`src/assets` 下位图经 import.meta.glob 自动入册，进网页统一预载并 warm 进共享缓存）。
+Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环）、`stages/`（MapStage、BattleStage）、`scenes/`（skydome、dungeon3D、volumetricMoon 等场景件 + **场景素材管线**：`kit/`（propKit 契约本体——palette 主题调色板/五族共享材质/图元修饰器/撒布/合并，主会话维护、产出代理禁改）与 `props/`（道具资产库，一文件一资产，显式登记，契约测试按 fs 自动发现）、`rooms/`（房型配方，P3））、`objects/`（CardObject、UnitObject、ZonePileObject、TargetingArrowObject 等）、`richtext/`（卡面富文本解析/排版/纹理）、`animator/`、`layout/`、`picker/`（拾取）、`particles/`、`art/`（立绘/卡图缓存 unitArt·cardArtCache、战斗预取 preload、全量清单 assetManifest——`src/assets` 下位图经 import.meta.glob 自动入册，进网页统一预载并 warm 进共享缓存）。场景素材验收：`test/sceneProps.test.js`（headless 契约门）+ `propGallery.html`（浏览器视觉门）。
 
 ### Shell（`src/shell/`）
 
@@ -94,12 +94,12 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环）、`sta
 - 可抽离的共用逻辑尽量抽离，避免重复。
 - Core 状态只放 id/slug + 标量（可序列化），定义引用一律经注册表反查。
 - 牌库顶 = 数组 index 0；牌的 zone 不显式存储，用 `zoneOf/moveCard` 反查，数组是唯一事实源。
-- **pending 结算区惯例**：结算中的卡（主语或宾语）在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手（hand→pending，静默裸 moveCard），收尾落位（chantSlot/burnt/discard）；对发动卡的引用以 `sctx.self` + 出牌时点捕获（`sctx.handIndexAtPlay`，经 `helpers.handIndexAtPlay/handNeighborsAtPlay` 读）为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来任何「离场→跨节拍处理→落位」的宾语机制按同一惯例书写：先入 pending、末段 `zoneOf` 校验后落位，落地指令对「目标不在预期区」静默落空（`DiscardCardInstruction` 为范式）。
+- **pending 结算区惯例**：结算中的卡（主语或宾语）在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手（hand→pending，静默裸 moveCard），收尾落位（咏唱回手点亮/burnt/discard）；对发动卡的引用以 `sctx.self` + 出牌时点捕获（`sctx.handIndexAtPlay`，经 `helpers.handIndexAtPlay/handNeighborsAtPlay` 读）为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来任何「离场→跨节拍处理→落位」的宾语机制按同一惯例书写：先入 pending、末段 `zoneOf` 校验后落位，落地指令对「目标不在预期区」静默落空（`DiscardCardInstruction` 为范式）。
 - **PRE/POST 反应纪律**：PRE 只做 payload 修饰（`setPayload`）或 veto，世界变更（改 zone/资源/生命）一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（替代效应，每事件至多一次），其次 POST 追加（目标结算时重选，天然无冲突）。PRE 内提交「自身资源记账」类子指令（block 层数 -1）是合法范式；PRE 禁的是与被观察指令操作同一 zone/资源的变更指令。
 - 伤害/面板修正三段式：`amount = 基础值 + getStat(面板)` → `payload = PRE 修饰流水线(amount)` → `execute(payload)`（固定公式：减防御→护盾吸收→minHp 地板）。PRE 流水线顺序敏感（priority 降序 + 注册序），不做固定乘区。
-- 效果订阅由 `AddEffectInstruction` 在首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；咏唱订阅 owner=卡牌。
+- 效果订阅由 `AddEffectInstruction` 在首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；咏唱双态（无槽）：发动=付费回手点亮（owner=卡牌订阅注册），再次打出=免费解除并按特性离场（消耗→焚毁，否则→牌库），任何离手路径由指令层统一熄灭；咏唱压力走手牌上限加权口径（激活咏唱按 chantWeight 计多张，发动合法性=激活后加权数 ≤ player.maxHandSize）。
 - 卡牌计数器放 `skillRuntime`，不藏闭包；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
-- **手牌弹簧弃管必须「离手即摘」**：卡离开手牌/咏唱（展示毕待离场 `held`、弃/焚/迁移、视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次 `_layoutAndTrack` 重算目标表兜底——弹簧目标表只在 sync 节拍重算，空窗期里动画已结束（idle）的卡会被弹簧从展示位拉回手牌锚点，产生「打出 → 飞回手牌 → 再飞牌库」。此病灶已多次回归，改动手牌/弹簧/展示逻辑时必跑 `battleStage.test.js` 的「空窗期不被弹簧拉回手牌」回归用例。
+- **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场 `held`、弃/焚/迁移、视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次 `_layoutAndTrack` 重算目标表兜底——弹簧目标表只在 sync 节拍重算，空窗期里动画已结束（idle）的卡会被弹簧从展示位拉回手牌锚点，产生「打出 → 飞回手牌 → 再飞牌库」。此病灶已多次回归，改动手牌/弹簧/展示逻辑时必跑 `battleStage.test.js` 的「空窗期不被弹簧拉回手牌」回归用例。
 - 卡面描述双轨：`describe`（应用前，无战斗上下文，纯文本）/ `battleDescribe`（结算中，数字按实时局面）。
 - **通用机制词走 named 术语**：跨卡复用的机制关键词（斩/衰败等）定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数如 `衰败2`），卡面 markup 用 `/named{术语}`（热区自动接 tooltip）；机制本体写进 def 字段/订阅（如 `returnToDeck`、`decay`），不要把长机制文本摊在卡面上。
 - 注意：`.trae/rules/project_rules.md` 中关于 `backendGameState/displayGameState`、`animationSequencer.js` 的描述是**旧架构**残留——现行架构见本文件与 README（Bridge + projection + EventNames），以代码为准。
@@ -108,7 +108,7 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环）、`sta
 
 - `README.md` — 场景层级总纲与数据系统说明。
 - `battle_gameplay/battle.md` — 战斗玩法总则（策划文档）：回合轮转/阶段/胜负/单位/资源/牌区与出牌/结算时序公理/数值基准。
-- `quest_prompts/` — 重构与玩法设计文档：`THREE_REFACTOR_PLAN.md`（重构权威依据）、`RUN_DESIGN.md`（run 层玩法循环）、`STAGE_DESIGN.md`、`NEW_BACKEND_LOGIC.md`、各体系卡牌提案。
+- `quest_prompts/` — 重构与玩法设计文档：`THREE_REFACTOR_PLAN.md`（重构权威依据）、`RUN_DESIGN.md`（run 层玩法循环）、`STAGE_DESIGN.md`、`NEW_BACKEND_LOGIC.md`、`SCENE_PROP_WORKFLOW.md`（场景素材生产管线契约 + 交互模板扩展设计）、`SCENE_PCG_CATALOG.md`（地块红线摆放法 + 85 件道具清单）、`SCENE_TASKS.md`（场景生成/改进任务分解）、`SCENE_FLASH_DISPATCH.md`（flash 派发总指令）、各体系卡牌提案。
 - `src/core/skills/SKILL_DESIGN_PRINCIPLES.md` — 技能体系设计意图，各体系「已验证/已敲定」状态在此标注。
 - `handoffs/` — 历史交接记录（含大量关键约定，但注意核对时效）。
 

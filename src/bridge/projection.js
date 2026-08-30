@@ -101,12 +101,9 @@ export function projectBattle(battle) {
     allies: battleState.allies.map(projectUnit),
     hand: battleState.zones.hand.map(rt => projectCardFull(battle, rt)),
     // 结算区（发动中的卡）：仅 id 列表——卡视图已在离手前的 hand 投影中建好，
-    // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）
+    // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）；
+    // 咏唱卡结算后回手（发动/关停都留在手牌，激活态 = isActivated）
     pending: battleState.zones.pending.map(rt => rt.uniqueID),
-    chant: {
-      capacity: battleState.chant.capacity,
-      slots: battleState.chant.slots.map(rt => projectCardFull(battle, rt)),
-    },
     // 覆盖层（牌库/弃牌堆/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts
     counts: {
       deck: battleState.zones.deck.length,

@@ -172,7 +172,7 @@ describe('区域图标与卡流动动画', () => {
     stage.handlePointerMove(onToken.x, onToken.y);
     expect(tooltips.length).toBe(1);
     expect(tooltips[0].kind).toBe('effect');
-    expect(tooltips[0].name).toBe('燃烧');
+    expect(tooltips[0].payload.name).toBe('燃烧');
 
     // 卡右半（无 token）→ tooltip 隐藏 + 整卡 hover（viewer 前缀 id）+ 画廊抬升
     const onCard = toScreen(stage, first.x + 4, first.y);

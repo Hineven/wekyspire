@@ -11,7 +11,7 @@ import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 
 // ---- pending 结算区 ----
 // 铁律：发动卡在 UseSkillInstruction stage 1 离手（hand→pending），收尾落位
-// （chantSlot/burnt/discard）；落地指令 zoneOf 校验、目标不在预期区静默落空；
+// （回手点亮/burnt/discard）；落地指令 zoneOf 校验、目标不在预期区静默落空；
 // 效果逻辑自行安置时收尾不二次搬动；终局 abort 由 PostBattle 清扫。
 // （「discardRightmost 无特判」的刀背行为由 bodySkills.test.js 同步更新覆盖，此处不重复。）
 
@@ -35,7 +35,7 @@ registerSkill({
   },
 });
 
-// 咏唱探针（测试卡）：最小咏唱卡，验证 pending → chantSlot 落位
+// 咏唱探针（测试卡）：最小咏唱卡，验证 pending → 回手点亮落位
 registerSkill({
   id: 'chantProbe', name: '咏唱探针', cardMode: 'chant',
   cost: { mana: 0, actionPoint: 1 },
@@ -130,7 +130,7 @@ describe('pending 结算区', () => {
     expect(zoneOf(d.state, rt.uniqueID)).toBe('discard');
   });
 
-  it('咏唱卡经 pending 落位咏唱槽并激活', () => {
+  it('咏唱卡经 pending 回手点亮激活（无槽：住手牌）', () => {
     const d = new BattleDriver({
       deck: ['chantProbe', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5,
@@ -138,7 +138,7 @@ describe('pending 结算区', () => {
     d.start();
     const rt = d.state.zones.hand.find(c => c.defId === 'chantProbe');
     d.play('chantProbe');
-    expect(zoneOf(d.state, rt.uniqueID)).toBe('chantSlot');
+    expect(zoneOf(d.state, rt.uniqueID)).toBe('hand');
     expect(rt.isActivated).toBe(true);
     expect(d.state.zones.pending).toHaveLength(0);
   });
@@ -226,14 +226,16 @@ describe('pending 结算区', () => {
     });
     d.start();
     const chant = d.state.zones.hand.find(c => c.defId === 'cascadeChant');
-    d.play('cascadeChant'); // 入咏唱槽
-    expect(zoneOf(d.state, chant.uniqueID)).toBe('chantSlot');
+    d.play('cascadeChant'); // 发动：留手牌点亮（无槽——咏唱卡也是链式弃牌的合法受害者）
+    expect(zoneOf(d.state, chant.uniqueID)).toBe('hand');
+    expect(chant.isActivated).toBe(true);
 
-    d.play('knifeBack'); // 自身弃 1 → 连锁再弃 1 → 再连锁 → 手牌清空
+    d.play('knifeBack'); // 自身弃 1 → 连锁再弃 → 链式到手牌清空（咏唱卡被弃时先熄灭，防自续）
     expect(d.state.zones.hand).toHaveLength(0);
     const discardIds = d.state.zones.discard.map(c => c.uniqueID);
-    expect(discardIds).toHaveLength(3); // 两张连锁弃牌 + knifeBack 自身收尾，各一次
-    expect(new Set(discardIds).size).toBe(3); // 无同卡双弃
-    expect(d.state.history.battle.discarded).toBe(2); // 只有两次真弃牌（knifeBack 收尾是 zone 迁移不计弃）
+    expect(discardIds).toHaveLength(4); // 两次连锁弃牌（punch×2 + 咏唱卡）+ knifeBack 自身收尾，各一次
+    expect(new Set(discardIds).size).toBe(4); // 无同卡双弃
+    expect(d.state.history.battle.discarded).toBe(3); // 三次真弃牌（knifeBack 收尾是 zone 迁移不计弃）
+    expect(chant.isActivated).toBe(false); // 离手熄灭（不变量）
   });
 });

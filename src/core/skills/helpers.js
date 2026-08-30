@@ -8,24 +8,80 @@ export function makeSkillCtx(ctx, self) {
   return { ...ctx, self, def: getSkillDefinition(self.defId) };
 }
 
-// 可用性基础检查（充能/咏唱槽/自定义条件/费用），费用修正（PRE 订阅）在结算时作用于
+// 可用性基础检查（充能/咏唱规则/自定义条件/费用），费用修正（PRE 订阅）在结算时作用于
 // 消耗指令，canUse 与结算的费用一致性由"消耗走资源指令"保证（多扣已在结算内，少扣由
 // canUse 兜底）。资源不足时进入能力裁决链：任一能力的 canUseSkill 钩子返回 true 即放行
 // （突破极限"蓝量大于1时可超费使用"等），结算侧由资源指令的 clamp 兜底。
+// 咏唱双态规则：激活态打出 = 免费解除并离场（anchored 锁定除外）；未激活打出 = 付费发动，
+// 发动合法性 = 激活后加权手牌数 ≤ 手牌上限（咏唱压力与手牌压力统一，用户定）。
 export function canUseSkill(ctx, self) {
   const def = getSkillDefinition(self.defId);
   if (self.remainingUses <= 0) return false;
-  if (def.cardMode === 'chant'
-      && ctx.battleState.chant.slots.length >= ctx.battleState.chant.capacity) return false;
+  if (def.cardMode === 'chant') {
+    if (self.isActivated) {
+      if (def.keywords?.includes('anchored')) return false; // 锁定：不可主动解除
+    } else if (!chantActivationLegal(ctx, self, def)) {
+      return false; // 激活后手牌压力超限：发动无效果，可用性直接拒绝
+    }
+  }
   if (def.canUse && !def.canUse(makeSkillCtx(ctx, self))) return false;
-  const manaOk = ctx.player.mana >= (def.cost?.mana ?? 0);
-  const apOk = ctx.player.actionPoints >= (def.cost?.actionPoint ?? 0);
+  const free = freeChantToggle(def, self);
+  const manaOk = free || ctx.player.mana >= (def.cost?.mana ?? 0);
+  const apOk = free || ctx.player.actionPoints >= (def.cost?.actionPoint ?? 0);
   if (manaOk && apOk) return true;
   for (const id of ctx.player.abilities ?? []) {
     const verdict = getAbilityDefinition(id).canUseSkill?.(makeSkillCtx(ctx, self), { manaOk, apOk });
     if (verdict === true) return true;
   }
   return false;
+}
+
+// ---- 咏唱双态元语（无槽模型：压力走手牌上限加权口径）----
+// 咏唱卡与普通卡同住五区；激活态 = isActivated（仅手牌中可为真，离手即熄）。
+// 玩家获得所有已激活咏唱卡的 activated 能力；无激活数上限——其代价是手牌压力：
+// 激活的咏唱卡按咏唱值（chantWeight）计多张手牌（咏唱3 = 占 3 张手牌位）。
+
+// 手牌上限（旧档无字段时兜底 7；能力可修改 player.maxHandSize）
+export function handLimitOf(ctx) {
+  return ctx.player.maxHandSize ?? 7;
+}
+
+// 单卡的手牌压力权重：激活咏唱 = 咏唱值，其余恒 1
+export function handWeightOf(card) {
+  return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 2) : 1;
+}
+
+// 加权手牌数（抽牌满手判定 / 咏唱发动合法性共用口径）
+export function effectiveHandCount(battleState) {
+  return battleState.zones.hand.reduce((n, c) => n + handWeightOf(c), 0);
+}
+
+// 咏唱发动合法性：激活后（自身权重 1 → chantWeight）加权手牌数 ≤ 上限。
+// 卡在手牌中调用（结算中的卡已离手，先放回再算）。
+export function chantActivationLegal(ctx, self, def = getSkillDefinition(self.defId)) {
+  const weight = def.chantWeight ?? 2;
+  return effectiveHandCount(ctx.battleState) + weight - 1 <= handLimitOf(ctx);
+}
+
+// 激活态打出 = 免费关停
+export function freeChantToggle(def, self) {
+  return def.cardMode === 'chant' && self.isActivated;
+}
+
+/**
+ * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 按 owner 注销订阅 → 播报。
+ * 调用方：打出已激活咏唱（免费解除，随后按卡牌特性离场）、离手不变量
+ * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）。
+ * 幂等：未激活静默落空。anchored 不设防——离手熄灭是物理事实，锁定只挡主动解除。
+ */
+export function deactivateChant(ctx, skill, reason) {
+  if (!skill?.isActivated) return false;
+  const sctx = makeSkillCtx(ctx, skill);
+  sctx.def.activated?.onDisable?.(sctx, reason);
+  skill.isActivated = false;
+  ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);
+  ctx.presenter?.chantToggled?.({ skill, on: false, reason });
+  return true;
 }
 
 // 注册技能常驻订阅（触发器）。战斗开始时对每张技能调用一次（window:'battle'），

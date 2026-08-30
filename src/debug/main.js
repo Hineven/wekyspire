@@ -9,7 +9,7 @@ import { createSkillRuntime } from '../core/state/skillRuntime.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
 import { getAllyDefinition } from '../core/allies/registry.js';
 import { createBridge, EventNames } from '../bridge/index.js';
-import { tooltipHtml } from '../shell/tooltip.js';
+import { tooltipModel } from '../shell/tooltip.js';
 import { StageManager } from '../stage/StageManager.js';
 import { BattleStage } from '../stage/stages/BattleStage.js';
 
@@ -24,7 +24,7 @@ runState.player.deck = [
 
 const bridge = createBridge({
   runState,
-  enemies: ['slime', 'pyro'].map(id => getEnemyDefinition(id).createUnit()),
+  enemies: ['bigSlime', 'pyro'].map(id => getEnemyDefinition(id).createUnit()),
   allies: [getAllyDefinition('remi').createUnit()],
   seed: Date.now() % 100000,
 });
@@ -90,13 +90,18 @@ bridge.backendBus.on(EventNames.BATTLE_END, ({ result }) => {
   endEl.style.display = 'block';
 });
 
-// tooltip（Stage Picker → Shell 协议事件的调试呈现）——内容函数与 BattleHud 共享
-bridge.frontendBus.on(EventNames.TOOLTIP_SHOW, (payload) => {
-  tooltipEl.innerHTML = tooltipHtml(payload);
+// tooltip（Stage Picker → Shell 协议事件的调试呈现）——内容契约与正式 Shell 共享
+// （tooltipModel；正式页渲染在 App.vue 的 TooltipOverlay，本页自组 HTML）
+const renderTooltip = ({ kind, payload, x, y }) => {
+  const m = tooltipModel(kind, payload);
+  const delta = m.delta != null ? `（威力 ${m.delta > 0 ? '+' : ''}${m.delta}）` : '';
+  const body = m.body ? `<br><span style="color:${m.tint ?? '#dde'}">${m.body}</span>` : '';
+  tooltipEl.innerHTML = `<b>${m.title}</b>${delta}${body}`;
   tooltipEl.style.display = 'block';
-  tooltipEl.style.left = `${payload.x + 12}px`;
-  tooltipEl.style.top = `${payload.y + 12}px`;
-});
+  tooltipEl.style.left = `${x + 12}px`;
+  tooltipEl.style.top = `${y + 12}px`;
+};
+bridge.frontendBus.on(EventNames.TOOLTIP_SHOW, renderTooltip);
 bridge.frontendBus.on(EventNames.TOOLTIP_MOVE, ({ x, y }) => {
   tooltipEl.style.left = `${x + 12}px`;
   tooltipEl.style.top = `${y + 12}px`;
