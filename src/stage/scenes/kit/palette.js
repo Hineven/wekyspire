@@ -43,6 +43,16 @@ const THEMES = {
     potionRed: 0x7a4048,
     potionBlue: 0x46628a,
     ember: 0x9aa8d8,     // 余烬/火星粒子
+    // ---- CATALOG2 增补（塔身物件多样化；仍守冷调低饱和） ----
+    bread: 0x8a795a,
+    cheese: 0x9c8d62,
+    flour: 0xb0aa9c,
+    copper: 0x7c5a48,
+    silver: 0x9aa4b2,
+    herb: 0x5d7a5e,
+    glowCyan: 0x9ad8e8,  // 幽光青：晶簇/微光蘑菇专用
+    wine: 0x4e2c38,
+    parchment: 0x9c9278,
   },
 
   // Boss 房（血色基调：更深更暗的岩 + 血色点缀；P3 房型配方联调时再精调）
@@ -78,6 +88,15 @@ const THEMES = {
     potionRed: 0x8a3844,
     potionBlue: 0x425a84,
     ember: 0xb098a8,
+    bread: 0x7a6a4e,
+    cheese: 0x8a7c56,
+    flour: 0xa09a8e,
+    copper: 0x6e4c40,
+    silver: 0x8e96a4,
+    herb: 0x4e6852,
+    glowCyan: 0x8ec4d8,
+    wine: 0x44242e,
+    parchment: 0x8a8068,
   },
 };
 
