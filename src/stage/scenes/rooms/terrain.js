@@ -144,7 +144,20 @@ export function generateTerrain(rng, recipe, keepout, anchors = [], bounds = {})
       for (const kk of keepout.hard) d = Math.min(d, rectDist(cx(i), cz(j), kk));
       if (d < 8) continue;
       cat[k] = 'fissure';
-      h[k] = rng() < 0.6 ? -(3.5 + rng() * 1.5) : -(7 + rng() * 2); // 60% 深沟 / 40% 深不见底
+      h[k] = rng() < 0.6 ? -(3.5 + rng() * 1.5) : -(9 + rng() * 2.5); // 60% 深沟 / 40% 深不见底（真洞，靠深黑暗化）
+    }
+  }
+  // 裂缝连贯化：剔除孤立格（8 邻域内裂缝邻居 <2 的散格溶解为平地）——ridge 细线被 keepout
+  // 斩断后残留的孤立黑方块读作随机污渍而非地裂（用户报障：地板体素黑得异常）
+  for (let j = 1; j < nz - 1; j++) {
+    for (let i = 1; i < nx - 1; i++) {
+      const k = at(i, j);
+      if (cat[k] !== 'fissure') continue;
+      let nb = 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        if (cat[at(i + di, j + dj)] === 'fissure') nb++;
+      }
+      if (nb < 2) { cat[k] = 'flat'; h[k] = 0; }
     }
   }
 
@@ -284,7 +297,8 @@ const CAT_COLOR = {
   flat: (hh, tone) => shade(P.floor, tone),
   platform: (hh, tone) => shade(P.stone, 0.04 + tone * 0.5), // 石质台面（P.slab 过亮会发光）
   basin: (hh, tone) => shade(P.stone, -0.28 + tone),
-  fissure: (hh, tone) => (hh < -6 ? null : shade(P.stone, -0.42 + tone)), // 深渊底=null（走 unlit 批）
+  // 裂缝不调色（用户定 2026-09：不用黑色体素填充——真洞 + 场景光照自然暗下去）
+  fissure: (hh, tone) => shade(P.floor, tone),
   'slope-ramp': (hh, tone) => shade(P.stone, -0.12 + tone),
 };
 const colTone = (i, j) => ((((i * 73 + j * 151) % 17) + 17) % 17) / 17 * 0.1 - 0.05; // 确定性逐块调色
@@ -295,35 +309,26 @@ export function buildTerrain(grid) {
   const size = cell - gap;
   const solid = new THREE.Group();
   solid.name = 'terrain';
-  const abyss = new THREE.Group();
-  abyss.name = 'terrain:abyss';
+  // 统一深基柱（用户定 2026-09）：每格柱从 BASE 直通顶面——裂缝/坑格是真洞（顶面深、
+  // 侧壁由邻格柱面露出），不填 unlit 黑柱。柱底全部落在同一深度，衬板在更下面兜底。
+  const BASE = -13;
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i;
       const top = h[k];
       const c = cat[k];
       const x = x0 + (i + 0.5) * cell; const z = z0 + (j + 0.5) * cell;
-      // 柱体自 -1.2 起、顶面 = top：高必须取绝对值——坑底 top<-1.2 时 top+1.2 为负，
-      // 负高 BoxGeometry 面片内翻 = "四个面立起来"的病灶（用户报障）
-      const H = Math.abs(top + 1.2);
-      const cy = (top - 1.2) / 2;
-      if (c === 'fissure' && top < -6) {
-        // 深不见底：unlit 纯黑柱（顶面即黑底，不反光）
-        abyss.add(K.put(K.box({ color: P.night, size: [size, H, size], family: 'unlit' }), x, cy, z));
-        continue;
-      }
+      const H = top - BASE; // 顶面恒在 BASE 之上（最深裂缝 -11.5 > BASE）
       const color = (CAT_COLOR[c] || CAT_COLOR.flat)(top, colTone(i, j));
-      solid.add(K.put(K.box({ color, size: [size, H, size] }), x, cy, z));
+      solid.add(K.put(K.box({ color, size: [size, H, size] }), x, (top + BASE) / 2, z));
     }
   }
-  // 底衬板：封住块间细缝的视线（缝底见它而非夜空穹顶）——相机浅角度从缝穿过去
-  // 会瞄到穹顶亮部，读出"缝会发光"的亮边（用户报障）
+  // 底衬板：封住块间细缝与洞底的视线（缝底/洞底见它而非夜空穹顶）——相机浅角度从缝穿过去
+  // 会瞄到穹顶亮部，读出"缝会发光"的亮边（用户报障）；必须在最深柱底之下
   const span = [(grid.x1 ?? FLOOR_X1) - FLOOR_X0 + 8, (grid.z1 ?? FLOOR_Z1) - FLOOR_Z0 + 8];
   solid.add(K.put(
     K.plate({ color: shade(P.stone, -0.48), w: span[0], d: span[1], th: 0.4 }),
-    (FLOOR_X0 + (grid.x1 ?? FLOOR_X1)) / 2, -1.5, (FLOOR_Z0 + (grid.z1 ?? FLOOR_Z1)) / 2,
+    (FLOOR_X0 + (grid.x1 ?? FLOOR_X1)) / 2, BASE - 0.6, (FLOOR_Z0 + (grid.z1 ?? FLOOR_Z1)) / 2,
   ));
-  const g = new THREE.Group();
-  g.add(solid, abyss);
-  return g;
+  return solid;
 }

@@ -43,9 +43,27 @@ function archFrame(w, h, color) {
   return new THREE.Mesh(paint(new THREE.ShapeGeometry(shape), color), materialOf('stone'));
 }
 
-// 拱洞黑洞（门洞纵深）：unlit 暗槽色片。
-function archVoid(w, h, color = P.night) {
-  return new THREE.Mesh(paint(new THREE.ShapeGeometry(pointedArch(w, h)), color), materialOf('unlit'));
+// 矩形轮廓（体素墙洞口口径：洞是矩形，门洞视觉件必须同形——尖拱配矩形洞会露馅，用户定 2026-09）。
+function rectShape(w, h) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, 0);
+  s.lineTo(-w / 2, h);
+  s.lineTo(w / 2, h);
+  s.lineTo(w / 2, 0);
+  s.closePath();
+  return s;
+}
+
+// 矩形石框（环）：与 archFrame 同边距口径。
+function rectFrame(w, h, color) {
+  const shape = rectShape(w + 3.2, h + 3.2);
+  shape.holes.push(new THREE.Path(rectShape(w - 0.6, h - 0.4).getPoints(4)));
+  return new THREE.Mesh(paint(new THREE.ShapeGeometry(shape), color), materialOf('stone'));
+}
+
+// 矩形黑洞（门洞纵深）：unlit 暗槽色片。
+function rectVoid(w, h, color = P.night) {
+  return new THREE.Mesh(paint(new THREE.ShapeGeometry(rectShape(w, h)), color), materialOf('unlit'));
 }
 
 /**
@@ -154,14 +172,20 @@ function wallRelief(rng, axis, face, u0, u1, openings) {
   }
   // 墙裙：贴地横带（压暗、出挑），把墙面从地板里"锚"出来，也给墙根道具一道靠背线
   {
-    const segs = segmentsAroundOpenings(u0, u1, FLOOR_Y, FLOOR_Y + 5.5,
-      openings.map(o => ({ u0: o.u0 - 0.8, u1: o.u1 + 0.8, sill: 0.3, top: 4.8 })));
+    // 只避让真正与墙裙带（0..5.5）相交的开口（门洞全交→完全绕开；高窗不交→连续通过）
+    // 【病灶实录】曾把开口伪造成 {sill:0.3,top:4.8} 再硬摆满高 5.5：分段被无视，门洞被墙裙封死
+    const bandY0 = FLOOR_Y; const bandY1 = FLOOR_Y + 5.5;
+    const relevant = openings
+      .filter(o => FLOOR_Y + o.sill < bandY1 && FLOOR_Y + o.top > bandY0)
+      .map(o => ({ u0: o.u0 - 0.8, u1: o.u1 + 0.8, sill: o.sill, top: o.top }));
+    const segs = segmentsAroundOpenings(u0, u1, bandY0, bandY1, relevant);
     for (const s of segs) {
       const len = s.u1 - s.u0;
-      if (len <= 2) continue;
-      place(K.box({ color: shade(P.wall, -0.14), size: dim(len, 5.5, 3.2) }),
-        (s.u0 + s.u1) / 2, FLOOR_Y + 2.75, 1.6);
-      bandSegs.push({ u0: s.u0, u1: s.u1, y0: 0, y1: 5.5 });
+      const h = s.y1 - s.y0;
+      if (len <= 2 || h <= 0.2) continue;
+      place(K.box({ color: shade(P.wall, -0.14), size: dim(len, h, 3.2) }),
+        (s.u0 + s.u1) / 2, (s.y0 + s.y1) / 2, 1.6);
+      bandSegs.push({ u0: s.u0, u1: s.u1, y0: s.y0 - FLOOR_Y, y1: s.y1 - FLOOR_Y });
     }
   }
   // 扶壁肋：粗墩（宽 4~6.5 / 深 3.5~5.5 / 高 28~72 大幅断残），间距 24~38 不规则——
@@ -274,11 +298,12 @@ export function buildBackWall(rng, { door = null, slits = [], brickChance = 0.5,
   wallSegments(group, 'x', fixedC, segs, { th: wallTh, cavity: skinCfg ? skinU : null });
 
   if (door) {
-    const doorVoid = archVoid(door.w, door.h);
+    // 方形门洞（体素墙洞口是矩形，门视觉件同形——用户定 2026-09）
+    const doorVoid = rectVoid(door.w, door.h);
     doorVoid.position.set(door.x, FLOOR_Y, BACK_WALL_Z + 0.4);
     group.add(doorVoid);
-    const frame = archFrame(door.w, door.h, P.stone);
-    frame.position.set(door.x, FLOOR_Y - 1.5, BACK_WALL_Z + 0.9);
+    const frame = rectFrame(door.w, door.h, P.stone);
+    frame.position.set(door.x, FLOOR_Y - 1.4, BACK_WALL_Z + 0.9);
     group.add(frame);
     // 门内踏步：三级台阶向下没入黑暗（纵深感）
     for (let i = 0; i < 3; i++) {

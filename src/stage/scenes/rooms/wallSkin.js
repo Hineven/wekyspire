@@ -86,7 +86,7 @@ export function generateWallSkin(rng, cfg, spec) {
       for (const s of spalls) {
         const e = ((u - s.cU) / s.rU) ** 2 + ((y - s.cY) / s.rY) ** 2;
         if (e < 1) {
-          const depth = -(0.7 + 0.7 * fbm(noise, u / 5, y / 5, 2));
+          const depth = -(0.35 + 0.3 * fbm(noise, u / 5, y / 5, 2)); // 浅斑：体素侧面在掠射光下会暗，起伏大了读成马赛克
           if (depth < d[k]) { d[k] = depth; break; }
         }
       }
@@ -101,7 +101,7 @@ export function generateWallSkin(rng, cfg, spec) {
       const r = 1 - Math.abs(fbm(ridgeN, cu(i) / 11, cy(j) / 11, 3) * 2 - 1); // 脊线≈1
       if (r < 0.9) continue;
       if (nearOpen(cu(i), cy(j), 3)) continue;
-      const depth = -(0.6 + r * 0.7);
+      const depth = -(0.3 + r * 0.3);
       if (depth < d[k]) d[k] = depth;
     }
   }
@@ -117,9 +117,9 @@ export function generateWallSkin(rng, cfg, spec) {
         const e = ((cu(i) - cU) / rU) ** 2 + ((cy(j) - cY) / rY) ** 2;
         const k = at(i, j);
         if (e < 0.55) { flag[k] = F.THROUGH; d[k] = 0; i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j); }
-        else if (e < 1.0) { const dd = -(2.5 + 1.5 * h2(i, j)); if (dd < d[k]) d[k] = dd; }
-        else if (e < 1.5 && h2(i + 7, j + 3) < 0.55) { const dd = -(4.5 + 1.5 * h2(i + 1, j + 9)); if (dd < d[k]) d[k] = dd; }
-        else if (e < 1.2 && h2(i + 3, j + 5) >= 0.8 && flag[k] !== F.THROUGH) { const dd = 1.6 + 0.6 * h2(i, j); if (dd > d[k]) d[k] = dd; } // 断口外翻石茬
+        else if (e < 1.0) { const dd = -(1.2 + 0.6 * h2(i, j)); if (dd < d[k]) d[k] = dd; }
+        else if (e < 1.5 && h2(i + 7, j + 3) < 0.55) { const dd = -(2.0 + 0.8 * h2(i + 1, j + 9)); if (dd < d[k]) d[k] = dd; }
+        else if (e < 1.2 && h2(i + 3, j + 5) >= 0.8 && flag[k] !== F.THROUGH) { const dd = 0.9 + 0.3 * h2(i, j); if (dd > d[k]) d[k] = dd; } // 断口外翻石茬
       }
     }
     if (i1 - i0 < 2 || j1 - j0 < 2) return;
@@ -180,7 +180,7 @@ export function generateWallSkin(rng, cfg, spec) {
       const u = cu(i); const y = cy(j);
       for (const r of openRects) {
         if (rectDist(u, y, r) < 2.2 && h2(i + 11, j + 13) < 0.3) {
-          const dd = -(0.6 + 0.5 * h2(i + 5, j + 7));
+          const dd = -(0.3 + 0.25 * h2(i + 5, j + 7));
           if (dd < d[k]) d[k] = dd;
         }
       }
