@@ -15,6 +15,11 @@ export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳�
 export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
 export const CAMERA_ELEVATION = 20;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
 export const CAMERA_LOOK_AT = Object.freeze({ x: 0, y: -15, z: 0 }); // 视轴锚在牌桌上方，底部留给手牌构图
+// 世界相机取景缩放（用户定 2026-09：0.79 ≈ 距离 235→185）。房间 PCG 道具全面 2x+ 放大后，
+// 原距离下战场空旷感强；拉近让房间/道具铺满画面。只作用于世界相机距离——worldHeight/
+// UI 正交视锥/布局坐标系全部不动（UI 取景、布局、拾取反投影不受影响），代价是 z=0 平面
+// 可视高 ≈79（画面外圈内容出画，由房型配方按新机位校核）。
+export const CAMERA_ZOOM = 0.79;
 // UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角（用户定）。
 // 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs
 // 手牌 z=20+ 位置错乱、卡牌飞行 z 变化时忽大忽小）；正交下布局坐标↔屏幕线性映射，
@@ -44,9 +49,10 @@ export class StageManager {
     this._createRenderer = options.createRenderer || (({ canvas }) => new THREE.WebGLRenderer({ canvas, antialias: true }));
     this._renderer = null;
     this._camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
-    // 相机距离：让 z=0 平面的可视高恰好 = worldHeight（与旧正交约定无缝衔接）
-    this._cameraDistance = (this._worldHeight / 2)
-      / Math.tan(THREE.MathUtils.degToRad(this._camera.fov / 2));
+    // 相机距离：让 z=0 平面的可视高恰好 = worldHeight（与旧正交约定无缝衔接），
+    // 再乘 CAMERA_ZOOM 取景缩放（拉近出画的部分由场景内容本身兜底：夜空/雾/墙顶铁律）
+    this._cameraDistance = ((this._worldHeight / 2)
+      / Math.tan(THREE.MathUtils.degToRad(this._camera.fov / 2))) * CAMERA_ZOOM;
     // 斜方向俯视：lookAt + 球坐标偏移（azimuth 绕 y、elevation 俯角）。
     // 眼高高于场内一切水平面（透视方向一致性的根），视轴锚在牌桌上方
     const az = THREE.MathUtils.degToRad(CAMERA_AZIMUTH);

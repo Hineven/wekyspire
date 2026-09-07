@@ -15,6 +15,7 @@ import { getRelicDefinition } from '../core/relics/registry.js';
 import { getAllyDefinition } from '../core/allies/registry.js';
 import { createBridge, EventNames } from '../bridge/index.js';
 import { BattleStage } from '../stage/stages/BattleStage.js';
+import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
@@ -36,6 +37,10 @@ export { RunEvents };
 
 // 默认起始卡组 = 体修基础卡组（BODY_CULTIVATION_CARDS §0：从拳/盾生长的三系种子）
 const DEFAULT_DECK = [...BODY_STARTER_DECK];
+
+// PCG 房型开关：true = 战斗房间按章节/Boss 走配方层（scenes/rooms），
+// false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
+const USE_PCG_ROOMS = true;
 
 // 存档快照 → run：advanceFloor 推进层数（遭遇/房间按 seed 确定性，无需回放），
 // 再覆盖养成字段。存档语义 = 检查点：落盘只在 prep，故恢复后必处 prep。
@@ -173,7 +178,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       battleBridge = markRaw(bridge);
       if (stageManager) {
         battleStage?.dispose(); // 上一场舞台即刻释放（场景图 + composer 渲染目标）
-        battleStage = new BattleStage({ bridge, stageManager, displayModel });
+        const sceneId = USE_PCG_ROOMS ? sceneIdForFloor(run.floor) : 'dungeon';
+        // 房间种子 = 战斗种子 + 层号派生：同层同种子恒定同布局，重打同层房间不变
+        battleStage = new BattleStage({
+          bridge, stageManager, displayModel, scene: sceneId, sceneSeed: `${seed}:room:${run.floor}`,
+        });
         stageManager.setStage(battleStage);
       }
       bridge.start();

@@ -1,13 +1,20 @@
 // 场景注册表（STAGE_DESIGN §2）：战斗 → 场景定义的映射入口。
-// 目前全部战斗固定 dungeon；将来按战斗配置（敌人组合/剧情节点）选场。
+// dungeon = 手工大厅（回退/对照）；pcg:* = 房型配方层 PCG 房间（P3/P4，
+// 配方按章节/Boss 选，见 rooms/index.js 的 sceneIdForFloor）。未知 id 回退 dungeon。
 
 import { DUNGEON } from './dungeon.js';
+import { getRoomScene } from './rooms/index.js';
 
 const SCENES = Object.freeze({
   dungeon: DUNGEON,
 });
 
-export function getScene(id = 'dungeon') {
+/**
+ * @param id 场景 id：'dungeon' | 'pcg:fortress' | 'pcg:palace' | 'pcg:manor' | 'pcg:library' | 'pcg:boss' | 'pcg:mezzanine'
+ * @param seed PCG 房间种子（run 种子 + 层号派生；同种子恒定同布局）——仅 pcg:* 使用
+ */
+export function getScene(id = 'dungeon', seed = 'dev') {
+  if (id.startsWith('pcg:')) return getRoomScene(id.slice(4), seed);
   return SCENES[id] ?? DUNGEON;
 }
 
