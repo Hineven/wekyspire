@@ -34,8 +34,9 @@ const STATUS_SCALE = 1.8;
 
 // 状态层法则（与 UnitObject 的 statusify 同律）：整面板统一关深度测试/写入、
 // 全件透明材质、renderOrder 归零（构造尾部 traverse 一把梭）——面板对内对外的
-// 层级只认 uiCamera 正交 z 的 painter 序：件与件之间靠局部 z 错层（瑞米区
-// 0.7~1.2 盖过骑士头像/血环 0.5~0.66，盾徽 z=2 全组最高，数字再 +0.5），面板
+// 层级只认 uiCamera 正交 z 的 painter 序：件与件之间靠局部 z 错层（骑士
+// 头像/血环栈 0.45~1.26——血环组 z=0.6，RingGauge 内件自带 +0.62/+0.66；
+// 瑞米区整组抬 0.6、件 1.3~1.8 盖过血环栈；盾徽 z=2 全组最高，数字再 +0.5），面板
 // 对外靠组 z 抬进手牌之上的层级（见 PLAYER_STATUS_POS 注释）。旧 per-part
 // renderOrder（瑞米 10/11、盾徽 40/41）已废弃——renderOrder>0 会把部件钉在
 // renderOrder-0 的悬浮手牌之上，破坏「面板压静息手牌、让位悬浮牌」的层级契约。
@@ -209,12 +210,14 @@ export class PlayerStatusObject extends THREE.Group {
 
     // ---- 瑞米区（概念图新稿）：小圆头像叠骑士左下 + 金环 + 心形血量 + 攻/盾横幅 ----
     // 金环为纯装饰（瑞米血量走心形当前值，不走血环）。圆缘遮搭骑士头像/外环，必须
-    // 整区盖在其上：整区各件局部 z（0.7~1.2）抬过骑士头像/血环（0.5~0.66）——
-    // 状态层法则下 z 差即层级差（见 statusifyPanel）。
+    // 整区盖在其上：状态层法则下 z 差即层级差（见 statusifyPanel）。注意骑士血环
+    // （RingGaugeObject）内件自带 +0.62/+0.66 偏移，面板内血环实际 z=1.22/1.26，
+    // 故整组抬 z=0.6（各件面板 z 1.3~1.8）才压得住血环栈；仍低于盾徽 z=2，
+    // 全组最高件 1.8 也不破坏面板对外「压静息手牌、让位悬浮牌」的 z 层级契约。
     // 未出战/被打跑整区隐藏（setRemi 驱动）。
     this._remi = new THREE.Group();
     this._remi.name = 'remi';
-    this._remi.position.set(L.REMI_AVATAR_X, L.REMI_AVATAR_Y, 0);
+    this._remi.position.set(L.REMI_AVATAR_X, L.REMI_AVATAR_Y, 0.6);
     this._remi.visible = false;
     this._remiAvatarBack = new THREE.Mesh(
       new THREE.CircleGeometry(L.REMI_AVATAR_R, 40),

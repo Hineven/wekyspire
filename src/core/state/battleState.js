@@ -3,13 +3,15 @@ import { createRng } from './rng.js';
 // battleState：单场战斗寿命，进战斗装配、战斗结束销毁。
 // zones 为有序数组（牌序玩法依赖顺序）；牌的 zone 不显式存储在 runtime 上，
 // 由 zoneOf 反查派生，防双写失同步。
+// 牌库 = 唯一循环区（FIFO：顶抽底还，无弃牌堆、无重洗）；打出/弃置/换牌/解除咏唱
+// 等原因离手的非消耗卡一律落牌库底（数组尾），牌库抽空抽牌即落空。
 // pending = 结算区（结算中的卡——主语或宾语）：跨节拍持有卡牌的指令先入 pending、
 // 末段 zoneOf 校验后落位（惯例见 AGENTS.md）；单节拍原子指令（弃/焚/移）不经 pending。
 // 与 battleState.pendingInput（输入仲裁）、sequencer 的 'pending'（演出状态）仅词根相同，互不相干。
-// 咏唱无槽位、无激活数上限：咏唱卡与普通卡同住五区，激活态存 skillRuntime.isActivated
+// 咏唱无槽位、无激活数上限：咏唱卡与普通卡同住四区，激活态存 skillRuntime.isActivated
 // （仅手牌中可为真，任何离手路径由指令层统一熄灭）；其压力走手牌上限的加权口径
 // （激活咏唱按咏唱值计多张手牌，见 skills/helpers.js 的 effectiveHandCount）。
-export const ZONES = ['hand', 'deck', 'discard', 'burnt', 'pending'];
+export const ZONES = ['hand', 'deck', 'burnt', 'pending'];
 
 export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) {
   for (const e of enemies) e.side = 'enemy';
@@ -19,9 +21,8 @@ export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) 
     allies,         // 我方 AI 队友（如瑞米；有序 = 行动顺序，玩家回合先于玩家行动）
     zones: {
       hand: [],       // 手牌（有序，位置有语义：两侧/最右等；激活的咏唱卡也住这里）
-      deck: [],       // 牌库（有序，约定：顶 = index 0，即下次抽的卡）
-      discard: [],    // 弃牌堆
-      burnt: [],      // 焚毁区
+      deck: [],       // 牌库（有序 FIFO：顶 = index 0 = 下次抽的卡；离手卡回尾 = 牌库底）
+      burnt: [],      // 焚毁区（消耗卡去处，本场不回流）
       pending: [],    // 结算区（正在发动/被跨节拍结算搬运的卡；正常时序在结算树内清空，终局由 PostBattle 兜底）
     },
     turn: { count: 0, side: 'player' },             // side: 'player' | 'enemy'
@@ -51,7 +52,7 @@ export function resetTurnHistory(battleState) {
   battleState.history.turn = counters;
 }
 
-// 反查卡牌所在 zone：'hand' | 'deck' | 'discard' | 'burnt' | 'pending' | null
+// 反查卡牌所在 zone：'hand' | 'deck' | 'burnt' | 'pending' | null
 export function zoneOf(battleState, uniqueID) {
   for (const name of ZONES) {
     if (battleState.zones[name].some(c => c.uniqueID === uniqueID)) return name;

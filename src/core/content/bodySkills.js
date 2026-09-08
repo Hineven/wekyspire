@@ -304,15 +304,15 @@ function isOnlyHandCard(sctx) {
 
 // ==== 刀组合（卡序）============================================================
 
-// 斩（斩系列 C）：最高单伤链起点。机制走 named 术语：斩（打出后回牌库代替弃牌，
-// 仅在牌库中冷却充能）+ 衰败N（回合开始时若在手，冷却计时反向推进）。
+// 斩（斩系列 C）：最高单伤链起点。机制走 named 术语：斩（仅在牌库中冷却充能——
+// FIFO 下打出本就连牌库底回，斩的苛刻在于冷却只在牌库推进）+ 衰败N（回合开始时
+// 若在手，冷却计时反向推进）。
 // 局内进阶链（斩→裂石斩→…→断神斩）待 modifier 系统落地；斩灭召回待 spawn 元数据。
 registerSkill({
   id: 'slash', name: '斩', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: 2 },
   cooldownZones: ['deck'],
-  returnToDeck: true,
   decay: 1,
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
@@ -338,7 +338,6 @@ registerSkill({
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: 2 },
   cooldownZones: ['deck'],
-  returnToDeck: true,
   decay: 1,
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {

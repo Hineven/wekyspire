@@ -71,7 +71,7 @@ const endEl = overlay.querySelector('#debug-end');
 function refreshCounts() {
   const p = bridge.getProjection();
   countsEl.textContent =
-    `回合 ${p.turn.count}(${p.turn.side}) ｜ 牌库 ${p.counts.deck} 弃 ${p.counts.discard} 焚 ${p.counts.burnt}`
+    `回合 ${p.turn.count}(${p.turn.side}) ｜ 牌库 ${p.counts.deck} 焚 ${p.counts.burnt}`
     + ` ｜ 换牌费 ${p.swapCost}`
     + (p.pendingInput ? ` ｜ 等待输入: ${p.pendingInput.request.kind}` : '');
 }

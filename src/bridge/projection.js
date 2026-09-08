@@ -104,15 +104,13 @@ export function projectBattle(battle) {
     // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）；
     // 咏唱卡结算后回手（发动/关停都留在手牌，激活态 = isActivated）
     pending: battleState.zones.pending.map(rt => rt.uniqueID),
-    // 覆盖层（牌库/弃牌堆/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts
+    // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts
     counts: {
       deck: battleState.zones.deck.length,
-      discard: battleState.zones.discard.length,
       burnt: battleState.zones.burnt.length,
     },
     zones: {
       deck: battleState.zones.deck.map(rt => projectCardFull(battle, rt)),
-      discard: battleState.zones.discard.map(rt => projectCardFull(battle, rt)),
       burnt: battleState.zones.burnt.map(rt => projectCardFull(battle, rt)),
     },
   };

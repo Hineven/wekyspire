@@ -19,9 +19,9 @@
 // 不做：日志、tooltip 渲染（Shell/调试页消费 bus 事件）、rest 阶段。
 //
 // 布局（世界坐标，z=0 平面屏幕高≈100，y 向上，相机抬眼高斜视，16:9 世界宽≈177.8）：
-//   手牌 y=-40 居中扇形（压低给战场让位）；咏唱槽屏幕左侧纵列（x=-74，自 y=18 向下，z 低于手牌）；
+//   手牌 y=-40 居中扇形（压低给战场让位；咏唱卡激活态住手牌扇形，边缘流光表达）；
 //   单位脚底锚定场景水平地板（scene.battleLine y=FLOOR_Y，slotTransform 换算）；
-//   按钮纵列（主/换卡）x=74 y=-4/-12；牌库图标 (80,-55)，坟墓图标 (80,-38)；出牌线 y=-20；
+//   按钮纵列（主/换卡）x=74 y=-4/-12；牌库图标 (80,-55)；出牌线 y=-20；
 //   背景 = 程序化 3D 场景（dungeon3D）。
 
 import * as THREE from 'three';
@@ -62,8 +62,7 @@ export const BUTTON_POSITIONS = {
 };
 const PILE_POSITIONS = {
   deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；扇形手牌卡中心右界 64，避让开）
-  discard: { x: 80, y: -38 },   // 坟墓图标（牌库上方）
-};
+};                               // FIFO 单循环区：无弃牌堆，离场非消耗卡一律飞回牌库
 // 手牌悬浮/瞄准提拉目标：整牌（含 liftScale 放大）拉入屏内 + 2 单位余量。
 // 由卡高与放大系数推导（旧固定值 -46.5 是 27 高卡时代遗留，卡面 ×1.3 后下缘重新出屏）
 const HAND_LIFT_Y = UI_CAMERA_LOOK_AT_Y - WORLD_HEIGHT / 2
@@ -146,10 +145,10 @@ export class BattleStage {
 
     this.layout = new LayoutEngine();
     // 手牌扇形几何：minX/maxX 为卡中心硬区间——左让状态栏面板（UI 底板右缘 ≈ -44.9），
-    // 右让牌库/坟墓图标（x ∈ [75,85]）；baseY 压低让下缘可越出屏底（-65），与重叠、
+    // 右让牌库图标（x = 80）；baseY 压低让下缘可越出屏底（-65），与重叠、
     // 外倾共同压缩满 10 张所需空间。机制参数（挤开/提拉放大/z 抬升）见 LayoutEngine。
     this.layout.registerContainer('hand', {
-      minX: -40.5, maxX: 58.5,        // 横界 2026-08 缩 10%：满手外缘不再压牌库/坟墓图标（中心 9 不变）
+      minX: -40.5, maxX: 58.5,        // 横界 2026-08 缩 10%：满手外缘不再压牌库图标（中心 9 不变）
       baseY: -51.3,                   // 随卡高放大（保持已验收的下潜比例 ≈9% 卡高）
       minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3：重叠率与旧版一致（≈52% 可见）
       radius: 95,
@@ -159,7 +158,6 @@ export class BattleStage {
     });
     // 咏唱无槽区：咏唱卡住手牌扇形（激活态 = isActivated 边缘流光），与普通卡同布局。
     this.layout.setNamedAnchor('deck', PILE_POSITIONS.deck);
-    this.layout.setNamedAnchor('discard', PILE_POSITIONS.discard);
 
     this.animator = new StageAnimator({ layoutEngine: this.layout, tween });
     // 手牌/咏唱静息姿态的弹簧跟随层：布局锚点只当目标，逐帧软收敛（见 HandSprings）
@@ -190,7 +188,7 @@ export class BattleStage {
     this._aiming = null;       // 选目标卡（targetMode 'enemy'）瞄准中 { id }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
     this._inputSelection = [];
-    // 区域查看器（点牌库/坟墓图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
+    // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
     this._viewer = new CardGalleryObject({
       cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
       bakeFace: this._bakeFace, picker: this.picker,
@@ -229,10 +227,9 @@ export class BattleStage {
       this.shake.update(dt);      // 相机位移最后落位：本帧逻辑读基位，渲染带偏移
     });
 
-    // 区域图标（牌库/坟墓）：点击开查看器，计数经 reconcile 同步
+    // 区域图标（牌库）：点击开查看器，计数经 reconcile 同步
     this._piles = {
       deck: new ZonePileObject({ zoneKey: 'deck', label: '牌库', color: '#5aa2e8' }),
-      discard: new ZonePileObject({ zoneKey: 'discard', label: '坟墓', color: '#a0855a' }),
     };
     for (const [key, pile] of Object.entries(this._piles)) {
       pile.position.set(PILE_POSITIONS[key].x, PILE_POSITIONS[key].y, 5);
@@ -340,7 +337,6 @@ export class BattleStage {
     const remi = proj.allies.find(a => a.defId === 'remi');
     this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
-    this._piles.discard.setCount(proj.counts.discard);
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
@@ -389,13 +385,12 @@ export class BattleStage {
 
   // 全 zone 对账（持久模型）：新卡建条目+建视图（各一次），zone 按快照刷新。
   // burnt zone 不参与——焚毁节拍销毁视图/出册后不再重生（未来"焚毁区捞回"机制
-  // 到来时由其专属节拍重建）。快照四 zone 都没有的注册卡 = 上游丢节拍的绊线
-  // （warn + 收尸），正常流程不应触达。
+  // 到来时由其专属节拍重建）。快照各 zone 与 held 都没有的注册卡 = 上游丢节拍的
+  // 绊线（warn + 收尸），正常流程不应触达。
   _syncCardZones(proj) {
     const lists = {
       hand: proj.hand.map(c => c.uniqueID),
       deck: proj.zones.deck.map(c => c.uniqueID),
-      discard: proj.zones.discard.map(c => c.uniqueID),
     };
     const present = new Set();
     for (const [zone, ids] of Object.entries(lists)) {
@@ -422,7 +417,7 @@ export class BattleStage {
     }
   }
 
-  // zone 迁移：模型推进（状态权威）+ 视图随动。进牌库/坟堆 = 隐形停车 +
+  // zone 迁移：模型推进（状态权威）+ 视图随动。进牌库 = 隐形停车 +
   // 摘除拾取；进手牌的显形与烘面在 _syncCardContents（惰性）。
   _setCardZone(id, zone) {
     // 'held'（展示毕待离场）是 hand 的显示位精化：sync 对账不得解除停留，
@@ -439,19 +434,18 @@ export class BattleStage {
       view.visible = false;
       this.picker.removePickable(id);
     } else if (change.from !== 'held') {
-      // 入场（牌库/坟堆 → 手牌）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
+      // 入场（牌库 → 手牌）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
       this._entering.add(id);
     }
   }
 
-  // 视图惰性建：停在来源 pile 锚点（scale 0.5、隐形）——抽牌"从牌库长开飞入"
-  // 的入场视觉由其后的跟踪补间天然给出；牌库/坟堆中的卡永不烘面（省 canvas）。
+  // 视图惰性建：停在牌库 pile 锚点（scale 0.5、隐形）——抽牌"从牌库长开飞入"
+  // 的入场视觉由其后的跟踪补间天然给出；牌库中的卡永不烘面（省 canvas）。
   _ensureView(id) {
     let view = this._views.get(id);
     if (view) return view;
     view = new CardObject({ uniqueID: id, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace });
-    const zone = this.model.getZone(id) ?? 'deck';
-    const anchor = this.layout.getNamedAnchor(zone === 'discard' ? 'discard' : 'deck');
+    const anchor = this.layout.getNamedAnchor('deck');
     view.position.set(anchor.x, anchor.y, 0);
     view.scale.set(0.5, 0.5, 1);
     view.visible = false;
@@ -506,27 +500,26 @@ export class BattleStage {
 
   // 离场节拍：播放该卡的离场演出（弃/回库=飞行停车；焚毁=原地燃烧殆尽）并
   // **阻塞本节拍**（onDone 才回 finish）——"发动 → 效果 → 离场"的次序由
-  // sequencer 队列编排（sync 节拍在离场之后，坟堆数字因此飞进才+1）。
+  // sequencer 队列编排（sync 节拍在离场之后，牌库数字因此飞进才+1）。
   // zone 在节拍时点即推进（显示状态由节拍权威）；落点取自节拍载荷（toZone），
   // 不读投影——显示状态此时尚未同步，投影里卡还在原地。
   _departureBeat(id, type, payload, finish) {
     const view = id != null ? this._views.get(id) : null;
     if (!view) { // 无载体（未来机制/异常）：脉冲落点图标打节拍
       if (type === EventNames.ANIM_CARD_BURNT) return finish();
-      const zone = payload?.toZone === 'deck' ? 'deck' : 'discard';
-      return this._pulsePile(zone, finish);
+      return this._pulsePile('deck', finish);
     }
     this.picker.removePickable(id);
     if (type === EventNames.ANIM_CARD_BURNT) {
       return this._burnOut(id, view, finish);
     }
-    const toZone = payload?.toZone === 'deck' ? 'deck' : 'discard';
-    this.model.setZone(id, toZone); // 状态在节拍时点推进（模型权威）
-    this._flyOut(id, view, { ...PILE_POSITIONS[toZone], z: 40, scale: 0.5 }, finish);
+    // FIFO 单循环区：非焚毁离场（打出/弃置/换牌/解除咏唱/迁移）一律回牌库底
+    this.model.setZone(id, 'deck'); // 状态在节拍时点推进（模型权威）
+    this._flyOut(id, view, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, finish);
   }
 
   // 焚毁离场：原地燃烧殆尽（着色器自底向上吞蚀 + 前沿余烬 + 火起颤动），
-  // 燃尽后牌面已全 discard（不可见）——瞬移落位坟墓即销毁收尾，无飞行动画。
+  // 燃尽后牌面已全 discard（不可见）——瞬移落位牌库图标处即销毁收尾，无飞行动画。
   // 焚毁 = 对象终结（唯一销毁路径）：模型出册 + 视图销毁（burnt 不回流，id 不会
   // 重生；未来"焚毁区捞回"机制须自行重建）。
   // 节拍阻塞至燃尽完成，sequencer 队列次序因此是：发动 → 效果 → 燃烧殆尽 → 状态同步。
@@ -538,7 +531,7 @@ export class BattleStage {
       durationMs: CARD_BURN_MS,
       onBurnt: () => {
         this._burning.delete(view);
-        view.position.set(PILE_POSITIONS.discard.x, PILE_POSITIONS.discard.y, 40); // 不可见瞬移
+        view.position.set(PILE_POSITIONS.deck.x, PILE_POSITIONS.deck.y, 40); // 不可见瞬移
         this.animator.unregister(id);
         this.uiScene.remove(view);
         view.dispose();
@@ -835,7 +828,7 @@ export class BattleStage {
     }
 
     // 卡牌离场节拍（弃/焚/迁移）：播放该卡的离场飞行并阻塞本节拍——
-    // 离场时序完全由 sequencer 编排（sync 节拍排在离场之后，坟堆数字飞进才+1）
+    // 离场时序完全由 sequencer 编排（sync 节拍排在离场之后，牌库数字飞进才+1）
     if (type === EventNames.ANIM_CARD_DISCARDED || type === EventNames.ANIM_CARD_BURNT
       || type === EventNames.ANIM_CARD_MOVED) {
       const id = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID ?? null;
@@ -850,7 +843,7 @@ export class BattleStage {
       return this._addCardBeat(payload, finish);
     }
     if (type === EventNames.ANIM_CARD_SWAPPED) {
-      return this._pulsePile('discard', finish);
+      return this._pulsePile('deck', finish);
     }
     if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
     // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
@@ -1221,7 +1214,7 @@ export class BattleStage {
     return this._units.get(id) ?? this._views.get(id) ?? null;
   }
 
-  // ========== 区域查看器（点牌库/坟墓图标开）：战斗同栈的卡牌画廊 ==========
+  // ========== 区域查看器（点牌库图标开）：战斗同栈的卡牌画廊 ==========
   // 渲染（CardObject 同烘焙）、拾取（token→tooltip / 整卡→hover）与手牌同协议；
   // 点卡（或卡面 token）保持打开读卡，点其余任意处关闭。
 
@@ -1230,14 +1223,11 @@ export class BattleStage {
     const proj = this._snapshot;
     if (!proj) return;
     const list = proj.zones[zone] ?? [];
-    const names = { deck: '牌库', discard: '坟墓' };
-    // 顺序语义：牌库顶 = 数组首（展示最左）；弃牌堆尾 = 最新弃置（展示最右）
-    const subtitle = list.length === 0 ? '空空如也'
-      : zone === 'deck' ? '最左为牌库顶'
-        : '最右为最新弃置';
+    // 顺序语义：牌库顶 = 数组首（展示最左）、牌库底（最新回库）= 最右
+    const subtitle = list.length === 0 ? '空空如也' : '最左为牌库顶';
     this._viewer.open(list, {
       zone,
-      title: `${names[zone] ?? zone} · ${list.length} 张`,
+      title: `牌库 · ${list.length} 张`,
       subtitle,
     });
     this.uiScene.add(this._viewer);

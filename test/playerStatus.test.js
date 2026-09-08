@@ -65,6 +65,19 @@ describe('PlayerStatusObject 玩家状态栏（基础设施契约）', () => {
     expect(bar.getObjectByName('remiAvatar').material.map).toBeTruthy();
   });
 
+  it('层级契约：瑞米区压过骑士头像/血环栈（含血环内件偏移），仍让位盾徽', () => {
+    // 状态层法则：面板内部件层级只认局部 z 错层。回归点——血环（RingGaugeObject）
+    // 内件自带 +0.62/+0.66 偏移，瑞米区若只比血环组 z 高会被血环盖住。
+    const bar = new PlayerStatusObject({});
+    const remi = bar.getObjectByName('remi');
+    const knightRingTop = bar.playerGauge.position.z +
+      Math.max(...bar.playerGauge.children.map((c) => c.position.z));
+    const remiZs = remi.children.map((c) => remi.position.z + c.position.z);
+    expect(Math.min(...remiZs)).toBeGreaterThan(knightRingTop); // 整区最低件也盖过血环栈
+    expect(Math.min(...remiZs)).toBeGreaterThan(bar.getObjectByName('avatar').position.z);
+    expect(Math.max(...remiZs)).toBeLessThan(bar.playerShieldBadge.position.z); // 让位盾徽
+  });
+
   it('悬浮开销交互态机：零开销=normal，可负担=highlight，不满足=insufficient（覆盖高亮）', () => {
     const mana = new ManaCrystalObject({});
     const ap = new ApCoinObject({});

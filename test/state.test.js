@@ -100,8 +100,8 @@ describe('battleState：zones 模型', () => {
     expect(zoneOf(bs, a.uniqueID)).toBe('hand');
     moveCard(bs, a.uniqueID, 'deck');
     expect(zoneOf(bs, a.uniqueID)).toBe('deck');
-    moveCard(bs, b.uniqueID, 'discard'); // 正解：移动而非 push，数组唯一事实源
-    expect(zoneOf(bs, b.uniqueID)).toBe('discard');
+    moveCard(bs, b.uniqueID, 'burnt'); // 正解：移动而非 push，数组唯一事实源
+    expect(zoneOf(bs, b.uniqueID)).toBe('burnt');
     expect(zoneOf(bs, 'nonexistent')).toBeNull();
   });
 
@@ -191,7 +191,7 @@ describe('可序列化约束', () => {
     expect(runRevived.player.effects).toEqual([{ effectId: 'strength', stacks: 2 }]);
     expect(bsRevived.enemies[0].defId).toBe('slime');
     expect(bsRevived.turn.count).toBe(5);
-    expect(bsRevived.zones).toEqual({ hand: [], deck: [], discard: [], burnt: [], pending: [] });
+    expect(bsRevived.zones).toEqual({ hand: [], deck: [], burnt: [], pending: [] });
   });
 });
 
