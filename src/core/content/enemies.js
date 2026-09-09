@@ -33,7 +33,7 @@ registerEnemy({
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }
-    : { kinds: ['defend'] }),
+    : { kinds: ['defend'], note: '自身护盾+4' }),
 });
 
 // ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（enemies 未满
@@ -69,7 +69,7 @@ registerEnemy({
   },
   getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
     ? { kinds: ['summon'], note: '召唤史莱姆' }
-    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack') }),
+    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '并获护盾5' }),
 });
 
 // ② 带效果联动的小 Boss：每第三次行动给玩家上 2 层燃烧，其余时间攻 10
@@ -179,7 +179,7 @@ registerEnemy({
     const phase = unit.actionIndex % 3;
     if (phase === 0) return { kinds: ['buff'], note: '自身再生3' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
-    return { kinds: ['defend'] };
+    return { kinds: ['defend'], note: '自身护盾+6' };
   },
 });
 

@@ -112,7 +112,7 @@ registerEffect({
   type: 'buff',
   stacking: 'count',
   name: '荆棘',
-  description: '受到攻击时，对攻击者造成层数点伤害。',
+  description: '受到攻击时，对攻击者造成层数点穿透伤害（无视护盾）。',
   icon: '🌵',
   color: 'green',
   subscriptions: (unit) => [{

@@ -488,8 +488,8 @@ registerSkill({
     drawCards(sctx, hand.length);
     return true;
   },
-  describe: () => '弃手中全部卡，抽等量卡',
-  battleDescribe: () => '弃手中全部卡，抽等量卡',
+  describe: () => '弃其余全部手牌，抽等量卡',
+  battleDescribe: () => '弃其余全部手牌，抽等量卡',
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====

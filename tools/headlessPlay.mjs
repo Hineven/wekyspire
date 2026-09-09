@@ -133,14 +133,21 @@ function battleLogText(S, tail = 10) {
   for (const { method, args } of S.presenter?.calls ?? []) {
     const p = args?.[0] ?? {};
     switch (method) {
-      case 'damage':
-        lines.push(`${p.source?.name ?? '环境'} → ${p.target?.name}: ${p.dealt}伤`
+      case 'damage': {
+        if ((p.dealt ?? 0) <= 0 && (p.shieldAbsorbed ?? 0) <= 0 && (p.defenseBlocked ?? 0) <= 0) break;
+        const src = p.source?.name ?? (p.pierce ? '持续伤害' : '环境'); // 燃烧/中毒等无来源穿透伤
+        lines.push(`${src} → ${p.target?.name}: ${p.dealt}伤`
           + `${p.pierce ? '（穿透）' : ''}${p.shieldAbsorbed ? `（盾挡${p.shieldAbsorbed}）` : ''}`
           + `${p.defenseBlocked ? `（防挡${p.defenseBlocked}）` : ''}`);
         break;
-      case 'heal': lines.push(`${p.target?.name} 恢复 ${p.healed}`); break;
-      case 'shield': lines.push(`${p.target?.name} 护盾+${p.gained}`); break;
-      case 'effect': lines.push(`${p.target?.name} 获得${getEffectDefinition(p.effectId)?.name ?? p.effectId}${p.stacks}`); break;
+      }
+      case 'heal': if ((p.healed ?? 0) > 0) lines.push(`${p.target?.name} 恢复 ${p.healed}`); break;
+      case 'shield': if ((p.gained ?? 0) > 0) lines.push(`${p.target?.name} 护盾+${p.gained}`); break;
+      case 'effect': {
+        const name = getEffectDefinition(p.effectId)?.name ?? p.effectId;
+        lines.push((p.stacks ?? 0) > 0 ? `${p.target?.name} ${name}${p.stacks}` : `${p.target?.name} ${name}消散`);
+        break;
+      }
       case 'unitDeath': lines.push(`${p.unit?.name} 被击败！`); break;
       case 'unitSpawned': lines.push(`${p.unit?.name} 现身！`); break;
       case 'cardTransformed':
@@ -160,16 +167,17 @@ function battleLogText(S, tail = 10) {
   return lines.slice(-tail);
 }
 
-// 手牌寻址：编号（1起）或卡名/卡名前缀（唯一命中才生效）
+// 手牌寻址：编号（1起）或卡名/卡名前缀（唯一命中才生效；同 defId 重复卡任取第一张）
 function resolveHandIdx(hand, arg, what) {
   if (/^\d+$/.test(arg)) return idxOk(num(arg), hand.length, what);
   const matches = hand.filter(c => {
     const n = defOf(c).name;
     return n === arg || n.startsWith(arg);
   });
-  if (matches.length === 1) return hand.indexOf(matches[0]);
-  if (matches.length > 1) throw new Error(`「${arg}」匹配多张手牌（${matches.map(c => defOf(c).name).join(' / ')}），请用编号`);
-  throw new Error(`手牌中没有「${arg}」`);
+  if (!matches.length) throw new Error(`手牌中没有「${arg}」`);
+  const defIds = new Set(matches.map(c => c.defId));
+  if (defIds.size === 1) return hand.indexOf(matches[0]); // 同名重复卡等价，任打一张
+  throw new Error(`「${arg}」匹配多张不同手牌（${matches.map(c => defOf(c).name).join(' / ')}），请用编号`);
 }
 
 function settleBattle(S) {
@@ -244,6 +252,7 @@ function exec(S, raw) {
     case 'swap': {
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
+      if (!hand.length) throw new Error('手牌为空，无法换牌');
       const skill = hand[resolveHandIdx(hand, String(a), '手牌')];
       if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
       S.lastOutcome = `换牌 ${defOf(skill).name}`;
@@ -382,10 +391,9 @@ function exec(S, raw) {
     // ---- 进阶 ----
     case 'dim': {
       if (stage !== 'ascension') throw new Error('当前不在进阶事件');
-      if (a === '跳过' || a === 'skip') chooseAscension(run, null);
-      else if (a === '火' || a === 'fire') chooseAscension(run, 'fire');
+      if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = '跳过进阶（体修隐藏等级+1，全恢复，魏启上限+1）'; }
+      else if (a === '火' || a === 'fire') { chooseAscension(run, 'fire'); S.lastOutcome = '火灵脉 +1（全恢复，魏启上限+1）'; }
       else throw new Error('dim 火 | dim 跳过');
-      S.lastOutcome = a === '跳过' || a === 'skip' ? '跳过进阶（体修隐藏等级+1）' : '火灵脉 +1';
       return;
     }
     case 'seed': {
@@ -417,7 +425,11 @@ function exec(S, raw) {
     // ---- 阶段推进 ----
     case 'next':
       if (stage === 'reward') { completeRewards(run); S.roomDone = false; S.lastOutcome = '离开奖励'; return; }
-      if (stage === 'room') { completeRoom(run); S.roomDone = false; S.lastOutcome = '离开房间'; return; }
+      if (stage === 'room') {
+        // 训练强绑尾款未领不允许离场（UI 契约：forced 状态只给三选一不给跳过）
+        if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取：act take <#>');
+        completeRoom(run); S.roomDone = false; S.lastOutcome = '离开房间'; return;
+      }
       throw new Error(`当前阶段无需 next（${stageCn(stage)}）`);
     default:
       throw new Error(`未知动作：${cmd}（help 查看动作表）`);
@@ -485,7 +497,8 @@ function render(S) {
       L.push(`已开 ${PACKS[rw.packId]?.name ?? rw.packId}，候选:`);
       rw.skillChoices.forEach((id, i) => {
         const def = getSkillDefinition(id);
-        L.push(`  [${i + 1}] ${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
+        const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
+        L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
       });
       L.push(`→ take <#> / skip`);
     }
@@ -502,7 +515,8 @@ function render(S) {
         L.push(`抓牌候选:`);
         run.roomData.drawChoices.forEach((id, i) => {
           const def = getSkillDefinition(id);
-          L.push(`  [${i + 1}] ${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
+          const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
+          L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
         });
         L.push(`→ act take <#>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
       } else if (trainingMode(run) === 'upgrade') {
@@ -544,6 +558,13 @@ function render(S) {
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {
     L.push(`本局结束：${run.result === 'victory' ? '登顶成功' : '战败'}。感谢游玩！`);
+  }
+  if ((stage === 'reward' || stage === 'end') && S.presenter?.calls?.length) {
+    const log = battleLogText(S);
+    if (log.length) {
+      L.push('上场战斗尾档（死因/击杀回放）:');
+      for (const l of log) L.push(`  · ${l}`);
+    }
   }
   if (S.lastOutcome) L.push(`⟐ ${S.lastOutcome}`);
   return L.join('\n');
