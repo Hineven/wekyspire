@@ -10,9 +10,9 @@ class FakeImage {
 describe('ART_MANIFEST 目录自动登记', () => {
   it('assets 下全部位图入册（stage/cards/根级散图），非位图不混入，条目 url 有效', () => {
     const paths = ART_MANIFEST.map(e => e.path);
-    expect(paths.some(p => p.endsWith('/assets/stage/unit_player.png'))).toBe(true);
+    expect(paths.some(p => p.endsWith('/assets/stage/unit_player.webp'))).toBe(true);
     expect(paths.some(p => p.includes('/assets/cards/'))).toBe(true);
-    expect(paths.some(p => p.endsWith('/assets/remi.png'))).toBe(true); // 根级散图（** 命中）
+    expect(paths.some(p => p.endsWith('/assets/remi.webp'))).toBe(true); // 根级散图（** 命中）
     expect(paths.every(p => /\.(png|jpe?g|webp)$/.test(p))).toBe(true); // css/mp3 天然排除
     expect(ART_MANIFEST.every(e => typeof e.url === 'string' && e.url.length > 0)).toBe(true);
   });

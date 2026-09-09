@@ -115,5 +115,6 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环；`CAMERA
 ## 安全注意事项
 
 - `tools/seedream/` 是美术素材生成管线（Python，火山引擎方舟 API）：`ARK_API_KEY` 经环境变量传入，**不要**把密钥写进代码或提交。
+- `tools/compress_art.py` 是美术压缩管线（Python/PIL）：`src/assets` 下 PNG 原位转 WebP（立绘 q90 保 alpha、插画/背景 q85，删原件）；素材解析层（`stage/art/imageCache.js` 的 `indexArtUrls`）按去扩展名查表，png/webp 混放透明切换——新素材丢进 assets 后跑一次即可。
 - 存档存于浏览器 localStorage（`saves.js`），不涉及服务端凭据。
 - 仓库无后端、无数据库；不要引入新的网络请求或远程依赖而不说明理由。

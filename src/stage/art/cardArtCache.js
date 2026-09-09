@@ -9,18 +9,16 @@
 // 实例为应用级共享单例（sharedCardArtCache）：跨舞台/跨战斗复用已解码图，
 // 并让"预取 → 建视图命中"成为可能（每场战斗 new 缓存会把解码成果全部丢弃）。
 
-import { ArtImageCache } from './imageCache.js';
+import { ArtImageCache, indexArtUrls } from './imageCache.js';
 
-// vite 静态收集素材 URL（filename → url）
-const ART_URLS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/cards/*.png', { eager: true, query: '?url', import: 'default' }))
-    .map(([path, url]) => [path.split('/').pop(), url]),
+// vite 静态收集素材 URL（去扩展名 filename → url，png/webp 混放透明切换）
+const ART_URLS = indexArtUrls(
+  import.meta.glob('../../assets/cards/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
 );
-// 系列装饰图层（assets/cards/decor/decor-{系列}.png）：整卡面装饰框（自带透明镂空），
+// 系列装饰图层（assets/cards/decor/decor-{系列}.*）：整卡面装饰框（自带透明镂空），
 // 按系列/类型匹配，素材未就位时回退程序化装饰（cardFace.js）
-const DECOR_URLS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/cards/decor/*.png', { eager: true, query: '?url', import: 'default' }))
-    .map(([path, url]) => [path.split('/').pop(), url]),
+const DECOR_URLS = indexArtUrls(
+  import.meta.glob('../../assets/cards/decor/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
 );
 
 const TIER_ART_INDEX = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
@@ -28,20 +26,18 @@ const TIER_ART_INDEX = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 export class CardArtCache extends ArtImageCache {
   /** 该卡是否有可用素材（同步，不发起加载）。 */
   resolveUrl(card) {
-    const file = card.image
-      ? `${card.image}.png`
-      : `${card.type ?? 'normal'}-${TIER_ART_INDEX[card.tier] ?? 0}.png`;
-    return ART_URLS[file] ?? null;
+    const key = card.image ?? `${card.type ?? 'normal'}-${TIER_ART_INDEX[card.tier] ?? 0}`;
+    return ART_URLS[key] ?? null;
   }
 
   /**
-   * 系列装饰图层解析：decor-{series}.png 优先，回落 decor-{type}.png。
+   * 系列装饰图层解析：decor-{series} 优先，回落 decor-{type}。
    * @param {object} card  projectCardFull 视图（series/type）
    */
   resolveDecorUrl(card) {
     for (const key of [card.series, card.type]) {
       if (!key) continue;
-      const url = DECOR_URLS[`decor-${key}.png`];
+      const url = DECOR_URLS[`decor-${key}`];
       if (url) return url;
     }
     return null;

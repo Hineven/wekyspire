@@ -4,6 +4,23 @@
 // warm() 供全量预载（assetManifest）把「已解码完成的图」直接注入缓存——
 // 舞台首拍 get() 同步命中，无占位色块→补挂的闪变。
 
+// 位图扩展名（glob 与查表共用）：素材落盘格式不限（png/webp/jpg），查表按去扩展名匹配
+export const IMG_EXT_RE = /\.(png|jpe?g|webp)$/i;
+
+/**
+ * 文件名 → URL 表（去扩展名键，png/webp 混放透明切换；冲突时 webp 优先）。
+ * @param {Record<string, string>} globbed import.meta.glob(..., import:'default') 的 path→url
+ */
+export function indexArtUrls(globbed) {
+  const table = {};
+  for (const [path, url] of Object.entries(globbed)) {
+    const base = path.split('/').pop();
+    const key = base.replace(IMG_EXT_RE, '');
+    if (!(key in table) || base.toLowerCase().endsWith('.webp')) table[key] = url;
+  }
+  return table;
+}
+
 export class ArtImageCache {
   constructor() {
     this._cache = new Map(); // url -> HTMLImageElement | 'loading' | 'error'

@@ -8,8 +8,8 @@
 import { sharedUnitArtCache } from './unitArt.js';
 import { sharedCardArtCache } from './cardArtCache.js';
 
-// **/*.png 同时命中根级散图（如 remi.png）与任意深度子目录（cards/decor/ 等）；
-// 扩展名过滤天然排除 css/mp3 等非位图
+// 根级散图（如 remi.webp）与任意深度子目录（cards/decor/ 等）均被 ** 命中；
+// 扩展名过滤天然排除 css/mp3 等非位图（素材经 tools/compress_art.py 转 WebP）
 export const ART_MANIFEST = Object.freeze(
   Object.entries(
     import.meta.glob('../../assets/**/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' }),

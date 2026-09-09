@@ -5,15 +5,15 @@
 // 实例为应用级共享单例（sharedUnitArtCache）：BattleStage/MapStage 共用一份，
 // 跨舞台/跨战斗复用已解码图（各自 new 会导致头像等素材重复加载与解码）。
 
-import { ArtImageCache } from './imageCache.js';
+import { ArtImageCache, IMG_EXT_RE, indexArtUrls } from './imageCache.js';
 //
 // 视角约定（STAGE_DESIGN §0 用户手绘稿）：友军（玩家/队友）背对屏幕，敌军正对屏幕。
-//   unit_xxx.png      = 舞台用图（友军=背视图，敌军=正视图）
-//   unit_xxx_front.png = 正视图备用（幕间/图鉴等 UI 场景）
+//   unit_xxx.{webp,png}      = 舞台用图（友军=背视图，敌军=正视图）
+//   unit_xxx_front.{webp,png} = 正视图备用（幕间/图鉴等 UI 场景）
+// 素材经 tools/compress_art.py 转 WebP；查表按去扩展名匹配，新旧格式混放均可。
 
-const ART_URLS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/stage/*.png', { eager: true, query: '?url', import: 'default' }))
-    .map(([path, url]) => [path.split('/').pop(), url]),
+const ART_URLS = indexArtUrls(
+  import.meta.glob('../../assets/stage/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
 );
 
 // defId → 立牌文件名；玩家（side==='player'）无 defId，固定 unit_player.png
@@ -46,7 +46,7 @@ export function unitHeightFactor(defId, side) {
 export class UnitArtCache extends ArtImageCache {
   resolveUrl(defId, side) {
     const file = side === 'player' ? 'unit_player.png' : UNIT_ART_FILES[defId];
-    return file ? (ART_URLS[file] ?? null) : null;
+    return file ? (ART_URLS[file.replace(IMG_EXT_RE, '')] ?? null) : null;
   }
 
   /**
@@ -59,7 +59,7 @@ export class UnitArtCache extends ArtImageCache {
 
   /** 按文件名直接取图（如 'unit_player_front.png' 头像正视图），加载语义同 get()。 */
   getFile(file) {
-    const url = ART_URLS[file] ?? null;
+    const url = ART_URLS[file.replace(IMG_EXT_RE, '')] ?? null;
     return url ? this.getByUrl(url) : null;
   }
 }

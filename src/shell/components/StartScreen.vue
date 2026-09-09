@@ -47,7 +47,7 @@ import ChangeLog from './ChangeLog.vue';
 import { settings, persistSettings } from '../settings';
 import { showMenuDialog } from '../menuDialog';
 import { fadeInTitleMusic, fadeOutTitleMusic } from '../audio';
-import startBg from '../../assets/images/start-screen.png';
+import startBg from '../../assets/images/start-screen.webp';
 import titleMusicUrl from '../../assets/sounds/story-mode-intro.mp3';
 
 const props = defineProps({
