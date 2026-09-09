@@ -130,5 +130,6 @@ export class GainShieldInstruction extends BattleInstruction {
 export function previewDamage(ctx, { source, target, amount, pierce = false, tags = [] }) {
   const probe = ctx.kernel.preview(
     new DealDamageInstruction({ source, target, amount, pierce, tags }), ctx);
-  return { dodged: probe.cancelled, damage: probe.payload.damage };
+  // 与 execute 的减防御地板同口径：预览不露出负值（虚弱压负面板时显示 -N 会误导）
+  return { dodged: probe.cancelled, damage: Math.max(0, probe.payload.damage) };
 }

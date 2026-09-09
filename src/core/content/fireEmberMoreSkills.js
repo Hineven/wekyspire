@@ -34,8 +34,8 @@ function selfImmolate({ id, name, tier, base, burn }) {
       addEffect(sctx, 'burn', burn); // 默认 target = sctx.player：代价给自己
       return true;
     },
-    describe: () => `${base}伤害，/effect{燃烧}${burn}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，/effect{燃烧}${burn}`,
+    describe: () => `${base}伤害，自身/effect{燃烧}${burn}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，自身/effect{燃烧}${burn}`,
   });
 }
 

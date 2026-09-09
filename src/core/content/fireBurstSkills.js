@@ -125,8 +125,8 @@ function burstChantCard({ id, name, tier, base, perMana }) {
         aoeDamage(sctx, total);
       },
     },
-    describe: () => `每消耗1魏启，终止伤害+${perMana}。终止：${base}群伤`,
-    battleDescribe: () => `每消耗1魏启，终止伤害+${perMana}；终止：${base}群伤`,
+    describe: () => `每消耗1魏启，/named{终止}伤害+${perMana}。/named{终止}：${base}群伤`,
+    battleDescribe: () => `每消耗1魏启，/named{终止}伤害+${perMana}；/named{终止}：${base}群伤`,
   });
 }
 burstChantCard({ id: 'smallBurst', name: '小爆裂术', tier: 'B', base: 30, perMana: 5 });

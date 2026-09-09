@@ -23,6 +23,8 @@ import { canUseSkill, makeSkillCtx, effectiveHandCount } from '../src/core/skill
 import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { listNamedTerms } from '../src/core/skills/namedTerms.js';
 import { getEffectDefinition, allEffects } from '../src/core/effects/registry.js';
+import { getEnemyDefinition } from '../src/core/enemies/registry.js';
+import { gatedPromotionTargets } from '../src/core/run/promotion.js';
 import { getAbilityDefinition } from '../src/core/abilities/registry.js';
 import { getRelicDefinition } from '../src/core/relics/registry.js';
 import { swapCostOf } from '../src/core/state/battleState.js';
@@ -49,12 +51,12 @@ import { spinSlot, SLOT_PLACEHOLDER } from '../src/core/run/rooms/slotMachine.js
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
 const HELP = `动作表（按当前阶段）：
-  战斗: fight | play <手牌#> [敌#] | swap <手牌#> | end | in <候选#...> | auto
+  战斗: play <手牌#> [敌#] | swap <手牌#>（首次免费，之后费用逐次+1） | end | in <候选#...> | auto
   奖励: pack <#|体修|火|通用> | take <#> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> | act up <构筑#> | act draw
         | act take <#> | act skipdraw | act skip | act spin | act play | next
   进阶: dim 火|跳过 | seed <#,#,#> | reroll | ability <#|skip>
-  通用: state | deck | note <文本> | help`;
+  通用: state | deck | terms（词条/效果释义） | note <文本> | help`;
 
 // ---------- 小工具 ----------
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
@@ -72,11 +74,14 @@ const costText = (def) => {
 const kwText = (def) => (def.keywords ?? [])
   .filter(k => k !== 'blade').map(k => ({ exhaust: '消耗', transient: '短暂', innate: '固有' }[k] ?? k)).join(' ');
 const effectsText = (unit) => unit.effects?.length
-  ? unit.effects.map(e => `${getEffectDefinition(e.effectId)?.name ?? e.effectId}${e.stacks > 1 ? e.stacks : ''}`).join(' ') : '';
+  ? unit.effects.map(e => `${getEffectDefinition(e.effectId)?.name ?? e.effectId}${e.stacks}`).join(' ') : '';
 const intentText = (u) => {
   const it = u.intention;
   if (!it) return '未知';
-  const kind = (it.kinds ?? []).map(k => ({ attack: '攻击', defend: '防御', buff: '强化', unknown: '未知' }[k] ?? k)).join('+');
+  const kind = (it.kinds ?? []).map(k => ({
+    attack: '攻击', defend: '防御', buff: '强化', debuff: '削弱',
+    summon: '召唤', unknown: '未知',
+  }[k] ?? k)).join('+');
   const dmg = it.damage ? ` ${it.damage}${it.hits > 1 ? `×${it.hits}` : ''}` : '';
   return kind + dmg + (it.note ? `（${it.note}）` : '');
 };
@@ -132,6 +137,32 @@ const idxOk = (n, len, what) => {
   return n - 1;
 };
 
+// 升级门禁预检（gatedPromotionTargets 同源）：给出可读的拒绝理由
+function upgradeGateError(run, card) {
+  const targets = gatedPromotionTargets(run, defOf(card));
+  if (targets.length) return null;
+  return defOf(card).promotesTo
+    ? `「${defOf(card).name}」的晋升目标等阶未解锁（卡包等级门禁），暂不可升级`
+    : `「${defOf(card).name}」已是链尾，无可升级目标`;
+}
+
+// 老虎机/事件结果的中文呈现（内部 id → 名称）
+function slotResultText(r) {
+  switch (r.type) {
+    case 'money': return `金币 +${r.money}`;
+    case 'fruit': return `瑞米的水果 +1`;
+    case 'training': return `训练次数 +1（等效一次训练）`;
+    case 'card': return `获得卡牌：${getSkillDefinition(r.defId)?.name ?? r.defId}（已入构筑）`;
+    case 'relic': return `获得遗物：${getRelicDefinition(r.relicId)?.name ?? r.relicId}`;
+    default: return `空奖（nothing）`;
+  }
+}
+function eventResultText(r) {
+  if (r.eventId === 'moneyBag') return `「钱袋」金币 +${r.money}`;
+  if (r.eventId === 'spring') return `「治愈泉」恢复 ${r.heal} 生命`;
+  return JSON.stringify(r);
+}
+
 function exec(S, raw) {
   const t = raw.trim().split(/\s+/);
   const [cmd, a, b] = t;
@@ -152,10 +183,11 @@ function exec(S, raw) {
       if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#...>）');
       const hand = battle.battleState.zones.hand;
       const skill = hand[idxOk(num(a), hand.length, '手牌')];
+      const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
       const target = b != null
         ? battle.battleState.enemies[idxOk(num(b), battle.battleState.enemies.length, '敌人')] : null;
       if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) throw new Error('无法打出（费用/条件不满足）');
-      S.lastOutcome = `打出 ${defOf(skill).name}`;
+      S.lastOutcome = `打出 ${name}`;
       if (isBattleFinished(battle)) settleBattle(S);
       return;
     }
@@ -244,9 +276,12 @@ function exec(S, raw) {
         if (a === 'remi') { campRecoverRemi(run); S.roomDone = true; S.lastOutcome = '找回瑞米'; return; }
         if (a === 'upgrade') {
           const card = run.player.deck[idxOk(num(b), run.player.deck.length, '构筑卡')];
+          const gateErr = upgradeGateError(run, card);
+          if (gateErr) throw new Error(gateErr);
+          const before = defOf(card).name;
           campUpgrade(run, card.uniqueID);
           S.roomDone = true;
-          S.lastOutcome = `营地升级：${defOf(card).name} → ${getSkillDefinition(defOf(card).promotesTo ?? '').name ?? '?'}`;
+          S.lastOutcome = `营地升级：${before} → ${defOf(card).name}`;
           return;
         }
         throw new Error('营地动作：act rest | act remi | act upgrade <构筑#>');
@@ -254,8 +289,11 @@ function exec(S, raw) {
       if (room === 'training') {
         if (a === 'up') {
           const card = run.player.deck[idxOk(num(b), run.player.deck.length, '构筑卡')];
+          const gateErr = upgradeGateError(run, card);
+          if (gateErr) throw new Error(gateErr);
+          const before = defOf(card).name;
           trainUpgrade(run, card.uniqueID);
-          S.lastOutcome = `训练升级：${defOf(card).name}（接下来强制三选一抓牌）`;
+          S.lastOutcome = `训练升级：${before} → ${defOf(card).name}（接下来强制三选一抓牌）`;
           return;
         }
         if (a === 'draw') { trainDrawChoices(run); S.lastOutcome = '训练抓牌候选已生成'; return; }
@@ -274,13 +312,18 @@ function exec(S, raw) {
       if (room === 'slot') {
         if (a === 'spin') {
           const r = spinSlot(run);
-          S.lastOutcome = `老虎机(${SLOT_PLACEHOLDER.spinCost}金币)：${JSON.stringify(r)}`;
+          S.lastOutcome = `老虎机(-${SLOT_PLACEHOLDER.spinCost}金币)：${slotResultText(r)}`;
           return;
         }
         throw new Error('老虎机动作：act spin（离开用 next）');
       }
       if (room === 'event') {
-        if (a === 'play') { const r = playEvent(run); S.roomDone = true; S.lastOutcome = `事件：${JSON.stringify(r)}`; return; }
+        if (a === 'play') {
+          const r = playEvent(run);
+          S.roomDone = true;
+          S.lastOutcome = `事件：${eventResultText(r)}`;
+          return;
+        }
         throw new Error('事件动作：act play');
       }
       throw new Error(`未知房间类型：${room}`);
@@ -437,7 +480,10 @@ function render(S) {
       L.push(`→ ability <#|skip>`);
     }
   } else if (stage === 'prep') {
-    L.push(`下一层遭遇: ${run.encounter.map(e => e.defId).join(' + ')}${run.encounter.length > 1 ? '' : ''}`);
+    L.push(`下一层遭遇: ${run.encounter.map(e => {
+      const def = getEnemyDefinition(e.defId);
+      return `${def?.name ?? e.defId}(${e.maxHp}血/${e.attack}攻)`;
+    }).join(' + ')}`);
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {
     L.push(`本局结束：${run.result === 'victory' ? '登顶成功' : '战败'}。感谢游玩！`);
@@ -462,8 +508,13 @@ function renderDeck(S) {
   const L = [`构筑牌组（${S.run.player.deck.length} 张，升级用编号）:`];
   S.run.player.deck.forEach((rt, i) => {
     const def = defOf(rt);
-    const promo = Array.isArray(def.promotesTo) ? def.promotesTo[0] : def.promotesTo;
-    L.push(`  [${i + 1}] ${def.name} ${def.tier}阶${promo ? ` →${getSkillDefinition(promo)?.name ?? promo}` : ''}`);
+    const targets = gatedPromotionTargets(S.run, def);
+    const next = targets[0];
+    const promo = next
+      ? ` →${getSkillDefinition(next).name}`
+      : (Array.isArray(def.promotesTo) ? def.promotesTo[0] : def.promotesTo)
+        ? ' →（等阶未解锁）' : '';
+    L.push(`  [${i + 1}] ${def.name} ${def.tier}阶${promo}`);
   });
   return L.join('\n');
 }
@@ -476,6 +527,20 @@ function renderTerms() {
     L.push(`  ${def.name}（${def.type === 'buff' ? '增益' : '减益'}） — ${def.description}`);
   }
   return L.join('\n');
+}
+
+// ---------- 调试：PLAYTRACE=<defId> 重放时逐动作打印该卡去向（排查报告用） ----------
+const TRACE = process.env.PLAYTRACE ?? null;
+function traceLine(S, action) {
+  const bs = S.battle?.battleState;
+  const where = [];
+  if (bs) {
+    for (const z of ['hand', 'deck', 'burnt', 'pending']) {
+      const n = bs.zones[z].filter(c => c.defId === TRACE).length;
+      if (n) where.push(`${z}×${n}${z === 'hand' && bs.zones.hand.some(c => c.defId === TRACE && c.isActivated) ? '★' : ''}`);
+    }
+  }
+  console.error(`[trace] ${action} | 层${S.run.floor} ${stageCn(S.run.gameStage)} 回合${bs?.turn.count ?? '-'} | ${where.join(' ') || '场上无'} | 构筑×${S.run.player.deck.filter(c => c.defId === TRACE).length}`);
 }
 
 // ---------- 入口 ----------
@@ -495,18 +560,19 @@ if (argv[0] === 'new') {
 if (!fs.existsSync(file)) { console.error(`会话不存在：${file}（先 new）`); process.exit(1); }
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 const action = argv.join(' ').trim();
+const readOnly = !action || action === 'state' || action === 'help' || action === 'terms';
 
 let S;
 try {
   S = freshState(data.seed);
-  for (const a of data.actions) exec(S, a);
-  if (action && action !== 'state' && action !== 'help') exec(S, action);
+  for (const a of data.actions) { exec(S, a); if (TRACE) traceLine(S, a); }
+  if (!readOnly) exec(S, action);
 } catch (err) {
   console.error(`✗ ${err.message}`);
   console.error('（动作未入档，状态未变）');
   process.exit(1);
 }
-if (action && action !== 'state' && action !== 'help') {
+if (!readOnly) {
   data.actions.push(action);
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }

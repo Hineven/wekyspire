@@ -28,7 +28,8 @@ export { enemyTarget, resolvedDamageText };
 
 // 体修/火灵脉攻击卡统一算式：基数 + 攻击面板 + power（battle.md F1 / U1 读轨口径）
 export function attackAmount(sctx, base) {
-  return base + sctx.player.getStat('attack') + sctx.self.power;
+  // 负面板（虚弱叠高）可把原始和压到负——地板 0（execute 同款口径，防预览露出 -N）
+  return Math.max(0, base + sctx.player.getStat('attack') + sctx.self.power);
 }
 
 // 随机存活敌人（走种子 rng，可复现）；无存活敌人返回 null

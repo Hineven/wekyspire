@@ -28,10 +28,12 @@ registerAlly({
     }
   },
   getIntention: (_unit, battleState) => {
-    const target = remiTarget(battleState);
-    const note = battleState.lastPlayerTarget
-      ? `目标：你最后攻击的敌人（${target?.name ?? '已倒，回退最前者'}）`
-      : '目标：最靠前的存活敌人';
+    const last = battleState.enemies.find(
+      e => e.uniqueID === battleState.lastPlayerTarget && !e.isDead());
+    const target = last ?? firstAliveEnemy(battleState);
+    const note = last
+      ? `目标：你最后攻击的敌人（${last.name}）`
+      : '目标：最靠前的存活敌人'; // 未攻击过 / 最后目标已倒：回退口径如实呈现
     return { kinds: ['attack'], hits: 1, damage: REMI_DAMAGE, note };
   },
 });
