@@ -1,4 +1,4 @@
-// CardGalleryObject：区域查看器（牌库/坟墓等卡列表的全屏画廊）。
+// CardGalleryObject：区域查看器（牌库卡列表的全屏画廊）。
 // 「查看 = 战斗同一套卡牌栈」：渲染复用 CardObject（同烘焙管线同卡面），
 // 交互复用 Picker——卡注册为 kind:'card' 并携带 cardObject 引用，
 // 富文本 token 热区 → tooltip:*、整卡 → CARD_HOVER/LEAVE，与手牌完全同协议。

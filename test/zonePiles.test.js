@@ -9,8 +9,8 @@ import { createBridge, EventNames } from '../src/bridge/index.js';
 import { StageManager } from '../src/stage/StageManager.js';
 import { BattleStage, CARD_HEIGHT } from '../src/stage/stages/BattleStage.js';
 
-// 区域图标与卡流动动画：牌库/坟墓图标计数、点击查看器、
-// 生成（牌库处出现）与离场（飞向坟墓图标后销毁）的状态差分驱动模型。
+// 区域图标与卡流动动画：牌库图标计数、点击查看器、
+// 生成（牌库处出现）与离场（非焚毁飞回牌库图标停车；焚毁原地燃尽）的状态差分驱动模型。
 
 // 记录型手动 tween：先记录目标，放行时才应用数值并回调（模拟"动画播完到位"）
 function manualTween() {
@@ -69,12 +69,13 @@ function click(stage, worldPos) {
 }
 
 describe('区域图标与卡流动动画', () => {
-  it('牌库/坟墓图标计数与投影一致', () => {
+  it('牌库图标计数与投影一致（无弃牌堆）', () => {
     const { bridge, stage } = make();
     bridge.start();
     const proj = bridge.getProjection();
     expect(stage._piles.deck.count).toBe(proj.counts.deck);
-    expect(stage._piles.discard.count).toBe(0);
+    expect(stage._piles.discard).toBeUndefined(); // 弃牌堆已删除：FIFO 单循环区
+    expect(Object.keys(proj.counts).sort()).toEqual(['burnt', 'deck']);
   });
 
   it('抽牌生成模型：新卡在牌库图标处出现，经跟踪飞入手牌', () => {
@@ -93,27 +94,28 @@ describe('区域图标与卡流动动画', () => {
     expect(Math.max(...xs)).toBeGreaterThan(0);
   });
 
-  it('离场模型：打出的卡等自己的离场节拍才飞向坟墓，sync 后坟堆计数才+1', () => {
+  it('离场模型：打出的卡等自己的离场节拍才飞向牌库，sync 后牌库计数才+1', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
+    const deckBefore = stage._piles.deck.count; // 差值断言：deck 计数含牌库原有卡
     const first = bridge.getProjection().hand[0];
     bridge.intents.playCard(first.uniqueID);
 
-    // 显示状态未推进（sync 排在节拍链之后）：卡仍在手牌，未起飞，坟堆数字未提前+1
+    // 显示状态未推进（sync 排在节拍链之后）：卡仍在手牌，未起飞，牌库数字未提前+1
     expect(stage.model.getZone(first.uniqueID)).toBe('hand');
-    expect(stage._piles.discard.count).toBe(0);
+    expect(stage._piles.deck.count).toBe(deckBefore);
     expect(stage._views.get(first.uniqueID).visible).toBe(true); // 仍在桌上
 
     tween.completeAll(); // 发动展示 → 伤害 → 离场弧线飞行（淡出）→ sync 应用
     const view = stage._views.get(first.uniqueID);
-    // 停车入坟：弧线落位（onComplete 硬化终态）→ 隐形停车，不透明度复位
+    // 停车回库：弧线落位牌库图标（onComplete 硬化终态）→ 隐形停车，不透明度复位
     expect(view.position.x).toBe(80);
-    expect(view.position.y).toBe(-38);
+    expect(view.position.y).toBe(-55);
     expect(view.visible).toBe(false);
     expect(view.faceMesh.material.opacity).toBe(1);
-    expect(stage.model.getZone(first.uniqueID)).toBe('discard');
-    expect(stage._piles.discard.count).toBe(1); // 飞进坟堆后数字才+1
+    expect(stage.model.getZone(first.uniqueID)).toBe('deck');
+    expect(stage._piles.deck.count).toBe(deckBefore + 1); // 飞进牌库后数字才+1
   });
 
   it('点牌库图标开查看器：卡全部在取景带内，点卡不关闭、点空白关闭且 pickable 清空', () => {

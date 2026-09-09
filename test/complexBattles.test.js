@@ -209,7 +209,8 @@ describe('复杂战斗：结算期输入（完美花刀）', () => {
 
     const target = d.state.zones.hand.find(s => s.defId === 'punch');
     d.respond([target.uniqueID]);
-    expect(zoneOf(d.state, target.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, target.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO）
+    expect(d.state.zones.deck.at(-1).defId).toBe('perfectCut'); // 被弃牌先落位，完美花刀收尾居末位
     expect(d.pendingInput).toBeNull();
     expect(d.isWaiting()).toBe(true);                // 回到回合级等待
   });
@@ -224,9 +225,10 @@ describe('复杂战斗：队友死亡', () => {
     const hunter = d.state.enemies[0];
     const remi = d.state.allies[0];
     d.start();
-    expect(hunter.hp).toBe(48); // 瑞米先动：50-2
+    expect(hunter.hp).toBe(50); // 盟友在玩家回合结束后行动（P7）：起手瑞米未动
 
-    d.endTurn(); // 猎人打瑞米 8
+    d.endTurn(); // 玩家回合结束 → 瑞米行动（50→48）；敌方回合猎人打瑞米 8
+    expect(hunter.hp).toBe(48);
     expect(remi.hp).toBe(7);
 
     d.endTurn(); // 瑞米再动（48→46），猎人击杀瑞米

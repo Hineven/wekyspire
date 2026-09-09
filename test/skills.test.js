@@ -135,7 +135,7 @@ describe('canUseSkill：可用性检查', () => {
 });
 
 describe('UseSkillInstruction：完整流程', () => {
-  it('资源消耗 → 激活 → 弃牌，history 与 presenter 正确', () => {
+  it('资源消耗 → 激活 → 收尾落牌库底，history 与 presenter 正确', () => {
     const { ctx, enemy } = setup();
     const p = putInHand(ctx, 'punch');
     ctx.kernel.run(new UseSkillInstruction({ skill: p }), ctx);
@@ -143,7 +143,8 @@ describe('UseSkillInstruction：完整流程', () => {
     expect(enemy.hp).toBe(14);
     expect(ctx.player.actionPoints).toBe(2);
     expect(ctx.battleState.history.turn.played).toBe(1);
-    expect(zoneOf(ctx.battleState, p.uniqueID)).toBe('discard');
+    expect(zoneOf(ctx.battleState, p.uniqueID)).toBe('deck'); // 非消耗卡收尾落牌库底（FIFO 数组尾）
+    expect(ctx.battleState.zones.deck.at(-1).uniqueID).toBe(p.uniqueID);
     expect(ctx.presenter.calls.some(c => c.method === 'skillUsed')).toBe(true);
   });
 
@@ -212,7 +213,8 @@ describe('咏唱卡生命周期（双态开关）', () => {
 
     ctx.kernel.run(new DiscardCardInstruction({ uniqueID: c.uniqueID }), ctx);
     expect(c.isActivated).toBe(false);
-    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('discard');
+    expect(zoneOf(ctx.battleState, c.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO 数组尾）
+    expect(ctx.battleState.zones.deck.at(-1).uniqueID).toBe(c.uniqueID);
     expect(chantFlags.disabledReason).toBe('leave-hand');
     expect(ctx.presenter.calls.some(x => x.method === 'chantToggled' && x.args[0].on === false)).toBe(true);
   });

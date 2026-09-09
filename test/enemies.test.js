@@ -198,20 +198,22 @@ describe('floorEnemyGenerator', () => {
     expect(bandOfFloor(44)).toBe(3);
   });
 
-  it('编成规模：教学层恒 1，第 1 章即常出双敌，后期可 2-3', () => {
+  it('编成规模：第 1 层恒 1；第 2 场起恒 ≥2（2026-09 定），后期可 2-3', () => {
     for (let i = 0; i < 10; i++) {
       expect(generateEncounter(runAt(1, 300 + i))).toHaveLength(1);
     }
-    let earlyMulti = false;
-    for (let i = 0; i < 40; i++) {
-      if (generateEncounter(runAt(6, 400 + i)).length >= 2) earlyMulti = true;
+    // 第 2 场起（floor ≥ 2）任何种子都不得单敌
+    for (let floor = 2; floor <= 10; floor++) {
+      for (let i = 0; i < 8; i++) {
+        expect(generateEncounter(runAt(floor, 400 + i)).length).toBeGreaterThanOrEqual(2);
+      }
     }
-    expect(earlyMulti).toBe(true);
     let three = false;
     for (let i = 0; i < 40; i++) {
       const enc = generateEncounter(runAt(30, 500 + i));
       if (enc.length === 3) three = true;
       expect(enc.length).toBeLessThanOrEqual(3);
+      expect(enc.length).toBeGreaterThanOrEqual(2);
     }
     expect(three).toBe(true);
   });

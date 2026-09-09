@@ -20,16 +20,16 @@ describe('tooltipModel：内容契约', () => {
     const m = tooltipModel('skill', { name: '收刃', powerDelta: 2 });
     expect(m.title).toBe('收刃');
     expect(m.delta).toBe(2);
-    expect(m.body).toContain('AP2');
+    expect(m.body).toContain('AP1');
     expect(tooltipModel('skill', { name: '不存在' }).title).toBe('[skill] 不存在');
   });
 
   it('named：经术语表反查（参数插值），未注册回落原文标题', () => {
     expect(tooltipModel('named', { name: '瑞米' })).toEqual({ title: '瑞米', body: '' });
     expect(tooltipModel('named', { name: '斩' }))
-      .toEqual({ title: '斩', body: '此卡打出后进阶，以进入牌库代替焚毁' });
+      .toEqual({ title: '斩', body: '此卡无法被焚毁（改为回牌库，冷却1）；打出后进阶；只在牌库中冷却充能' });
     expect(tooltipModel('named', { name: '衰败2' }))
-      .toEqual({ title: '衰败2', body: '回合开始时，若在手牌中，反向冷却2' });
+      .toEqual({ title: '衰败2', body: '在手牌中持有且未完全冷却时，回合结束时反向冷却2' });
   });
 
   it('intention：标题带单位名 + 释义短句（与意图条图标同语言）', () => {

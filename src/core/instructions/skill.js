@@ -20,8 +20,8 @@ import { ConsumeManaInstruction, ConsumeActionPointsInstruction } from './resour
 //            激活后加权手牌数 ≤ 手牌上限）。canUse 已挡常规路径，此处为嵌套强发兜底——
 //            非法发动无效果（回手不点亮）。
 //   stage 3: 收尾 zone 迁移——咏唱发动（合法）回手落原位 + 点亮激活 + 注册订阅；
-//            咏唱解除按卡牌特性离场（消耗→焚毁，否则→牌库）；非法强发回手不点亮；
-//            消耗→burnt / 回库→deck / 否则→discard + 离场播报（cardBurnt/cardMoved）
+//            咏唱解除按卡牌特性离场（消耗→焚毁，否则→牌库底）；非法强发回手不点亮；
+//            消耗→burnt / 其余→deck 底（FIFO：打出即回库，无弃牌堆）+ 离场播报（cardBurnt/cardMoved）
 //            ——离场动画因此成为 sequencer 节拍，串行队列天然保证"发动 → 效果 → 离场"的次序。
 //            落位容差：卡已不在 pending = 效果逻辑已在结算中自行安置（如「回到牌库顶」
 //            类自改去向），收尾不再搬动、不播离场——安置权归效果逻辑。
@@ -75,40 +75,27 @@ export class UseSkillInstruction extends BattleInstruction {
         if (zoneOf(ctx.battleState, this.skill.uniqueID) !== 'pending') return true; // 已被效果逻辑自行安置
 
         const def = sctx.def;
-        if (def.cardMode === 'chant') {
-          if (this._chantOff) {
-            // 解除并离场：按卡牌特性（消耗→焚毁，否则→牌库——压力随离手释放）
-            if (def.keywords?.includes('exhaust')) {
-              moveCard(ctx.battleState, this.skill.uniqueID, 'burnt');
-              ctx.presenter?.cardBurnt?.({ card: this.skill });
-            } else {
-              moveCard(ctx.battleState, this.skill.uniqueID, 'deck');
-              ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'deck' });
+        if (def.cardMode === 'chant' && !this._chantOff) {
+          // 咏唱发动：回手（落回出牌时点手位，扇形不跳位）；合法发动点亮激活 + 注册咏唱订阅
+          // （owner = 卡牌，熄灭时按 owner 注销）；非法强发无效果（回手不点亮）
+          moveCard(ctx.battleState, this.skill.uniqueID, 'hand',
+            { index: this._handIndexAtPlay ?? null });
+          if (this._chantLegal) {
+            this.skill.isActivated = true;
+            def.activated?.onEnable?.(sctx);
+            for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
+              ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
             }
-          } else {
-            // 回手（落回出牌时点手位，扇形不跳位）；合法发动点亮激活 + 注册咏唱订阅
-            // （owner = 卡牌，熄灭时按 owner 注销）；非法强发无效果（回手不点亮）
-            moveCard(ctx.battleState, this.skill.uniqueID, 'hand',
-              { index: this._handIndexAtPlay ?? null });
-            if (this._chantLegal) {
-              this.skill.isActivated = true;
-              def.activated?.onEnable?.(sctx);
-              for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
-                ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
-              }
-              ctx.presenter?.chantToggled?.({ skill: this.skill, on: true, reason: 'played' });
-            }
+            ctx.presenter?.chantToggled?.({ skill: this.skill, on: true, reason: 'played' });
           }
         } else if (def.keywords?.includes('exhaust')) {
+          // 消耗卡（含咏唱解除）：→ 焚毁区
           moveCard(ctx.battleState, this.skill.uniqueID, 'burnt');
           ctx.presenter?.cardBurnt?.({ card: this.skill });
-        } else if (def.returnToDeck) {
-          // 斩（named 术语）：打出后回牌库底部（代替弃牌/焚毁）——回库期间冷却充能
+        } else {
+          // FIFO 循环：非消耗卡打出/解除咏唱后一律回牌库底（无弃牌堆，压力随离手释放）
           moveCard(ctx.battleState, this.skill.uniqueID, 'deck');
           ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'deck' });
-        } else {
-          moveCard(ctx.battleState, this.skill.uniqueID, 'discard');
-          ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'discard' });
         }
         return true;
       }
@@ -130,8 +117,13 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
       const free = freeChantToggle(def, this.skill);
-      const mana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
-      const ap = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      const rawMana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
+      const rawAp = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      // 【X 费】cost 为 'X' = 打出时点的全部现有资源（NAMED「消耗为X」）。实付量记在
+      // runtime.xCost 上供卡牌效果读取——支付先于 use()，效果读不到余额。
+      const mana = rawMana === 'X' ? ctx.player.mana : rawMana;
+      const ap = rawAp === 'X' ? ctx.player.actionPoints : rawAp;
+      if (rawMana === 'X' || rawAp === 'X') this.skill.xCost = { mana, actionPoint: ap };
       if (mana > 0) ctx.kernel.submitInstruction(new ConsumeManaInstruction({ amount: mana }), this);
       if (ap > 0) ctx.kernel.submitInstruction(new ConsumeActionPointsInstruction({ amount: ap }), this);
       return false;

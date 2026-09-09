@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册全部最小内容
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import {
-  REWARDS_PLACEHOLDER, spawnableCardPool, rollSkillChoices, maxRewardTier,
-  spawnRewards, chooseSkillReward, isRewardsClaimed,
+  REWARDS_PLACEHOLDER, spawnableCardPool, packCardPool, availablePacks,
+  rollSkillChoices, maxRewardTier, spawnRewards, chooseSkillReward, isRewardsClaimed,
 } from '../src/core/run/rewards.js';
 
 const TIER_RANK = { D: 0, C: 1, B: 2, A: 3 };
@@ -19,29 +19,31 @@ describe('奖励卡池（RUN_DESIGN §2.1/§6.3 占位）', () => {
     }
   });
 
-  it('等阶门禁：未进阶只出 D/C；灵脉 1 解锁 B、2 解锁 A', () => {
+  it('等阶门禁：按该维度自己的等级出卡（0 级 D/C，1 级 B，2 级 A）', () => {
     const run = createRun({ seed: 1 });
-    const tiersOf = (r) => new Set(spawnableCardPool(r).map(d => d.tier));
-    const maxRankOf = (r) => Math.max(...[...tiersOf(r)].map(t => TIER_RANK[t]));
+    expect(maxRewardTier(run, 'body')).toBe('C');
+    expect(maxRewardTier(run, 'fire')).toBe('C');
+    expect(packCardPool(run, 'body').some(d => d.tier === 'B')).toBe(false);
+    expect(packCardPool(run, 'body').some(d => d.tier === 'A')).toBe(false);
 
-    expect(maxRewardTier(run)).toBe('C');
-    expect(tiersOf(run).has('B')).toBe(false);
-    expect(tiersOf(run).has('A')).toBe(false);
-    expect(maxRankOf(run)).toBe(TIER_RANK.C);
+    run.player.leino.fire = 1; // 火灵脉专精：只惠及火包
+    expect(maxRewardTier(run, 'fire')).toBe('B');
+    expect(maxRewardTier(run, 'body')).toBe('C');
+    expect(packCardPool(run, 'fire').some(d => d.tier === 'B')).toBe(true);
+    expect(packCardPool(run, 'body').some(d => d.tier === 'B')).toBe(false);
 
-    run.player.leino.fire = 1; // 首次进阶
-    expect(maxRewardTier(run)).toBe('B');
-    expect(tiersOf(run).has('B')).toBe(true);
-    expect(tiersOf(run).has('A')).toBe(false);
+    run.player.leino.fire = 2;
+    expect(maxRewardTier(run, 'fire')).toBe('A');
+    expect(packCardPool(run, 'fire').some(d => d.tier === 'A')).toBe(true);
 
-    run.player.leino.body += 1; // 第二次进阶
-    expect(maxRewardTier(run)).toBe('A');
-    expect(tiersOf(run).has('A')).toBe(true);
+    // 可开卡包：体修恒开；火灵脉需等级 ≥1；木/空无内容自动隐藏
+    expect(availablePacks(createRun({ seed: 7 })).map(p => p.id)).toEqual(['body']);
+    expect(availablePacks(run).map(p => p.id)).toEqual(['body', 'fire']);
 
-    // 抽取候选与门禁同源：未进阶 run 的 3 选 1 不含 B/A
+    // 抽取候选与门禁同源：未进阶 run 的包内 3 选 1 不含 B/A
     const fresh = createRun({ seed: 7 });
-    for (const id of rollSkillChoices(fresh)) {
-      const def = spawnableCardPool(fresh).find(d => d.id === id);
+    for (const id of rollSkillChoices(fresh, 'body')) {
+      const def = packCardPool(fresh, 'body').find(d => d.id === id);
       expect(TIER_RANK[def.tier]).toBeLessThanOrEqual(TIER_RANK.C);
     }
   });

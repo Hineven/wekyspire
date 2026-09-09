@@ -37,7 +37,9 @@ function effectModel({ effectId, name }) {
 function skillModel({ name, powerDelta }) {
   const def = allSkills().find(d => d.name === name);
   if (!def) return { title: `[skill] ${name ?? ''}`, body: '' };
-  const cost = def.cost ? `费${def.cost.mana} AP${def.cost.actionPoint}` : '';
+  const cost = def.cost
+    ? `费${def.cost.mana === 'X' ? 'X（全部魏启）' : def.cost.mana} AP${def.cost.actionPoint === 'X' ? 'X' : def.cost.actionPoint}`
+    : '';
   return { title: def.name, delta: powerDelta || null, body: cost, tint: '#8af' };
 }
 

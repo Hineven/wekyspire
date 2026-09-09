@@ -18,7 +18,7 @@ const enemyHp = (d) => d.state.enemies[0].hp;
 
 // 把指定 defId 的卡弄回手牌（从任意 zone；已在手则原样返回）
 function toHandKeep(d, defId) {
-  const card = [d.state.zones.deck, d.state.zones.discard, d.state.zones.burnt]
+  const card = [d.state.zones.deck, d.state.zones.burnt]
     .flat().find(c => c.defId === defId);
   if (card) moveCard(d.state, card.uniqueID, 'hand');
   return d.state.zones.hand.find(c => c.defId === defId);
@@ -28,12 +28,12 @@ const toHand = toHandKeep;
 // 清空手牌中除指定卡外的所有卡（构造「唯一手牌」）
 function keepOnly(d, defId) {
   for (const other of [...d.state.zones.hand.filter(c => c.defId !== defId)]) {
-    moveCard(d.state, other.uniqueID, 'discard');
+    moveCard(d.state, other.uniqueID, 'deck'); // 挪走置牌库底（弃牌堆已不存在，FIFO）
   }
 }
 
-describe('虚形拳系列：唯一手牌条件', () => {
-  it('豹形拳/龙形拳：唯一手牌时增伤并抽牌，非唯一只 7 伤', () => {
+describe('虚形拳系列：后手条件', () => {
+  it('豹形拳：后手时增伤，非后手只 7 伤', () => {
     const d = new BattleDriver({ deck: ['leopardFist', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     let hp0 = enemyHp(d);
@@ -46,22 +46,20 @@ describe('虚形拳系列：唯一手牌条件', () => {
     keepOnly(d, 'leopardFist');
     hp0 = enemyHp(d);
     d.play('leopardFist');
-    expect(hp0 - enemyHp(d)).toBe(20); // 7 + 13
-    expect(d.state.zones.hand).toHaveLength(1); // 离手后抽 1 回补
+    expect(hp0 - enemyHp(d)).toBe(22); // 7 + 15（后手）
   });
 
-  it('空形拳：仅作为唯一手牌时可打出（canUse 守卫），100 伤', () => {
+  it('空形拳：后手时 55 伤（无 canUse 门槛，非后手无效果）', () => {
     const d = new BattleDriver({ deck: ['emptyFist', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const fist = d.state.zones.hand.find(c => c.defId === 'emptyFist');
-    expect(canUseSkill(d.ctx, fist)).toBe(false); // 手中多牌：不可打出
+    expect(canUseSkill(d.ctx, fist)).toBe(true); // 非后手也可打出（但无效果）
 
     toHandKeep(d, 'emptyFist');
     keepOnly(d, 'emptyFist');
-    expect(canUseSkill(d.ctx, fist)).toBe(true);
     const hp0 = enemyHp(d);
     d.play('emptyFist');
-    expect(hp0 - enemyHp(d)).toBe(100);
+    expect(hp0 - enemyHp(d)).toBe(55);
   });
 });
 

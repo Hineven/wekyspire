@@ -154,17 +154,16 @@ describe('卡牌指令族', () => {
     expect(ctx.battleState.history.turn.drawn).toBe(2);
   });
 
-  it('牌库抽空时弃牌堆洗回（rng 可复现）', () => {
+  it('牌库抽空即抽牌落空（FIFO 无重洗）', () => {
     const { ctx, enemy } = setup();
     fillDeck(ctx, ['a']);
-    ctx.battleState.zones.discard = ['x', 'y', 'z'].map(id => createSkillRuntime(id));
     const r = settle(new DrawCardsInstruction({ count: 3 }), ctx);
-    expect(r.drawn).toHaveLength(3);
+    expect(r.drawn).toHaveLength(1); // 抽完牌库唯一一张即止
     expect(r.drawn[0].defId).toBe('a');
-    // 剩余两张来自洗回的弃牌堆：抽到的两张 + 牌库剩的一张 = {x,y,z}
-    const recycled = [...r.drawn.slice(1).map(c => c.defId), ...ctx.battleState.zones.deck.map(c => c.defId)];
-    expect(recycled.sort()).toEqual(['x', 'y', 'z']);
-    expect(zoneOf(ctx.battleState, r.drawn[2].uniqueID)).toBe('hand');
+    expect(ctx.battleState.zones.deck).toHaveLength(0);
+    // 空牌库再抽：完全落空，不判负
+    const r2 = settle(new DrawCardsInstruction({ count: 2 }), ctx);
+    expect(r2.drawn).toHaveLength(0);
   });
 
   it("from:'bottom' 从牌库末抽（回旋斩类）", () => {
@@ -185,7 +184,8 @@ describe('卡牌指令族', () => {
     expect(ctx.battleState.history.battle.burnt).toBe(1);
 
     settle(new DiscardCardInstruction({ uniqueID: b.uniqueID }), ctx);
-    expect(zoneOf(ctx.battleState, b.uniqueID)).toBe('discard');
+    expect(zoneOf(ctx.battleState, b.uniqueID)).toBe('deck'); // 弃牌 = 置回牌库底（FIFO）
+    expect(ctx.battleState.zones.deck.at(-1).uniqueID).toBe(b.uniqueID);
     expect(ctx.battleState.history.battle.discarded).toBe(1);
   });
 });

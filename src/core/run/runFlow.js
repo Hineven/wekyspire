@@ -15,8 +15,9 @@ export const FLOORS_PER_CHAPTER = 11;               // 10 普通层 + 1 Boss 层
 export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * 4; // 44 层 = 4 章
 
 export const isBossFloor = (floor) => floor % FLOORS_PER_CHAPTER === 0;
-// 训练房固定 4N-3 层（1/5/9…41）；Boss 层优先级更高（33 层碰撞占位处理，细则见 §9）
-export const isTrainingFloor = (floor) => !isBossFloor(floor) && floor % 4 === 1;
+// 训练房固定 4N-2 层（2/6/10…42）——首进阶落在第 2 层，玩家快速特化进入真正的初始卡组。
+// 优先级：Boss 层（22）无房间，Boss 战前一层（10）营地保底顶替训练房（细则见 §9）。
+export const isTrainingFloor = (floor) => !isBossFloor(floor) && floor % 4 === 2;
 // Boss 战前一层必出营地保底（§4.3）
 export const isPreBossFloor = (floor) => (floor + 1) % FLOORS_PER_CHAPTER === 0;
 

@@ -1,4 +1,4 @@
-// ZonePileObject：牌库/坟墓等区域图标（卡背样式 + 计数）。
+// ZonePileObject：牌库等区域图标（卡背样式 + 计数）。
 // 点击交互由 BattleStage 处理（kind:'pile' → 打开区域查看器），本类只管视觉与计数重烘。
 
 import * as THREE from 'three';
@@ -8,8 +8,8 @@ const ICON_LAYOUT = { width: 100, height: 120 }; // 10x12 世界单位 × 10px�
 export class ZonePileObject extends THREE.Group {
   /**
    * @param {object} options
-   *   zoneKey: 'deck'|'discard'|'burnt'
-   *   label: 显示名（牌库/坟墓/焚毁）
+   *   zoneKey: 'deck'|'burnt'
+   *   label: 显示名（牌库/焚毁）
    *   color: 边框/主题色
    *   bakeIcon: (label, count, color) => { texture, width, height }   缺省浏览器 canvas 实现
    */

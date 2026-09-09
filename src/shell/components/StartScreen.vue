@@ -12,6 +12,7 @@
           <h1 v-else key="story" class="title">魏启尖塔 <span class="subtitle">故事</span></h1>
         </Transition>
       </div>
+      <div class="dev-banner">开发中版本，内容随时变更</div>
       <div class="slot btn-slot">
         <Transition name="swing-fade" mode="out-in">
           <button v-if="!isStory" key="infinite" class="main-btn-rogue" @click="launch(null)">肉鸽模式</button>
@@ -186,6 +187,10 @@ onBeforeUnmount(() => {
   text-shadow: 0 2px 18px rgba(255, 180, 80, .35), 0 0 40px rgba(255, 140, 40, .2);
 }
 .subtitle { font-size: 24px; letter-spacing: 4px; color: #9ad0ff; vertical-align: super; }
+.dev-banner {
+  font-size: 22px; font-weight: bold; color: #ff3b30; letter-spacing: 4px;
+  text-shadow: 0 0 14px rgba(255, 59, 48, .5);
+}
 .main-btn-rogue, .main-btn-story, .continue-btn {
   font-family: inherit; font-size: 18px; color: #fff; cursor: pointer;
   padding: 10px 44px; border-radius: 10px;

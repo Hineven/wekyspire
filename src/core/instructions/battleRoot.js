@@ -75,13 +75,13 @@ export class PreBattleInstruction extends BattleInstruction {
 }
 
 // 战后清理：清扫结算区残留（终局 abort 杀死结算子树时，正在发动的卡会滞留 pending——
-// 费用已付视作已打出，裸 moveCard 落弃牌堆、不播报）→ 注销全部 battle 窗口订阅 → 播报结果。
+// 费用已付视作已打出，裸 moveCard 落牌库底、不播报）→ 注销全部 battle 窗口订阅 → 播报结果。
 // 终局时内核 abort 的是 TurnLoop（不是根），本指令因此能正常执行到。
 export class PostBattleInstruction extends BattleInstruction {
   execute(ctx) {
     const { battleState } = ctx;
     for (const rt of [...battleState.zones.pending]) {
-      moveCard(battleState, rt.uniqueID, 'discard');
+      moveCard(battleState, rt.uniqueID, 'deck');
     }
     battleState.result = ctx.kernel.verdict;
     ctx.kernel.clearWindow('battle');

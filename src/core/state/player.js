@@ -15,6 +15,9 @@ export default class Player extends Unit {
     this.deck = [];                 // run 级卡组：[skillRuntime]
     this.abilities = [];            // [abilityId]
     this.leino = {};                // 灵脉等级 { fire: 1, ... }
+    // 隐藏体修等级：不随灵脉加点增长，只在进阶事件「跳过」时 +1（故事模式暗线，
+    // 见 RUN_DESIGN；决定体修卡包的等阶门禁）。
+    this.bodyLevel = opts.bodyLevel ?? 0;
     // 手牌上限（加权口径：激活的咏唱卡按咏唱值 chantWeight 计多张——咏唱与手牌
     // 压力统一为同一资源）。旧档无此字段时读取侧 ?? 10 兜底。
     this.maxHandSize = opts.maxHandSize ?? 7;

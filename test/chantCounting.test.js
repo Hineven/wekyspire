@@ -69,13 +69,13 @@ describe('太极：每打 3 张牌抽 1 张', () => {
     expect(d.state.zones.hand).toHaveLength(3); // 太极驻手 + 2 拳
     expect(taiji.chantCount).toBe(2);
 
-    // 第 3 张触发：牌库空 → 洗回弃牌 → 抽 1
+    // 第 3 张触发：抽 1（FIFO：先打出的拳已回牌库底，从牌库头抽回）
     d.play('punch');
     expect(taiji.chantCount).toBe(3);
     expect(d.state.zones.hand).toHaveLength(3); // 3 - 1 + 1
 
     // 跨回合：计数不清零，第 6 张再次触发
-    d.endTurn(); // 敌方回合 → 回合 2 抽牌（牌库 2 张，抽 2 后弃牌堆空即止）
+    d.endTurn(); // 敌方回合 → 回合 2 抽牌（牌库 2 张，抽 2 后牌库空即止——无重洗）
     expect(d.state.zones.hand).toHaveLength(5); // 太极 + 2 拳 + 抽 2
     d.play('punch');
     d.play('punch');

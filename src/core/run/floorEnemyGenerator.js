@@ -3,7 +3,7 @@
 //   1. 分段敌人池（章内楼层带决定可用敌人——机制复杂度随层数递进解锁）；
 //   2. 强度缩放：HP 倍率与攻击面板加成随楼层抬升（全体敌人走「基数+attack」
 //      同源算式，这里只改面板，行为定义零感知）；
-//   3. 编成规模：仅开局教学层单挑，此后双敌为主、逐章引入三敌；
+//   3. 编成规模：仅第 1 层单挑；**第 2 场起恒 ≥2 敌**（2026-09 定），三敌自第 2 章引入；
 //   4. Boss 层：单只 Boss（当前占位燃焰术士）吃独立强化倍率。
 // 确定性：编成与缩放全部由 deriveBattleSeed(run.seed, floor) 派生 rng 驱动，
 // 同 seed 同 floor 恒定（回放/测试可复现）。
@@ -36,15 +36,14 @@ const attackBonusOf = (floor) => Math.floor((floor - 1) / 8);
 const BOSS_HP_MULT = 2.2;
 const BOSS_ATTACK_BONUS = 3;
 
-// 编成规模：仅第 1 层保教学单挑，此后双敌为主、逐章引入三敌（早期单怪速杀
-// 压力不足，多敌战斗才是读意图/分摊伤害的主场——对齐玩家反馈 2026-08）
+// 编成规模：仅第 1 层保教学单挑；**第 2 场起恒 ≥2 敌**（2026-09 用户定：早期难度
+// 爬升太慢），三敌自第 2 章引入、第 4 章占比更高（多敌战斗是读意图/分摊伤害的主场）。
 function pickCount(rng, floor) {
   const roll = rng.next();
-  if (floor === 1) return 1;                                   // 开局教学：恒单敌
-  if (floor <= 3) return roll < 0.5 ? 2 : 1;                   // 第 1 章前段：双敌参半
-  if (floor <= 10) return roll < 0.8 ? 2 : 1;                  // 第 1 章主体：双敌为主
-  if (floor <= 24) return roll < 0.15 ? 3 : roll < 0.85 ? 2 : 1; // 第 2-3 章：偶发三敌
-  return roll < 0.3 ? 3 : roll < 0.8 ? 2 : 1;                  // 第 4 章：2-3 只为主
+  if (floor === 1) return 1;                    // 开局教学：恒单敌
+  if (floor <= 10) return 2;                    // 第 1 章（第 2 场起）：恒双敌
+  if (floor <= 24) return roll < 0.15 ? 3 : 2;  // 第 2-3 章：偶发三敌
+  return roll < 0.3 ? 3 : 2;                    // 第 4 章：三敌占比更高
 }
 
 export function bandOfFloor(floor) {

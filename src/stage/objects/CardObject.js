@@ -7,7 +7,7 @@
 // { texture, hitRegions, width, height } —— 纹理与 hit map 永远成对替换（§4.6 铁律）。
 // 状态视觉（禁用/高亮…）先以材质颜色占位，shader 版本后续替换 setVisualState 内部实现。
 // 焚毁离场走 startBurn/updateBurn：着色器自底向上吞蚀（噪声火线 + 辉光 + 炭化），
-// 由宿主逐帧驱动，燃尽回调 onBurnt（BattleStage 届时瞬移落位坟墓并销毁）。
+// 由宿主逐帧驱动，燃尽回调 onBurnt（BattleStage 届时瞬移落位牌库图标处并销毁）。
 
 import * as THREE from 'three';
 import { CardFxLayer } from './CardFxLayer.js';
@@ -130,7 +130,7 @@ export class CardObject extends THREE.Group {
   // 三层表达：① 着色器自底向上吞蚀（噪声咬边 + 火线辉光 + 上缘炭化预热）
   // ② 前沿余烬粒子（卡内局部 Points，随前沿上升喷发）③ 火起颤动（rotation.z 微振）。
   // startBurn 后由宿主逐帧调 updateBurn(dt)；燃尽（牌面全 discard，卡不可见）时
-  // 回调 onBurnt 一次——宿主届时瞬移落位坟墓并销毁（玩家已看不见卡，无需飞行动画）。
+  // 回调 onBurnt 一次——宿主届时瞬移落位牌库图标处并销毁（玩家已看不见卡，无需飞行动画）。
 
   /**
    * 点燃此卡。durationMs 为总燃烧时长；onBurnt 在燃尽瞬间回调一次。

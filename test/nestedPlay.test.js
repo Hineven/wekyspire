@@ -54,7 +54,7 @@ function bringToHand(d, defId) {
 }
 
 describe('万变拳：嵌套出牌 + 费用豁免', () => {
-  it('0 资源打出 1 蓝 1AP 的点火：资源不动，效果照常，双方计入出牌数', () => {
+  it('0 资源打出 1AP 的点火：资源不动，效果照常，双方计入出牌数', () => {
     const d = new BattleDriver({
       deck: ['wildFist', 'inflame', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
@@ -70,9 +70,11 @@ describe('万变拳：嵌套出牌 + 费用豁免', () => {
     expect(d.player.mana).toBe(2);        // 费用全免（新魏启规则：开局半满1+回合恢复1）
     expect(d.player.actionPoints).toBe(3);
     expect(slime.hp).toBe(20 - 2);        // 点火效果照常
-    expect(slime.getEffectStacks('burn')).toBe(2);
-    expect(zoneOf(d.state, inflame.uniqueID)).toBe('discard');   // 收尾迁移走标准管线
-    expect(zoneOf(d.state, d.state.zones.discard.at(-1).uniqueID)).toBe('discard');
+    expect(slime.getEffectStacks('burn')).toBe(4);
+    expect(zoneOf(d.state, inflame.uniqueID)).toBe('deck');      // 收尾迁移走标准管线（非消耗 → 牌库底）
+    // FIFO：内层点火先落牌库底，外层万变拳收尾居末位
+    expect(d.state.zones.deck.at(-2).uniqueID).toBe(inflame.uniqueID);
+    expect(d.state.zones.deck.at(-1).defId).toBe('wildFist');
     expect(d.state.history.turn.played).toBe(2); // 万变拳 + 点火都计数（拳师类机制兼容）
     expect(d.isWaiting()).toBe(true);
   });

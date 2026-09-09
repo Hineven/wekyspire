@@ -17,13 +17,14 @@ export function resolvedDamageText(sctx, base) {
   return `${damage}伤害`;
 }
 
-// ① 纯伤害攻击牌
+// ① 纯伤害攻击牌（真拳系列 D 位：拳→快拳→炮拳→真拳）
 registerSkill({
   id: 'punch', name: '拳', type: 'normal', tier: 'D', series: 'punch',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   targetMode: 'enemy', // 前端交互声明：需指定敌方目标（曲线箭头瞄准）
+  promotesTo: 'fastPunch',
   use(sctx) {
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player,
@@ -44,39 +45,41 @@ export function enemyTarget(sctx) {
     : firstAliveEnemy(sctx.battleState);
 }
 
-// ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列）。
-// 旧名"格挡"让位给 block 层数版（bodySkills.js），数值维持 5（旧占位，测试基线）。
+// ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 4 护盾）。
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'D', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
+  promotesTo: 'solidShield',
   use(sctx) {
-    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 5 }));
+    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 4 }));
     return true;
   },
-  describe: () => '5护盾',
+  describe: () => '4护盾',
 });
 
-// ③ 施加/触发效果牌：伤害 + 燃烧（验证 effect 订阅）
+// ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
 registerSkill({
-  id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'inflame',
-  cost: { mana: 1, actionPoint: 1 },
+  id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
+  cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   targetMode: 'enemy',
+  promotesTo: 'blaze',
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({
-      source: sctx.player, target, amount: 2,
+      source: sctx.player, target,
+      amount: 2 + sctx.player.getStat('attack') + sctx.self.power,
     }));
     sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target, effectId: 'burn', stacks: 2,
+      target, effectId: 'burn', stacks: 4,
     }));
     return true;
   },
-  describe: () => '2伤害，赋予/effect{燃烧}2',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 2)}，赋予/effect{燃烧}2`,
+  describe: () => '2伤害，赋予/effect{燃烧}4',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 2)}，赋予/effect{燃烧}4`,
 });
 
 // ④ 咏唱牌：每个玩家回合开始回复 1 点魏启（验证 activated 生命周期 + WAIT 回合）。
@@ -98,8 +101,6 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱3：回合开始时魏启+1；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：回合开始时魏启+1；再次打出（免费）解除并回牌库'
-    : '咏唱3：回合开始时魏启+1；再次打出（免费）解除并回牌库'),
+  describe: () => '回合开始时魏启+1',
+  battleDescribe: (sctx) => '回合开始时魏启+1',
 });

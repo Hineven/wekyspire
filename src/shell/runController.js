@@ -7,7 +7,7 @@ import {
   createRun, enterBattle, finishBattle, completeRewards, completeRoom,
   assembleBattle, isBossFloor, advanceFloor,
 } from '../core/run/runFlow.js';
-import { chooseSkillReward } from '../core/run/rewards.js';
+import { chooseSkillReward, chooseRewardPack as chooseRewardPackCore } from '../core/run/rewards.js';
 import { promotionTargets } from '../core/run/promotion.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
@@ -21,7 +21,10 @@ import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDra
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import { SLOT_PLACEHOLDER, spinSlot } from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
-import { chooseAscension, LEINO_DIMENSIONS } from '../core/run/ascension.js';
+import {
+  chooseAscension, LEINO_DIMENSIONS,
+  chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
+} from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
 import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
@@ -63,6 +66,7 @@ function restoreFromSave(run, save) {
   p.leino = { ...sp.leino };
   p.trainingCount = sp.trainingCount;
   p.ascensionCount = sp.ascensionCount;
+  p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
   p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
@@ -81,12 +85,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const isStory = save?.storyMode ?? storyMode; // 读档优先用存档自身的模式
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
-    player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3 }),
+    player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3 }),
   }));
   if (save) restoreFromSave(run, save);
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
-    run.player.abilities = ['battleFocus'];
   }
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 
@@ -236,6 +239,12 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
 
   // ---- reward ----
+  // 卡包制：先开包（chooseRewardPack）再领卡；只有体修包时 spawnRewards 已自动开包
+  function chooseRewardPack(packId) {
+    if (run.gameStage !== 'reward' || !run.rewards) return;
+    chooseRewardPackCore(run, packId);
+    notify();
+  }
   function claimReward(defId = null) {
     if (run.gameStage !== 'reward') return; // 防迟到重复点击
     chooseSkillReward(run, defId);
@@ -325,6 +334,24 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     chooseAscension(run, dimension);
     notify();
   }
+  // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
+  function skipAscension() {
+    if (run.gameStage !== 'ascension' || run.cardOffering) return;
+    chooseAscension(run, null);
+    notify();
+  }
+
+  // 种子包：九选三 + 一次刷新（首次 0→1 时挂起）
+  function chooseSeedCards(defIds) {
+    if (run.gameStage !== 'ascension' || !run.cardOffering) return;
+    chooseSeedCardsCore(run, defIds);
+    notify();
+  }
+  function rerollSeedOffering() {
+    if (run.gameStage !== 'ascension' || !run.cardOffering) return;
+    rerollSeedOfferingCore(run);
+    notify();
+  }
 
   // ---- prep ----
   function equip(relicId) { equipRelic(run, relicId); notify(); }
@@ -357,10 +384,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     campOptions: () => campOptions(run),
     getBattleBridge: () => battleBridge,
     getBattleStage: () => battleStage,
-    startBattle, claimReward,
+    startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
     campChoose, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
-    chooseAscensionDimension,
+    chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };
 }

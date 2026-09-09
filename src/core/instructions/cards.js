@@ -6,17 +6,26 @@ import {
 } from '../skills/helpers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
 
-// 卡牌指令族。约定：牌库顶 = 数组 index 0。一切 zone 迁移走 moveCard（数组唯一事实源）。
+// 卡牌指令族。约定：牌库 = FIFO 循环队列（顶 = index 0 = 下次抽的卡；离手卡回尾 =
+// 牌库底——无弃牌堆、无重洗）。一切 zone 迁移走 moveCard（数组唯一事实源）。
 // 咏唱离手不变量：激活的咏唱卡离开手牌（弃/焚/移/转化）必先熄灭（deactivateChant：
 // onDisable + 摘旗 + 注销订阅 + 播报）——「激活只在手牌中成立」由指令层统一保证。
+
+// battle.md §7.3（卡牌移动）：目标区为手牌而加权手牌已满时，改尝试进牌库；仍失败则焚毁。
+// 返回实际落区。手牌容量是唯一会让"移动失败"的约束（牌库/坟墓无上限）。
+function resolveTargetZone(ctx, toZone) {
+  if (toZone === 'hand' && effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) {
+    return 'deck';
+  }
+  return toZone;
+}
 
 // 抽牌：白名单 ['count']（PRE 可改抽牌数）。
 // from: 'top'（默认）| 'bottom'（回旋斩"牌库末抽牌"类机制）。
 // reason: 抽牌缘由标记（'turnStart' = 回合开始抽牌），供 filter 区分
 // "回合开始抽牌数修正"（龟守/神龟姿态）与技能抽牌。
 // 满手判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一，用户定）：
-// 手满后不再抽，未抽的卡留在牌库原位。
-// 牌库抽空时把弃牌堆洗回牌库（rng 可复现）。
+// 手满后不再抽。牌库抽空即落空（FIFO 无重洗——牌库是唯一循环区，无弃牌堆可回收）。
 export class DrawCardsInstruction extends BattleInstruction {
   constructor({ count = 1, from = 'top', reason = null }, opts = {}) {
     super(opts);
@@ -30,15 +39,11 @@ export class DrawCardsInstruction extends BattleInstruction {
   buildPayload() { this.payload.count = this.count; }
 
   execute(ctx) {
-    const { zones, rng } = ctx.battleState;
+    const { zones } = ctx.battleState;
     const drawn = [];
     for (let i = 0; i < this.payload.count; i++) {
       if (effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) break; // 加权满手：不抽
-      if (zones.deck.length === 0) {
-        if (zones.discard.length === 0) break;
-        zones.deck = rng.shuffle(zones.discard);
-        zones.discard = [];
-      }
+      if (zones.deck.length === 0) break; // 牌库空：落空（不判负、不重洗）
       const card = this.from === 'bottom' ? zones.deck.pop() : zones.deck.shift();
       zones.hand.push(card);
       drawn.push(card);
@@ -72,7 +77,8 @@ export class BurnCardInstruction extends BattleInstruction {
   }
 }
 
-// 弃牌：手牌 → 弃牌堆。index 语义在手牌有序数组上（刀背打击"右手边"等由调用方算好 uniqueID）。
+// 弃牌：手牌 → 牌库底（FIFO 循环——弃牌是动作不是区域，无弃牌堆）。
+// index 语义在手牌有序数组上（刀背打击"右手边"等由调用方算好 uniqueID）。
 // 结算时校验：只弃「手牌中的卡」——卡已被其他结算搬走（过期引用/同卡双弃）时静默落空，
 // 不计数不播报（与 target 结算时解析同哲学：过期引用无害）。
 export class DiscardCardInstruction extends BattleInstruction {
@@ -87,7 +93,7 @@ export class DiscardCardInstruction extends BattleInstruction {
       return true;
     }
     deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
-    const card = moveCard(ctx.battleState, this.uniqueID, 'discard');
+    const card = moveCard(ctx.battleState, this.uniqueID, 'deck'); // 落牌库底（数组尾）
     this.result = { card };
     ctx.battleState.history.turn.discarded += 1;
     ctx.battleState.history.battle.discarded += 1;
@@ -110,9 +116,10 @@ export class MoveCardInstruction extends BattleInstruction {
     if (zoneOf(ctx.battleState, this.uniqueID) === 'hand') {
       deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
     }
-    const card = moveCard(ctx.battleState, this.uniqueID, this.toZone, { index: this.index });
-    this.result = { card, toZone: this.toZone };
-    ctx.presenter?.cardMoved?.({ card, toZone: this.toZone });
+    const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    const card = moveCard(ctx.battleState, this.uniqueID, toZone, { index: toZone === this.toZone ? this.index : null });
+    this.result = { card, toZone };
+    ctx.presenter?.cardMoved?.({ card, toZone });
     return true;
   }
 }
@@ -130,14 +137,15 @@ export class AddCardInstruction extends BattleInstruction {
 
   execute(ctx) {
     const card = createSkillRuntime(this.defId, this.overrides);
-    const arr = ctx.battleState.zones[this.toZone];
+    const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    const arr = ctx.battleState.zones[toZone];
     let at = this.index;
     if (at === 'random') at = ctx.battleState.rng.int(0, arr.length);
     if (at === null) arr.push(card);
     else arr.splice(at, 0, card);
     enterBattle(ctx, card); // 新卡走"进入战斗"元语：充能初始化 + 常驻订阅注册
-    this.result = { card, index: at ?? arr.length - 1 };
-    ctx.presenter?.cardAdded?.({ card, toZone: this.toZone, index: this.result.index });
+    this.result = { card, index: at ?? arr.length - 1, toZone };
+    ctx.presenter?.cardAdded?.({ card, toZone, index: this.result.index });
     return true;
   }
 }
