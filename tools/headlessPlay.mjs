@@ -145,7 +145,7 @@ function battleLogText(S, tail = 10) {
       case 'shield': if ((p.gained ?? 0) > 0) lines.push(`${p.target?.name} 护盾+${p.gained}`); break;
       case 'effect': {
         const name = getEffectDefinition(p.effectId)?.name ?? p.effectId;
-        lines.push((p.stacks ?? 0) > 0 ? `${p.target?.name} ${name}${p.stacks}` : `${p.target?.name} ${name}消散`);
+        lines.push((p.stacks ?? 0) > 0 ? `${p.target?.name} 获得${name}${p.stacks}` : `${p.target?.name} ${name}消散`);
         break;
       }
       case 'unitDeath': lines.push(`${p.unit?.name} 被击败！`); break;
@@ -304,9 +304,11 @@ function exec(S, raw) {
     case 'pack': {
       if (stage !== 'reward') throw new Error('当前不在奖励阶段');
       const packs = run.rewards.packs;
-      const id = /^-?\d+$/.test(a ?? '')
-        ? packs[idxOk(num(a), packs.length, '卡包')]
-        : (packs.includes(a) ? a : (() => { throw new Error(`卡包不可选：${a}（${packs.join('/')}）`); })());
+      const PACK_ALIAS = { 体修: 'body', 火: 'fire', 火灵脉: 'fire', 通用: 'common' };
+      const key = PACK_ALIAS[a] ?? a;
+      const id = /^-?\d+$/.test(key ?? '')
+        ? packs[idxOk(num(key), packs.length, '卡包')]
+        : (packs.includes(key) ? key : (() => { throw new Error(`卡包不可选：${a}（${packs.join('/')}）`); })());
       chooseRewardPack(run, id);
       S.lastOutcome = `开包 ${PACKS[id]?.name ?? id}`;
       return;
@@ -650,7 +652,8 @@ try {
   if (!readOnly) exec(S, action);
 } catch (err) {
   console.error(`✗ ${err.message}`);
-  console.error('（动作未入档，状态未变）');
+  console.error('（动作未入档，状态未变）当前状态：');
+  try { console.log(render(S)); } catch { /* 状态本身异常时保持纯报错 */ }
   process.exit(1);
 }
 if (!readOnly) {
