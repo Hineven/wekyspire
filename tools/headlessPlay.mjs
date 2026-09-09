@@ -18,7 +18,7 @@ import '../src/core/content/index.js';
 import Player from '../src/core/state/player.js';
 import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../src/core/content/bodySkills.js';
-import { createNullPresenter } from '../src/core/presenter.js';
+import { createNullPresenter, createRecordingPresenter } from '../src/core/presenter.js';
 import { canUseSkill, makeSkillCtx, effectiveHandCount } from '../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { listNamedTerms } from '../src/core/skills/namedTerms.js';
@@ -72,7 +72,9 @@ const costText = (def) => {
   return parts.join(' ') || '0费';
 };
 const kwText = (def) => (def.keywords ?? [])
-  .filter(k => k !== 'blade').map(k => ({ exhaust: '消耗', transient: '短暂', innate: '固有' }[k] ?? k)).join(' ');
+  .filter(k => k !== 'blade').map(k => ({
+    exhaust: '消耗', transient: '短暂', innate: '固有', anchored: '锁定', slowStart: '缓启',
+  }[k] ?? k)).join(' ');
 const effectsText = (unit) => unit.effects?.length
   ? unit.effects.map(e => `${getEffectDefinition(e.effectId)?.name ?? e.effectId}${e.stacks}`).join(' ') : '';
 const intentText = (u) => {
@@ -87,7 +89,9 @@ const intentText = (u) => {
 };
 function cardLine(idx, rt, battleCtx) {
   const def = defOf(rt);
-  const bits = [`[${idx}] ${def.name} ${def.tier}阶 ${costText(def)}`];
+  // 咏唱卡前置「咏唱N·」标记（打出前可见——点燃/解除语义靠它）
+  const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
+  const bits = [`[${idx}] ${nameTag} ${def.tier}阶 ${costText(def)}`];
   const kw = kwText(def); if (kw) bits.push(kw);
   if (rt.isActivated) bits.push('★已激活咏唱');
   else if (rt.remainingUses <= 0) bits.push(`冷却中(剩${rt.currentCooldown}拍)`);
@@ -108,18 +112,64 @@ function freshState(seed) {
   const run = createRun({ seed, player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3 }) });
   run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
   run.player.abilities = [];
-  return { run, battle: null, lastOutcome: '' };
+  return { run, battle: null, lastOutcome: '', presenter: createRecordingPresenter() };
 }
 
 function ensureBattle(S) {
   if (S.run.gameStage === 'prep') enterBattle(S.run); // 免 fight：战斗动作直达
   if (S.run.gameStage !== 'battle') throw new Error(`当前不在战斗阶段（${stageCn(S.run.gameStage)}）`);
   if (!S.battle) {
-    S.battle = createRunBattle(S.run, { presenter: createNullPresenter() });
+    S.presenter.clear(); // 战斗日志按场清零
+    S.battle = createRunBattle(S.run, { presenter: S.presenter });
     startBattle(S.battle);
     if (isBattleFinished(S.battle)) settleBattle(S);
   }
   return S.battle;
+}
+
+// 战斗结算日志（recording presenter → 中文行；取尾部 N 条）
+function battleLogText(S, tail = 10) {
+  const lines = [];
+  for (const { method, args } of S.presenter?.calls ?? []) {
+    const p = args?.[0] ?? {};
+    switch (method) {
+      case 'damage':
+        lines.push(`${p.source?.name ?? '环境'} → ${p.target?.name}: ${p.dealt}伤`
+          + `${p.pierce ? '（穿透）' : ''}${p.shieldAbsorbed ? `（盾挡${p.shieldAbsorbed}）` : ''}`
+          + `${p.defenseBlocked ? `（防挡${p.defenseBlocked}）` : ''}`);
+        break;
+      case 'heal': lines.push(`${p.target?.name} 恢复 ${p.healed}`); break;
+      case 'shield': lines.push(`${p.target?.name} 护盾+${p.gained}`); break;
+      case 'effect': lines.push(`${p.target?.name} 获得${getEffectDefinition(p.effectId)?.name ?? p.effectId}${p.stacks}`); break;
+      case 'unitDeath': lines.push(`${p.unit?.name} 被击败！`); break;
+      case 'unitSpawned': lines.push(`${p.unit?.name} 现身！`); break;
+      case 'cardTransformed':
+        lines.push(`⚡卡牌变化: ${getSkillDefinition(p.fromDefId)?.name ?? p.fromDefId} → ${getSkillDefinition(p.toDefId)?.name ?? p.toDefId}`);
+        break;
+      case 'cardDiscarded': lines.push(`弃 ${p.card ? defOf(p.card).name : '?'}`); break;
+      case 'cardBurnt': lines.push(`焚毁 ${p.card ? defOf(p.card).name : '?'}`); break;
+      case 'cardAdded':
+        lines.push(`洗入 ${p.card ? defOf(p.card).name : '?'}（${p.toZone === 'hand' ? '入手' : '入库'}）`);
+        break;
+      case 'cardMoved':
+        lines.push(`${p.card ? defOf(p.card).name : '?'} → ${{ hand: '手牌', deck: '牌库', burnt: '焚毁区', pending: '结算区' }[p.toZone] ?? p.toZone}`);
+        break;
+      default: break; // 抽牌/展示/资源等由手牌与资源条直接可见，降噪省略
+    }
+  }
+  return lines.slice(-tail);
+}
+
+// 手牌寻址：编号（1起）或卡名/卡名前缀（唯一命中才生效）
+function resolveHandIdx(hand, arg, what) {
+  if (/^\d+$/.test(arg)) return idxOk(num(arg), hand.length, what);
+  const matches = hand.filter(c => {
+    const n = defOf(c).name;
+    return n === arg || n.startsWith(arg);
+  });
+  if (matches.length === 1) return hand.indexOf(matches[0]);
+  if (matches.length > 1) throw new Error(`「${arg}」匹配多张手牌（${matches.map(c => defOf(c).name).join(' / ')}），请用编号`);
+  throw new Error(`手牌中没有「${arg}」`);
 }
 
 function settleBattle(S) {
@@ -182,7 +232,7 @@ function exec(S, raw) {
       const battle = ensureBattle(S);
       if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#...>）');
       const hand = battle.battleState.zones.hand;
-      const skill = hand[idxOk(num(a), hand.length, '手牌')];
+      const skill = hand[resolveHandIdx(hand, String(a), '手牌')];
       const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
       const target = b != null
         ? battle.battleState.enemies[idxOk(num(b), battle.battleState.enemies.length, '敌人')] : null;
@@ -194,7 +244,7 @@ function exec(S, raw) {
     case 'swap': {
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
-      const skill = hand[idxOk(num(a), hand.length, '手牌')];
+      const skill = hand[resolveHandIdx(hand, String(a), '手牌')];
       if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
       S.lastOutcome = `换牌 ${defOf(skill).name}`;
       return;
@@ -407,7 +457,7 @@ function render(S) {
     L.push(`牌库 ${bs.zones.deck.length} | 焚毁 ${bs.zones.burnt.length} | 手牌 ${effectiveHandCount(bs)}/${p.maxHandSize}（加权）`);
     L.push(`手牌:`);
     bs.zones.hand.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, S.battle.ctx)));
-    L.push(`本回合已打 ${bs.history.turn.played} 已弃 ${bs.history.turn.discarded} 已抽 ${bs.history.turn.drawn}`);
+    L.push(`本回合累计: 打${bs.history.turn.played} 弃${bs.history.turn.discarded} 抽${bs.history.turn.drawn}`);
     const pi = bs.pendingInput?.request;
     if (pi) {
       L.push(`▶ 待输入: ${pi.prompt ?? pi.kind}${pi.count ? `（选${pi.count}张）` : ''}`);
@@ -418,7 +468,12 @@ function render(S) {
         }).join(' '));
       }
     }
-    L.push(`→ play <手牌#> [敌#] / swap <#>（费${swapCostOf(bs)}） / end / in <候选#...>`);
+    L.push(`→ play <手牌#或卡名> [敌#] / swap <#或卡名>（弃1抽1，费${swapCostOf(bs)}AP） / end / in <候选#...>`);
+    const log = battleLogText(S);
+    if (log.length) {
+      L.push(`最近结算:`);
+      for (const l of log) L.push(`  · ${l}`);
+    }
   } else if (stage === 'reward' && run.rewards) {
     const rw = run.rewards;
     L.push(`金币 +${rw.money}`);
@@ -439,19 +494,21 @@ function render(S) {
     if (S.roomDone) {
       L.push(`（房间动作已完成 → next 离开）`);
     } else if (room === 'camp') {
-      L.push(`营地。可用: ${campOptions(run).join(' ')}（act rest / act remi / act upgrade <构筑#>，之后 next）`);
+      const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
+      L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}（act rest | act remi | act upgrade <构筑#>，之后 next）`);
     } else if (room === 'training') {
-      L.push(`训练场（训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
+      L.push(`训练场（累计训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
       if (run.roomData?.drawChoices) {
         L.push(`抓牌候选:`);
         run.roomData.drawChoices.forEach((id, i) => {
           const def = getSkillDefinition(id);
-          L.push(`  [${i + 1}] ${def.name} ${def.tier}阶 ${costText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
+          L.push(`  [${i + 1}] ${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
         });
         L.push(`→ act take <#>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
       } else if (trainingMode(run) === 'upgrade') {
-        L.push(`可升级卡: ${upgradableCards(run).map(rt => defOf(rt).name).join(' ')}`);
-        L.push(`→ act up <构筑#>（deck 查构筑编号）/ act skip`);
+        const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
+        L.push(`可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
+        L.push(`→ act up <构筑#>（编号即 deck 视图行号）/ act skip`);
       } else {
         L.push(`→ act draw（看候选）/ act skip`);
       }
@@ -467,7 +524,7 @@ function render(S) {
       L.push(`种子九选三（选3张入组，刷新剩 ${off.rerollsLeft}）:`);
       off.cards.forEach((id, i) => {
         const def = getSkillDefinition(id);
-        L.push(`  [${i + 1}] ${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
+        L.push(`  [${i + 1}] ${def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·` : ''}${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
       });
       L.push(`→ seed <#,#,#> / reroll`);
     }
@@ -480,9 +537,9 @@ function render(S) {
       L.push(`→ ability <#|skip>`);
     }
   } else if (stage === 'prep') {
-    L.push(`下一层遭遇: ${run.encounter.map(e => {
+    L.push(`本层遭遇: ${run.encounter.map(e => {
       const def = getEnemyDefinition(e.defId);
-      return `${def?.name ?? e.defId}(${e.maxHp}血/${e.attack}攻)`;
+      return `${def?.name ?? e.defId}(${e.maxHp}血)`;
     }).join(' + ')}`);
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {
@@ -540,7 +597,10 @@ function traceLine(S, action) {
       if (n) where.push(`${z}×${n}${z === 'hand' && bs.zones.hand.some(c => c.defId === TRACE && c.isActivated) ? '★' : ''}`);
     }
   }
-  console.error(`[trace] ${action} | 层${S.run.floor} ${stageCn(S.run.gameStage)} 回合${bs?.turn.count ?? '-'} | ${where.join(' ') || '场上无'} | 构筑×${S.run.player.deck.filter(c => c.defId === TRACE).length}`);
+  const p = S.run.player;
+  console.error(`[trace] ${action} | 层${S.run.floor} ${stageCn(S.run.gameStage)} 回合${bs?.turn.count ?? '-'}`
+    + ` | HP${p.hp}/${p.maxHp} 盾${p.shield} 燃烧${p.getEffectStacks('burn')} | ${where.join(' ') || '场上无'}`
+    + ` | 构筑×${S.run.player.deck.filter(c => c.defId === TRACE).length}`);
 }
 
 // ---------- 入口 ----------

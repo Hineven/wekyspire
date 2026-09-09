@@ -701,13 +701,16 @@ registerSkill({
 });
 
 // 练刀（D，1AP，消耗）：选1张手中刀法牌令其伤害+4，丢弃之（deckCraft 锻刀原型同构；
-// power 漂移口径同培植系列）。
+// power 漂移口径同培植系列）。canUse 闸门：手中无刀法牌不可打出（试玩反馈——
+// 静默白烧 1AP 零反馈，比落空更糟）。
 registerSkill({
   id: 'practiceBlade', name: '练刀', type: 'normal', tier: 'D', series: 'blade',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  canUse: (sctx) => sctx.battleState.zones.hand.some(
+    c => c.uniqueID !== sctx.self.uniqueID && isBladeCard(c)),
   use(sctx, stage) {
     if (stage === 0) {
       const blades = sctx.battleState.zones.hand.filter(isBladeCard);   // 自身已离手
