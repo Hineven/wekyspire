@@ -91,12 +91,7 @@ function rerollSeed() {
           <span class="lv">{{ run.player.leino[dim.key] }}</span>
         </button>
       </div>
-      <button class="skip-ascend" @click="ctrl.skipAscension()">
-        <span class="skip-title">跳过进阶</span>
-        <span class="skip-desc">
-          不选灵脉，精进体修（隐藏等级 {{ run.player.bodyLevel ?? 0 }} → {{ (run.player.bodyLevel ?? 0) + 1 }}）
-        </span>
-      </button>
+      <button class="skip-ascend" @click="ctrl.skipAscension()">跳过</button>
       <p class="note">
         总进阶 {{ run.player.ascensionCount }}/{{ ASCENSION_PLACEHOLDER.maxAscensions }}
         ｜ 突破后全恢复且魏启上限 +{{ ASCENSION_PLACEHOLDER.manaGain }}
@@ -132,15 +127,12 @@ function rerollSeed() {
 .lv { color: var(--dim); font-size: 17px; font-weight: bold; }
 .note { font-size: 12px; color: #9aa3c0; }
 .skip-ascend {
-  display: flex; flex-direction: column; gap: 2px; align-items: center;
-  margin: 4px auto 10px; padding: 8px 22px; cursor: pointer;
+  display: block; margin: 4px auto 10px; padding: 7px 26px; cursor: pointer;
   background: linear-gradient(180deg, #2a2f42, #1e2233);
   border: 1px dashed #5a6485; border-radius: 10px; color: #b9c1da; font-size: 13px;
   transition: border-color .16s ease, color .16s ease;
 }
 .skip-ascend:hover { border-color: #8b97c0; color: #e6ebf7; }
-.skip-title { font-weight: bold; letter-spacing: .06em; }
-.skip-desc { font-size: 12px; color: #8f98b5; }
 
 /* ---- 种子包 ---- */
 .seed-grid {

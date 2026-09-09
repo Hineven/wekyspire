@@ -42,9 +42,9 @@ const SEED_EXCLUDED = new Set([
   'honeBlade', 'forgingBlade', 'edgeBreath', 'bloodEdge', 'unsheathe',
   'whetstone', 'honeEdgeMid', 'razorEdge', 'honeEdge', 'annihilatingEdge', 'practiceBlade',
   'bladeArt', 'bladeHeart',
-  'rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave',
   'barrier', 'fortress', 'bronzeCity', 'soulOfWar',
-  'perfectStrike', 'carefulStrike', 'winWithout', 'haveWithout',
+  'perfectStrike', 'carefulStrike',
+  'fastRain', 'fastWind', // 需大回合铺垫才生效，种子池里是废牌
 ]);
 
 export function totalLeino(run) {

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 import '../src/core/content/index.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { canUseSkill, makeSkillCtx } from '../src/core/skills/helpers.js';
@@ -10,7 +11,7 @@ import { moveCard, zoneOf } from '../src/core/state/battleState.js';
 import { createRunState } from '../src/core/state/runState.js';
 import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { promoteCard } from '../src/core/run/promotion.js';
-import { spawnableCardPool } from '../src/core/run/rewards.js';
+import { spawnableCardPool, packCardPool } from '../src/core/run/rewards.js';
 
 // 体修·拆组合（BODY_CULTIVATION_CARDS §3）：完美 / 命中 / 破 / 盾 / 姿态咏唱 /
 // 以无胜有·以有胜无 的后端结算验证。headless 驱动真实结算，不 mock Core。
@@ -80,18 +81,18 @@ describe('精准系列：【完美】位置门槛', () => {
     expect(canUseSkill(d.ctx, cardInHand(d, 'carefulStrike'))).toBe(true);
   });
 
-  it('精心二击（延伸卡）不带完美：左侧有不可打出卡也可打出', () => {
+  it('精心二击带完美（2026-09 设计稿）：左侧有不可打出卡时不可打出', () => {
     const d = new BattleDriver({
       deck: ['doubleStrike', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
     d.start();
     placeAt(d, 'doubleStrike', 2);
-    cardInHand(d, 'punch').remainingUses = 0;
-    expect(canUseSkill(d.ctx, cardInHand(d, 'doubleStrike'))).toBe(true);
+    cardInHand(d, 'punch').remainingUses = 0; // 左侧有不可打出卡
+    expect(canUseSkill(d.ctx, cardInHand(d, 'doubleStrike'))).toBe(false);
   });
 
-  it('精准一击 23 / 精心一击 15 / 精心二击 15×2（基础面板 0）', () => {
-    for (const [defId, times, base] of [['perfectStrike', 1, 23], ['carefulStrike', 1, 15], ['doubleStrike', 2, 15]]) {
+  it('精准一击 17 / 精心一击 12 / 精心二击 12×2（基础面板 0，2026-09 数值）', () => {
+    for (const [defId, times, base] of [['perfectStrike', 1, 17], ['carefulStrike', 1, 12], ['doubleStrike', 2, 12]]) {
       const d = new BattleDriver({
         deck: [defId, 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
       });
@@ -105,15 +106,15 @@ describe('精准系列：【完美】位置门槛', () => {
 });
 
 describe('精准系列：【命中】触发与未命中', () => {
-  it('折杨手命中：23 伤害并获得 3 层格挡', () => {
+  it('折杨手命中：20 伤害并获得 2 层格挡', () => {
     const d = new BattleDriver({
       deck: ['foldWillow', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
     d.start();
     const hp0 = enemyHp(d);
     d.play('foldWillow');
-    expect(hp0 - enemyHp(d)).toBe(23);
-    expect(d.player.getEffectStacks('block')).toBe(3);
+    expect(hp0 - enemyHp(d)).toBe(20);
+    expect(d.player.getEffectStacks('block')).toBe(2);
   });
 
   it('伤害被护盾完全吸收（零生命伤害）算未命中：不获得格挡', () => {
@@ -125,24 +126,24 @@ describe('精准系列：【命中】触发与未命中', () => {
     const hp0 = enemyHp(d);
     d.play('foldWillow');
     expect(hp0 - enemyHp(d)).toBe(0);            // 全部入护盾
-    expect(d.state.enemies[0].shield).toBe(77);  // 100 - 23
+    expect(d.state.enemies[0].shield).toBe(80);  // 100 - 20
     expect(d.player.getEffectStacks('block')).toBe(0);
   });
 
-  it('摘星手（S）命中给 7 层格挡（等阶数值）', () => {
+  it('摘星手（S）命中给 4 层格挡（等阶数值）', () => {
     const d = new BattleDriver({
       deck: ['pluckStar', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
     d.start();
     const hp0 = enemyHp(d);
     d.play('pluckStar');
-    expect(hp0 - enemyHp(d)).toBe(23);
-    expect(d.player.getEffectStacks('block')).toBe(7);
+    expect(hp0 - enemyHp(d)).toBe(20);
+    expect(d.player.getEffectStacks('block')).toBe(4);
   });
 });
 
 describe('破势系列：【破】逐层转化', () => {
-  it('破势：7 伤害 + 每失去一层格挡独立 11 伤害（3 层 → 共 40）', () => {
+  it('破势：7 伤害 + 每失去一层格挡独立 7 伤害（3 层 → 共 28）', () => {
     const d = new BattleDriver({
       deck: ['breakStance', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
@@ -150,12 +151,12 @@ describe('破势系列：【破】逐层转化', () => {
     gainBlock(d, 3);
     const hp0 = enemyHp(d);
     d.play('breakStance');
-    expect(hp0 - enemyHp(d)).toBe(7 + 3 * 11);
+    expect(hp0 - enemyHp(d)).toBe(7 + 3 * 7);
     expect(d.player.getEffectStacks('block')).toBe(0);
   });
 
-  it('解体 16/层（2 层 → 39）；贯心 24/层（2 层 → 55）', () => {
-    for (const [defId, per] of [['disassemble', 16], ['pierceHeart', 24]]) {
+  it('解体 11/层（2 层 → 29）；贯心 16/层（2 层 → 39）', () => {
+    for (const [defId, per] of [['disassemble', 11], ['pierceHeart', 16]]) {
       const d = new BattleDriver({
         deck: [defId, 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
       });
@@ -179,7 +180,7 @@ describe('破势系列：【破】逐层转化', () => {
     expect(d.player.getEffectStacks('block')).toBe(0);
   });
 
-  it('壁垒：每层 12 护盾（3 层 → 36），消耗焚毁', () => {
+  it('壁垒：10 基础护盾 + 每层 12（3 层 → 46），消耗焚毁', () => {
     const d = new BattleDriver({
       deck: ['barrier', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
@@ -187,24 +188,24 @@ describe('破势系列：【破】逐层转化', () => {
     gainBlock(d, 3);
     const card = cardInHand(d, 'barrier');
     d.play(card.uniqueID);
-    expect(d.player.shield).toBe(36);
+    expect(d.player.shield).toBe(10 + 3 * 12);
     expect(d.player.getEffectStacks('block')).toBe(0);
     expect(zoneOf(d.state, card.uniqueID)).toBe('burnt');
   });
 
-  it('壁垒无格挡时落空，仍照常消耗；铜城每层 18 护盾', () => {
+  it('壁垒无格挡时只给基础护盾；铜城基础 16 + 每层 18', () => {
     const d = new BattleDriver({
       deck: ['barrier', 'bronzeCity', 'punch', 'punch'], enemies: [tank()], seed: 5,
     });
     d.start();
     const barrier = cardInHand(d, 'barrier');
     d.play(barrier.uniqueID);
-    expect(d.player.shield).toBe(0);
+    expect(d.player.shield).toBe(10); // 无格挡：仅基础护盾
     expect(zoneOf(d.state, barrier.uniqueID)).toBe('burnt');
 
     gainBlock(d, 2);
     d.play('bronzeCity');
-    expect(d.player.shield).toBe(36);
+    expect(d.player.shield).toBe(10 + 16 + 2 * 18);
   });
 
   it('武魂：每层 +1 行动点（3 层 → +3）', () => {
@@ -329,7 +330,7 @@ describe('姿态系列（咏唱）：狂战链（格挡转力量）', () => {
 
     d.play('barrier'); // 破：失去 2 层（负向 AddEffect）→ 不触发力量
     expect(d.player.getEffectStacks('block')).toBe(0);
-    expect(d.player.shield).toBe(24);
+    expect(d.player.shield).toBe(10 + 2 * 12);
     expect(d.player.getEffectStacks('strength')).toBe(1);
 
     const hp0 = enemyHp(d); // 力量读轨生效：punch 6 + 1
@@ -339,7 +340,7 @@ describe('姿态系列（咏唱）：狂战链（格挡转力量）', () => {
 });
 
 describe('咏唱散卡：以无胜有 / 以有胜无', () => {
-  it('以无胜有：回合结束时无其他手牌 → 8 层格挡；手中有其他牌时不触发', () => {
+  it('以无胜有（B）：只有这一张手牌 → 3 层格挡；手中有其他牌时不触发', () => {
     const negative = new BattleDriver({
       deck: ['winWithout', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
     });
@@ -356,11 +357,11 @@ describe('咏唱散卡：以无胜有 / 以有胜无', () => {
     for (const c of [...positive.state.zones.hand.filter(c => c.defId !== 'winWithout')]) {
       moveCard(positive.state, c.uniqueID, 'deck'); // 清空其他手牌
     }
-    positive.endTurn(); // 回合末：仅剩驻手的自身 → +8
-    expect(positive.player.getEffectStacks('block')).toBe(8);
+    positive.endTurn(); // 回合末：仅剩驻手的自身 → +3
+    expect(positive.player.getEffectStacks('block')).toBe(3);
   });
 
-  it('以有胜无：回合结束时加权手牌 ≥6（咏唱自身计 2）→ 8 层格挡', () => {
+  it('以有胜无（B）：加权手牌 ≥6（咏唱自身计 2）→ 3 层格挡', () => {
     const d = new BattleDriver({
       deck: ['haveWithout', 'punch', 'punch', 'punch', 'punch', 'punch'],
       enemies: [turtle()], seed: 5, config: { initialDraw: 6 },
@@ -369,7 +370,7 @@ describe('咏唱散卡：以无胜有 / 以有胜无', () => {
     d.play('haveWithout'); // 手牌：5 张其他 + 自身（加权 2）= 7
     expect(d.state.zones.hand).toHaveLength(6);
     d.endTurn();
-    expect(d.player.getEffectStacks('block')).toBe(8);
+    expect(d.player.getEffectStacks('block')).toBe(3);
   });
 
   it('以有胜无：加权手牌不足 6 时不触发', () => {
@@ -383,6 +384,98 @@ describe('咏唱散卡：以无胜有 / 以有胜无', () => {
   });
 });
 
+describe('活动筋骨（C/B）：力量成长', () => {
+  it('C 版：每次打出固定获得 1 层力量（冷却2，跨回合可重复）', () => {
+    const d = new BattleDriver({
+      deck: ['rally', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+    });
+    d.start();
+    d.play('rally');
+    expect(d.player.getEffectStacks('strength')).toBe(1);
+    // 冷却推进后再次打出：仍为 1 层增量（总计 2）
+    d.endTurn(); d.endTurn();
+    const again = d.state.zones.hand.find(c => c.defId === 'rally');
+    if (again) { d.play(again.uniqueID); expect(d.player.getEffectStacks('strength')).toBe(2); }
+  });
+
+  it('B 版：力量 = 1 + 本场已打出次数（首打 1、次打 2、三打 3）', () => {
+    const d = new BattleDriver({
+      deck: ['rallyPlus', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+      player: { maxActionPoints: 6 },
+    });
+    d.start();
+    const card = d.state.zones.hand.find(c => c.defId === 'rallyPlus');
+    d.play(card.uniqueID);
+    expect(d.player.getEffectStacks('strength')).toBe(1);
+    expect(card.rallyCount).toBe(1);
+
+    card.remainingUses = 1; card.currentCooldown = 0; // 跳过冷却等待，直接复打
+    moveCard(d.state, card.uniqueID, 'hand');
+    d.play(card.uniqueID);
+    expect(d.player.getEffectStacks('strength')).toBe(3); // +2
+    card.remainingUses = 1; card.currentCooldown = 0;
+    moveCard(d.state, card.uniqueID, 'hand');
+    d.play(card.uniqueID);
+    expect(d.player.getEffectStacks('strength')).toBe(6); // +3
+  });
+});
+
+describe('散卡（2026-09 新增）：快如雨 / 疾如风 / 准备出招', () => {
+  it('快如雨：本回合每打出 4 牌获得 1 层格挡（打出前已出 4 张 → +1）', () => {
+    const d = new BattleDriver({
+      deck: ['fastRain', 'punch', 'punch', 'punch', 'punch'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 5 },
+      player: { maxActionPoints: 9 },
+    });
+    d.start();
+    d.playAll(['punch', 'punch', 'punch', 'punch']);
+    d.play('fastRain'); // 本回合已打出 4 张
+    expect(d.player.getEffectStacks('block')).toBe(1);
+  });
+
+  it('疾如风：每 3 牌 1 层（已出 6 张 → +2）', () => {
+    const d = new BattleDriver({
+      deck: ['fastWind', 'punch', 'punch', 'punch', 'punch', 'punch', 'punch'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 7 },
+      player: { maxActionPoints: 12 },
+    });
+    d.start();
+    d.playAll(['punch', 'punch', 'punch', 'punch', 'punch', 'punch']);
+    d.play('fastWind');
+    expect(d.player.getEffectStacks('block')).toBe(2);
+  });
+
+  it('准备出招：下回合开始前未受伤 → 获得格挡；受生命值伤害则不触发', () => {
+    const clean = new BattleDriver({
+      deck: ['prepareMove', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+    });
+    clean.start();
+    clean.play('prepareMove');
+    clean.endTurn(); // 龟缩木桩不出手 → 下回合开始结算
+    expect(clean.player.getEffectStacks('block')).toBe(2);
+
+    const hurt = new BattleDriver({
+      deck: ['prepareMove', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+    });
+    hurt.start();
+    hurt.play('prepareMove');
+    hurt.dispatch(new DealDamageInstruction({ source: hurt.state.enemies[0], target: hurt.player, amount: 3 }));
+    hurt.endTurn();
+    expect(hurt.player.getEffectStacks('block')).toBe(0);
+  });
+
+  it('准备出招 B（0AP）：格挡 3', () => {
+    const d = new BattleDriver({
+      deck: ['prepareMoveMaster', 'punch', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+    });
+    d.start();
+    expect(getSkillDefinition('prepareMoveMaster').cost.actionPoint).toBe(0);
+    d.play('prepareMoveMaster');
+    d.endTurn();
+    expect(d.player.getEffectStacks('block')).toBe(3);
+  });
+});
+
 describe('描述双轨与投放', () => {
   it('破势 battleDescribe：数字按当前格挡层数实时结算', () => {
     const d = new BattleDriver({
@@ -391,10 +484,10 @@ describe('描述双轨与投放', () => {
     d.start();
     const def = getSkillDefinition('breakStance');
     const rt = cardInHand(d, 'breakStance');
-    expect(def.battleDescribe(makeSkillCtx(d.ctx, rt))).toBe('7伤害，/named{破}：11伤害');
+    expect(def.battleDescribe(makeSkillCtx(d.ctx, rt))).toBe('7伤害，/named{破}：7伤害');
     gainBlock(d, 3);
     expect(def.battleDescribe(makeSkillCtx(d.ctx, rt)))
-      .toBe('7伤害，/named{破}：11伤害（当前3层 → +33）');
+      .toBe('7伤害，/named{破}：7伤害（当前3层 → +21）');
   });
 
   it('全部新卡 describe 可渲染（应用前纯文本轨）', () => {
@@ -438,11 +531,17 @@ describe('描述双轨与投放', () => {
 
   it('奖励池：C 阶新卡入池，S 阶（摘星手/神龟姿态）恒不入池', () => {
     const pool = spawnableCardPool().map(def => def.id);
-    for (const id of ['perfectStrike', 'carefulStrike', 'doubleStrike', 'breakStance', 'barrier',
-      'solidShield', 'reinforcedShield', 'defensePrep', 'martialStance', 'winWithout', 'haveWithout']) {
+    for (const id of ['perfectStrike', 'carefulStrike', 'breakStance', 'barrier',
+      'solidShield', 'reinforcedShield', 'defensePrep', 'martialStance', 'rally']) {
       expect(pool).toContain(id);
     }
     expect(pool).not.toContain('pluckStar');
     expect(pool).not.toContain('divineTurtle');
+    // 以无胜有/以有胜无 已升 B 阶（2026-09 稿）：C 阶池不含，体修 1 级后可见
+    expect(pool).not.toContain('winWithout');
+    const run = createRunState({ seed: 1 });
+    run.player.bodyLevel = 1;
+    const bPool = packCardPool(run, 'body').map(def => def.id);
+    for (const id of ['winWithout', 'haveWithout', 'rallyPlus']) expect(bPool).toContain(id);
   });
 });

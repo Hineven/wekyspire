@@ -39,7 +39,7 @@ export class RunDriver {
     profile = null,
     totalFloors,                 // 覆盖塔高（故事模式/测试；缺省 44）
     deck = [...BODY_STARTER_DECK], // 缺省=现行初始卡组（bodySkills 导出，随平衡改动同步）
-    abilities = ['battleFocus'],
+    abilities = [],              // 初始不带能力（战意已从初始配置移除，2026-09）
     player = {},                 // Player 构造参数覆盖
     battlePolicy = null,         // (battle) => skillRuntime | null（缺省=打第一张可出的牌）
     onInput = null,              // (request) => selection（缺省=取候选前 N 个，见 defaultInputAnswer）

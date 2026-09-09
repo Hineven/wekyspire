@@ -2,7 +2,8 @@
 // 布局盒固定 200x270（10px = 1 世界单位，对应 20x27 牌面 plane）。
 // 视觉语言：
 //   灵脉（series 归口，见 cardTheme）→ 主题色：底板着色 + 边框 + 斜纹饰面 + 名称分隔线 + 页脚
-//     ——整卡色相只认灵脉，一眼区分系别（用户定）；
+//     ——整卡色相只认灵脉，一眼区分系别（用户定）；通用灰卡（pack='common'）例外：
+//     走偏白主题色 COMMON_THEME，靠色相与所有体系卡拉开距离（不加文字角标，用户定）；
 //   等阶（tier）→ 只有等阶标记（左上菱形徽章）随等阶着色；边框粗细/内描边/箔金是等阶的
 //     「形」，色相仍属灵脉；
 //   开销徽章（右上，右对齐）：魏启=蓝 + 水晶素材（options.manaCrystal，缺省蓝色圆回落）、
@@ -70,13 +71,16 @@ const LEINO_THEME = Object.freeze({
   wood: '#4aa56e',  // 木
   air: '#7ad0e8',   // 风
 });
+// 通用灰卡（pack='common'）：偏白主题色——与所有体系卡拉开距离，且区分方式同样是主题色
+const COMMON_THEME = '#e8e6e0';
 // series（技能家族）→ 灵脉归口：新体系内容落定后在此补一行；未归口回落类型色
 const SERIES_LEINO = Object.freeze({
   fist: 'body', block: 'body', blade: 'body', punch: 'body', focusChant: 'body',
   inflame: 'fire',
 });
-/** 卡面主题色：灵脉（series 归口）优先 → 类型色回落 → 体修灰。 */
+/** 卡面主题色：通用灰卡（偏白）优先 → 灵脉（series 归口）→ 类型色回落 → 体修灰。 */
 export function cardTheme(card) {
+  if (card?.pack === 'common') return COMMON_THEME;
   const leino = SERIES_LEINO[card?.series];
   if (leino && LEINO_THEME[leino]) return LEINO_THEME[leino];
   return TYPE_COLORS[card?.type] ?? TYPE_COLORS.normal;
@@ -167,7 +171,7 @@ export function bakeCardFace(card, options = {}) {
   // 正文：富文本排版 + 绘制（热区加偏移）；有卡图时正文区下移。
   // resolveEffect 给 /effect{名} 供特征色（图标 emoji 由 drawCardIcon 负责）
   const bodyTop = art ? BODY_TOP_WITH_ART : BODY_TOP_PLAIN;
-  const layout = layoutRichText(parseRichText(card.text ?? ''), {
+  const layout = layoutRichText(parseRichText(chantPrefixedText(card)), {
     maxWidth: BODY_MAX_WIDTH,
     measure,
     style: BODY_FONT,
@@ -187,7 +191,7 @@ export function bakeCardFace(card, options = {}) {
     rect: { x: r.rect.x + 12, y: r.rect.y + bodyTop, w: r.rect.w, h: r.rect.h },
   }));
 
-  drawFooter(ctx, card);
+  hitRegions.push(...drawFooter(ctx, card));
 
   // 系列装饰图层最上（整面 cover 贴图、圆角裁剪；素材自带透明镂空则不遮正文）
   if (decor) {
@@ -368,11 +372,14 @@ function drawHeader(ctx, card, manaCrystal) {
   // 初始为 0 的开销不显示（用户定——零开销是常态，摆 0 徽章只有噪音）
   const cost = card.cost ?? {};
   let bx = 186;
-  if ((cost.mana ?? 0) > 0) {
+  // 'X' 费同样出徽章（徽章内直接写 X）
+  if (cost.mana === 'X' || (cost.mana ?? 0) > 0) {
     drawCostBadge(ctx, bx, 26, cost.mana, 'mana', manaCrystal);
     bx -= 25;
   }
-  if ((cost.actionPoint ?? 0) > 0) drawCostBadge(ctx, bx, 26, cost.actionPoint, 'ap', null);
+  if (cost.actionPoint === 'X' || (cost.actionPoint ?? 0) > 0) {
+    drawCostBadge(ctx, bx, 26, cost.actionPoint, 'ap', null);
+  }
   ctx.textAlign = 'left';
 }
 
@@ -501,16 +508,48 @@ function drawArtPlaceholder(ctx, card) {
   ctx.restore();
 }
 
+// 咏唱卡正文前缀：/named{咏唱N}：——咏唱值（手牌压力）是卡面必读信息，进正文而非页脚；
+// 激活前后文案不变（激活状态由卡面点亮表达，不写「已激活」）。
+function chantPrefixedText(card) {
+  const text = card.text ?? '';
+  if (card.cardMode !== 'chant' || !text) return text;
+  return `/named{咏唱${card.chantWeight ?? 2}}：${text}`;
+}
+
+// 页脚词条行：逐段绘制并登记 named 词条热区（咏唱/消耗等）——与正文热区同协议，
+// 命中即弹 tooltip。卡面因此不必复述词条定义（如「再次打出免费解除」归「咏唱」）。
 function drawFooter(ctx, card) {
   const bits = [];
-  if (card.cardMode && card.cardMode !== 'normal') bits.push(card.cardMode === 'chant' ? '咏唱' : card.cardMode);
+  // 咏唱N 已进正文前缀（chantPrefixedText），页脚不重复；其余非普通卡种仍在此标注
+  if (card.cardMode && card.cardMode !== 'normal' && card.cardMode !== 'chant') {
+    bits.push(card.cardMode);
+  }
   if (card.keywords?.length) bits.push(...card.keywords);
-  if (card.charges && card.charges.max !== Infinity) bits.push(`充能${card.charges.max}`);
-  if (bits.length === 0) return;
+  // 充能/冷却：系统数值只进词条行，不进效果文本（冷却优先——它是玩家要规划的等待时长）
+  if (card.charges && card.charges.cooldownTurns > 0) bits.push(`冷却${card.charges.cooldownTurns}`);
+  else if (card.charges && card.charges.max !== Infinity && card.charges.max > 1) bits.push(`充能${card.charges.max}`);
+  if (bits.length === 0) return [];
   ctx.font = '13px sans-serif';
   ctx.fillStyle = cardTheme(card);
   ctx.textBaseline = 'middle';
-  ctx.fillText(bits.join(' · '), 12, CARD_FACE_SIZE.height - 18);
+  const y = CARD_FACE_SIZE.height - 18;
+  const regions = [];
+  let x = 12;
+  for (let i = 0; i < bits.length; i++) {
+    if (i > 0) {
+      const sep = ' · ';
+      ctx.fillText(sep, x, y);
+      x += ctx.measureText(sep).width;
+    }
+    const label = bits[i];
+    const w = ctx.measureText(label).width;
+    ctx.fillText(label, x, y);
+    if (getNamedTerm(label)) {
+      regions.push({ type: 'named', payload: { name: label }, rect: { x, y: y - 8, w, h: 16 } });
+    }
+    x += w;
+  }
+  return regions;
 }
 
 // Shift 详情方标（仅已应用卡面）：右下角小方牌 + 字母 S；

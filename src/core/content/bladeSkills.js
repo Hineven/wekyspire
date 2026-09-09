@@ -187,6 +187,8 @@ const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
   cooldownZones: ['deck'],
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo: nextId ?? null,
+  // 斩（D）可入池作为链条起点；进阶卡只经局内转化获得，永不洗入奖励卡包
+  canSpawnAsReward: tier === 'D',
   use(sctx) {
     // 先进阶后伤害：进阶是结算内的簿记，放前面保证即便伤害击杀终局截断也已落定。
     // 发动卡自身已离手（pending），findSlashCard 看不见它——自我进阶直接对 self 转化。
@@ -216,8 +218,8 @@ const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
       ]);
     },
   }],
-  describe: () => `${damage}伤害，洗入3碎铁，斩`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，洗入3碎铁，/named{斩}`,
+  describe: () => `${damage}伤害，/named{洗入3}碎铁，/named{斩}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}碎铁，/named{斩}`,
 });
 for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
@@ -311,7 +313,7 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '丢弃所有无法打出的手牌，每张获得1层格挡',
+  describe: () => '丢弃所有无法打出的手牌，每张/effect{格挡}1',
   battleDescribe: (sctx) => {
     const n = stuckHandCards(sctx).length;
     return `丢弃所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}，每张/effect{格挡}1`;
@@ -363,7 +365,7 @@ const sideDaggerCard = (id, name, tier, damage) => registerSkill({
     if (right) discardCard(sctx, right.uniqueID);
     return true;
   },
-  describe: () => `${damage}伤害，弃两侧牌；顽固：两侧有牌`,
+  describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
 sideDaggerCard('flyingDagger', '飞刀', 'D', 12);
@@ -464,7 +466,7 @@ registerSkill({
     });
     return true;
   },
-  describe: () => '20伤害，焚毁两侧牌，寻找2牌插入两侧',
+  describe: () => '20伤害，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧',
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, 20)}，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧`,
 });
 
@@ -480,8 +482,8 @@ const sheathCard = (id, name, tier, damage, stall) => registerSkill({
     addEffect(sctx, 'stall', stall);
     return true;
   },
-  describe: () => `消耗。${damage}伤害，获得${stall}层滞气`,
-  battleDescribe: (sctx) => `/named{消耗}。${resolvedDamageText(sctx, damage)}，获得/effect{滞气}${stall}`,
+  describe: () => `${damage}伤害，/effect{滞气}${stall}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/effect{滞气}${stall}`,
 });
 sheathCard('storeEdge', '收刃', 'C', 13, 1);
 sheathCard('hiddenEdge', '潜锋', 'B', 23, 2);
@@ -493,7 +495,7 @@ sheathCard('sheathEdge', '藏锋', 'A', 48, 3);
 // 同样计入。打出自身不是弃牌（pending→burnt 的消耗路径）。
 const breathCard = (id, name, tier, { block = 0, strength = 0, fleeting = true }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
-  keywords: ['exhaust'],
+  keywords: fleeting ? ['exhaust', 'transient'] : ['exhaust'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -518,10 +520,10 @@ const breathCard = (id, name, tier, { block = 0, strength = 0, fleeting = true }
     });
     return true;
   },
-  describe: () => `消耗。${fleeting ? '短暂。' : ''}本回合每弃1牌：抽1牌`
+  describe: () => '本回合每弃1牌：抽1牌'
     + (block > 0 ? '，格挡1' : '')
     + (strength > 0 ? '，力量1' : ''),
-  battleDescribe: () => `/named{消耗}。${fleeting ? '/named{短暂}。' : ''}本回合每弃1牌：抽1牌`
+  battleDescribe: () => '本回合每弃1牌：抽1牌'
     + (block > 0 ? '，/effect{格挡}1' : '')
     + (strength > 0 ? '，/effect{力量}1' : ''),
 });
@@ -548,10 +550,8 @@ registerSkill({
       }
     },
   },
-  describe: () => '咏唱1：激发时手中刀法牌伤害+2；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：激发时手中刀法牌伤害+2；再次打出（免费）解除并回牌库'
-    : '咏唱1：激发时手中刀法牌伤害+2；再次打出（免费）解除并回牌库'),
+  describe: () => '激发时手中刀法牌伤害+2',
+  battleDescribe: (sctx) => '激发时手中刀法牌伤害+2',
 });
 
 // 锻刀术（C）：咏唱1。你打出刀法牌时，手中刀法牌伤害 +1（激活期间的常驻被动；
@@ -573,10 +573,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱1：你打出刀法牌时，手中刀法牌伤害+1；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：你打出刀法牌时，手中刀法牌伤害+1；再次打出（免费）解除并回牌库'
-    : '咏唱1：你打出刀法牌时，手中刀法牌伤害+1；再次打出（免费）解除并回牌库'),
+  describe: () => '你打出刀法牌时，手中刀法牌伤害+1',
+  battleDescribe: (sctx) => '你打出刀法牌时，手中刀法牌伤害+1',
 });
 
 // ==== 开刃系列（斩进阶）========================================================
@@ -601,40 +599,14 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱3：手牌少于2时斩进阶，此卡焚毁；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：手牌少于2时斩进阶，此卡/named{焚毁}；再次打出（免费）解除并回牌库'
-    : '咏唱3：手牌少于2时斩进阶，此卡/named{焚毁}；再次打出（免费）解除并回牌库'),
+  describe: () => '手牌少于2时斩进阶，此卡/named{焚毁}',
+  battleDescribe: (sctx) => '手牌少于2时斩进阶，此卡/named{焚毁}',
 });
 
-// 血激术（C，0费）：咏唱1。濒死时斩进阶，此卡焚毁。濒死口径（工作定义）：
-// 一次结算后生命 > 0 且 ≤ 上限的 1/3（battle.md §12 濒死机制留白，待设计定稿后统一）。
-registerSkill({
-  id: 'bloodEdge', name: '血激术', type: 'normal', tier: 'C', series: 'blade',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 1,
-  use() { return true; },
-  activated: {
-    subscriptions: (sctx) => [{
-      when: DealDamageInstruction, phase: 'post',
-      filter: (instr, ctx) => instr.target === ctx.player
-        && ctx.player.hp > 0
-        && ctx.player.hp <= Math.floor(ctx.player.maxHp / 3),
-      react: (instr, ctx) => {
-        advanceSlashChain(sctx, instr);
-        ctx.kernel.submitInstruction(
-          new BurnCardInstruction({ uniqueID: sctx.self.uniqueID }), instr);
-      },
-    }],
-  },
-  describe: () => '咏唱1：濒死（生命≤上限1/3）时斩进阶，此卡焚毁；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：濒死（生命≤上限1/3）时斩进阶，此卡/named{焚毁}；再次打出（免费）解除并回牌库'
-    : '咏唱1：濒死（生命≤上限1/3）时斩进阶，此卡/named{焚毁}；再次打出（免费）解除并回牌库'),
-});
+// 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
+// （battle.md §12 留白），待设计确认后补回。
 
-// 出鞘（C，设计稿未写费用 → 0费，消耗）：斩进阶，抽出斩（进阶后的斩链卡若在
+// 出鞘（C，设计稿未写费用 → 0费，消耗）：斩进阶，/named{抽出}斩（进阶后的斩链卡若在
 // 牌库，直接移入手牌——满手按 §7.3 落牌库；斩已因耗尽在冷却时，抽出的是一张
 // 「按新阶冷却中」的刀——它只在牌库冷却，手中只能靠砺刀/花刀处理，这是出鞘的
 // 时机博弈）。无斩可进则无事发生（抽出亦落空）。
@@ -656,8 +628,8 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '消耗。斩进阶，抽出斩',
-  battleDescribe: (sctx) => `/named{消耗}。斩进阶，/named{抽出}斩（牌库中${findSlashCard(sctx) ? '有' : '无'}斩）`,
+  describe: () => '斩进阶，/named{抽出}斩',
+  battleDescribe: (sctx) => `斩进阶，/named{抽出}斩（牌库中${findSlashCard(sctx) ? '有' : '无'}斩）`,
 });
 
 // ==== 深入卡（砺刀系：手中刀的冷却管理）========================================
@@ -666,8 +638,9 @@ registerSkill({
 // 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜）。
 const whetCard = (id, name, tier, delta) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
+  keywords: ['transient'],
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   subscriptions: (sctx) => [leaveHandAtTurnEnd(sctx)],
   use(sctx) {
@@ -678,11 +651,11 @@ const whetCard = (id, name, tier, delta) => registerSkill({
     }
     return true;
   },
-  describe: () => `短暂。手中刀法牌冷却${delta}`,
+  describe: () => `手中刀法牌冷却${delta}`,
   battleDescribe: (sctx) => {
     const cooling = sctx.battleState.zones.hand.filter(
       c => c.uniqueID !== sctx.self.uniqueID && isBladeCard(c) && c.currentCooldown > 0);
-    return `/named{短暂}。手中刀法牌冷却${delta}${cooling.length > 0 ? `（冷却中${cooling.length}张）` : ''}`;
+    return `手中刀法牌冷却${delta}${cooling.length > 0 ? `（冷却中${cooling.length}张）` : ''}`;
   },
 });
 whetCard('whetstone', '砺刀', 'C', 1);
@@ -694,7 +667,7 @@ whetCard('razorEdge', '展锐', 'A', 3);
 // 只作用于手牌，此处按设计稿字面「所有」扩到牌库。直改充能标量与原型同范式。
 registerSkill({
   id: 'honeEdge', name: '开刃', type: 'normal', tier: 'A', series: 'blade',
-  keywords: ['exhaust'],
+  keywords: ['exhaust', 'transient'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -709,8 +682,8 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '消耗。短暂。所有刀法牌即刻冷却',
-  battleDescribe: () => '/named{消耗}。/named{短暂}。所有刀法牌即刻冷却',
+  describe: () => '所有刀法牌即刻冷却',
+  battleDescribe: () => '/named{短暂}。所有刀法牌即刻冷却',
 });
 
 // 斩灭（A，2AP，消耗+短暂）：你的下一次刀法牌伤害变为固定伤害（F2：跳过修正与防御）。
@@ -723,7 +696,7 @@ registerSkill({
 // 「伤害类型改写」收编为正式管线。
 registerSkill({
   id: 'annihilatingEdge', name: '斩灭', type: 'normal', tier: 'A', series: 'blade',
-  keywords: ['exhaust'],
+  keywords: ['exhaust', 'transient'],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -738,8 +711,8 @@ registerSkill({
     });
     return true;
   },
-  describe: () => '消耗。短暂。你的下一次刀法牌伤害变为固定伤害',
-  battleDescribe: () => '/named{消耗}。/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
+  describe: () => '你的下一次刀法牌伤害变为固定伤害',
+  battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
 });
 
 // 练刀（D，1AP，消耗）：选1张手中刀法牌令其伤害+4，丢弃之（deckCraft 锻刀原型同构；
@@ -769,12 +742,12 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '消耗。选1张手中刀法牌令其伤害+4，丢弃之',
-  battleDescribe: () => '/named{消耗}。选1张手中刀法牌令其伤害+4，丢弃之',
+  describe: () => '选1张手中刀法牌令其伤害+4，丢弃之',
+  battleDescribe: () => '选1张手中刀法牌令其伤害+4，丢弃之',
 });
 
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
-// 咏唱1，P5 咏唱触发时：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
+// 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
 // ChantDrawDiscardInstruction 链式挂在触发指令树下）。设计稿未写费用——刀法 B 按
 // 表头 1AP；刃心是深入分支、同样按 1AP 落地。
 const bladeArtCard = (id, name, tier, n) => registerSkill({
@@ -790,10 +763,8 @@ const bladeArtCard = (id, name, tier, n) => registerSkill({
         new ChantDrawDiscardInstruction({ count: n, reason: `${name}：选${n}张手牌丢弃` }), instr),
     }],
   },
-  describe: () => `咏唱1：咏唱触发时抽${n}牌，选${n}张手牌丢弃；再次打出（免费）解除并回牌库`,
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? `已激活：咏唱触发时抽${n}牌，选${n}张手牌丢弃；再次打出（免费）解除并回牌库`
-    : `咏唱1：咏唱触发时抽${n}牌，选${n}张手牌丢弃；再次打出（免费）解除并回牌库`),
+  describe: () => `抽${n}牌，选${n}张手牌丢弃`,
+  battleDescribe: (sctx) => `抽${n}牌，选${n}张手牌丢弃`,
 });
 bladeArtCard('bladeArt', '刀法', 'B', 1);
 bladeArtCard('bladeHeart', '刃心', 'A', 2);

@@ -154,11 +154,11 @@ describe('斩系列：局内进阶链', () => {
 
   it('描述双轨：应用前纯文本，应用后带 /named{斩} 热区', () => {
     const def = getSkillDefinition('slash');
-    expect(def.describe()).toBe('16伤害，洗入3碎铁，斩');
+    expect(def.describe()).toBe('16伤害，/named{洗入3}碎铁，/named{斩}');
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const rt = toHand(d, 'slash');
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，洗入3碎铁，/named{斩}');
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，/named{洗入3}碎铁，/named{斩}');
   });
 });
 
@@ -608,20 +608,6 @@ describe('开刃系列：斩进阶', () => {
     expect(zoneOf(d.state, edge.uniqueID)).toBe('burnt'); // 此卡焚毁
   });
 
-  it('血激术：咏唱1，濒死受击（生命≤上限1/3）→ 斩进阶 + 此卡焚毁', () => {
-    const d = new BattleDriver({ deck: ['bloodEdge', 'slash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
-    d.start();
-    const blood = toHand(d, 'bloodEdge');
-    const slash = toHand(d, 'slash');
-    d.play('bloodEdge');
-    expect(blood.isActivated).toBe(true);
-    moveCard(d.state, slash.uniqueID, 'deck');
-    d.dispatch(new DealDamageInstruction({ source: d.state.enemies[0], target: d.player, amount: 25 }));
-    expect(d.player.hp).toBe(5);                          // 30 - 25 ≤ 10（1/3）
-    expect(slash.defId).toBe('rockCleave');
-    expect(zoneOf(d.state, blood.uniqueID)).toBe('burnt');
-  });
-
   it('砺刀/磨锋/展锐：手中刀法牌冷却 1/2/3（无视「只在牌库冷却」的区域门）', () => {
     for (const [id, delta] of [['whetstone', 1], ['honeEdgeMid', 2], ['razorEdge', 3]]) {
       const d = new BattleDriver({ deck: [id, 'slash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
@@ -758,13 +744,14 @@ describe('刀法咏唱：抽弃循环', () => {
 });
 
 describe('刀卡投放', () => {
-  it('奖励池含刀卡（等阶门禁 C 以内），排除衍生碎铁与 S 阶链尾', () => {
+  it('奖励池：斩（D）入池作链条起点；进阶卡（D 以上）只经局内转化，不入池', () => {
     const pool = spawnableCardPool().map(def => def.id);
     for (const id of ['slash', 'handCleave', 'doubleCleave', 'cycloneSlash', 'flyingDagger', 'storeEdge', 'whetstone', 'unsheathe']) {
       expect(pool).toContain(id);
     }
     expect(pool).not.toContain('ironShard');              // 衍生牌
-    expect(pool).not.toContain('skyCleave');              // S 阶
-    expect(pool).not.toContain('godCleave');              // S 阶
+    for (const id of ['rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave']) {
+      expect(pool).not.toContain(id);                     // 斩链进阶卡：仅局内进阶
+    }
   });
 });

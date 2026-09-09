@@ -106,6 +106,7 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环；`CAMERA
 - 卡牌计数器放 `skillRuntime`，不藏闭包；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
 - **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场 `held`、弃/焚/迁移、视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次 `_layoutAndTrack` 重算目标表兜底——弹簧目标表只在 sync 节拍重算，空窗期里动画已结束（idle）的卡会被弹簧从展示位拉回手牌锚点，产生「打出 → 飞回手牌 → 再飞牌库」。此病灶已多次回归，改动手牌/弹簧/展示逻辑时必跑 `battleStage.test.js` 的「空窗期不被弹簧拉回手牌」回归用例。
 - 卡面描述双轨：`describe`（应用前，无战斗上下文，纯文本）/ `battleDescribe`（结算中，数字按实时局面）。
+- **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词（消耗/固有/短暂/锁定/缓启）走徽章与页脚词条行（`cardFace.js` 的 `drawFooter`），**不要在 `describe`/`battleDescribe` 里复述**（如「冷却8」「消耗。」）；系统信息复述是卡面臃肿的主要来源。咏唱卡的「**咏唱N：**」前缀由渲染层自动加（`cardFace.js` 的 `chantPrefixedText`，named 热区），**激活前后文案不变**——不写「已激活」。
 - **通用机制词走 named 术语**：跨卡复用的机制关键词（斩/衰败等）定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数如 `衰败2`），卡面 markup 用 `/named{术语}`（热区自动接 tooltip）；机制本体写进 def 字段/订阅（如 `cooldownZones`、`decay`），不要把长机制文本摊在卡面上。
 - 注意：`.trae/rules/project_rules.md` 中关于 `backendGameState/displayGameState`、`animationSequencer.js` 的描述是**旧架构**残留——现行架构见本文件与 README（Bridge + projection + EventNames），以代码为准。
 

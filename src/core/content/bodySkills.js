@@ -81,7 +81,7 @@ function registerCollapseFist({ id, name, tier, damage, promotesTo = null }) {
       react: (instr, ctx) => ctx.kernel.submitInstruction(
         new SkillCooldownInstruction({ skill: sctx.self, delta: 1 }), instr),
     }],
-    describe: () => `${damage}伤害；冷却8，在手时每打出1牌冷却1`,
+    describe: () => `${damage}伤害；在手时每打出1牌冷却1`,
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}；在手时每打出1牌冷却1`,
   });
 }
@@ -229,10 +229,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱5：每次咏唱触发时/named{洗入}4「瞬击」；/named{消耗}',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：每次咏唱触发时洗入4「瞬击」'
-    : '咏唱5：每次咏唱触发时洗入4「瞬击」；再次打出（免费）解除并焚毁'),
+  describe: () => '/named{洗入}4「瞬击」',
+  battleDescribe: (sctx) => '/named{洗入4}「瞬击」',
 });
 
 // 一瞬千击（A）：1AP 消耗——发现 5 张瞬击（直接进手牌；满手按 §7.3 溢入牌库）。
@@ -246,7 +244,7 @@ registerSkill({
     for (let i = 0; i < 5; i++) addCard(sctx, 'instantStrike', { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}5「瞬击」；/named{消耗}',
+  describe: () => '/named{发现}5「瞬击」',
 });
 
 // 瞬击（蓄力系列衍生牌）：0 费即抛——7 伤 + 抽 1，打出即焚毁。
@@ -267,7 +265,7 @@ registerSkill({
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, 7)}，抽1牌`,
 });
 
-// ==== 6. 肘击系列（朴素咏唱：P5 节拍伤害，牢大做乘区）====
+// ==== 6. 肘击系列（朴素P5 节拍伤害，牢大做乘区）====
 
 // 肘击伤害预览文本（带 elbow 标记）：牢大的翻倍只认 tags 含 elbow 的伤害，
 // 预估必须带同一标记走真实 PRE 管线，才能「所见即所算」（battle.md A5）。
@@ -294,16 +292,15 @@ function registerElbow({ id, name, tier, damage, promotesTo = null }) {
     activated: {
       subscriptions: (sctx) => [{
         when: ChantTriggerInstruction, phase: 'post',
+        // 随机目标：咏唱自动触发没有出牌时点，随机选一个存活敌人（走种子 rng 可复现）
         react: () => {
-          const target = enemyTarget(sctx);
+          const target = randomAliveEnemy(sctx);
           if (target) dealDamage(sctx, attackAmount(sctx, damage), { target, tags: ['elbow'] });
         },
       }],
     },
-    describe: () => `咏唱1：每次咏唱触发时造成${damage}伤害`,
-    battleDescribe: (sctx) => (sctx.self.isActivated
-      ? `已激活：每次咏唱触发时${elbowDamageText(sctx, damage)}`
-      : `咏唱1：每次咏唱触发时${elbowDamageText(sctx, damage)}；再次打出（免费）解除并回牌库`),
+    describe: () => `随机${damage}伤害`,
+    battleDescribe: (sctx) => `随机${elbowDamageText(sctx, damage)}`,
   });
 }
 
@@ -327,13 +324,11 @@ registerSkill({
       react: (instr) => instr.setPayload('damage', instr.payload.damage * 2),
     }],
   },
-  describe: () => '咏唱1：你的肘击卡伤害翻倍',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：你的肘击卡伤害翻倍'
-    : '咏唱1：你的肘击卡伤害翻倍；再次打出（免费）解除并回牌库'),
+  describe: () => '你的肘击卡伤害翻倍',
+  battleDescribe: (sctx) => '你的肘击卡伤害翻倍',
 });
 
-// ==== 7. 太极系列（咏唱：打出牌数 → 抽牌，跨回合计数）====
+// ==== 7. 太极系列（打出牌数 → 抽牌，跨回合计数）====
 // 计数器放 skillRuntime（chantCount，plain data 可序列化），跨回合累积不清零；
 // 自身发动/解除不计入（filter 按 uniqueID 排除）。
 
@@ -357,10 +352,8 @@ function registerPlayCountChant({ id, name, tier, every, promotesTo = null }) {
         },
       }],
     },
-    describe: () => `咏唱2：每打出${every}张牌，抽1牌`,
-    battleDescribe: (sctx) => (sctx.self.isActivated
-      ? `已激活：每打出${every}张牌抽1（已打${sctx.self.chantCount ?? 0}）`
-      : `咏唱2：每打出${every}张牌，抽1牌`),
+    describe: () => `每打出${every}张牌，抽1牌`,
+    battleDescribe: (sctx) => `每打出${every}张牌，抽1牌（已打${sctx.self.chantCount ?? 0}）`,
   });
 }
 
@@ -371,7 +364,7 @@ registerPlayCountChant({ id: 'redirect', name: '化劲', tier: 'B', every: 5, pr
 // 太极（A）
 registerPlayCountChant({ id: 'taiji', name: '太极', tier: 'A', every: 4 });
 
-// ==== 8. 武学系列（咏唱：抽牌 → 伤害，与太极互为引擎）====
+// ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage 伤，
 // 每张独立随机选靶（多敌时伤害散步）；无存活敌人（战斗收尾）静默落空。
 
@@ -395,10 +388,8 @@ function registerDrawDamageChant({ id, name, tier, damage, promotesTo = null }) 
         },
       }],
     },
-    describe: () => `咏唱1：每抽1张牌，对随机敌人造成${damage}伤害`,
-    battleDescribe: (sctx) => (sctx.self.isActivated
-      ? `已激活：每抽1张牌对随机敌人${resolvedDamageText(sctx, damage)}`
-      : `咏唱1：每抽1张牌，对随机敌人${resolvedDamageText(sctx, damage)}；再次打出（免费）解除并回牌库`),
+    describe: () => `每抽1牌，随机${damage}伤害`,
+    battleDescribe: (sctx) => `每抽1牌，随机${resolvedDamageText(sctx, damage)}`,
   });
 }
 
@@ -497,8 +488,8 @@ registerSkill({
     drawCards(sctx, hand.length);
     return true;
   },
-  describe: () => '固有；弃手中全部卡，抽等量卡',
-  battleDescribe: () => '/named{固有}；弃手中全部卡，抽等量卡',
+  describe: () => '弃手中全部卡，抽等量卡',
+  battleDescribe: () => '弃手中全部卡，抽等量卡',
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
@@ -511,4 +502,5 @@ export const BODY_STARTER_DECK = Object.freeze([
   'duckHead',
   'adrenaline',
   'badOmen',
+  'slash', // 斩链起点（2026-09）：开局自带进阶引擎，靠局内打出逐阶生长
 ]);

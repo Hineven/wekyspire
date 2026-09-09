@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册效果定义（燃烧等），emoji/特征色解析依赖注册表
-import { bakeCardFace, CARD_FACE_SIZE } from '../src/stage/richtext/cardFace.js';
+import { bakeCardFace, CARD_FACE_SIZE, cardTheme } from '../src/stage/richtext/cardFace.js';
+import { allSkills } from '../src/core/skills/registry.js';
 
 // 全吸收 mock ctx：记录 fillText / drawImage 首参 / 画布尺寸
 function createMockCanvas() {
@@ -143,6 +144,61 @@ describe('cardFace', () => {
     // 两段命名热区：衰败1（带参数）与 斩
     const regions = r.hitRegions.filter(h => h.type === 'named');
     expect(regions.map(h => h.payload.name).sort()).toEqual(['斩', '衰败1']);
+  });
+
+  it('内容契约：卡面文本里的 named 术语一律走 /named{} 热区（动词用法除外）', () => {
+    const TERMS = ['后手', '破', '完美', '命中', '短暂', '洗入', '发现', '寻找', '抽出',
+      '顽固', '快速咏唱', '焚毁', '衰败', '斩'];
+    // 动词用法的白名单（「焚毁所有手牌」等不是词条用法）
+    const VERB_OK = [/焚毁所有/, /手牌焚毁/, /牌焚毁/];
+    const stub = {
+      self: { power: 0, isActivated: false, chantCount: 0 },
+      player: { getStat: () => 0, getEffectStacks: () => 0 },
+      battleState: { zones: { hand: [], deck: [], burnt: [], pending: [] }, enemies: [], rng: { int: () => 0 } },
+      handIndexAtPlay: null, target: null,
+    };
+    const bad = [];
+    for (const def of allSkills()) {
+      for (const fn of [def.describe, def.battleDescribe]) {
+        if (!fn) continue;
+        let text = '';
+        try { text = fn(stub); } catch { continue; } // 需要完整战斗上下文的卡跳过
+        for (const term of TERMS) {
+          if (!text.includes(term) || text.includes(`/named{${term}`)) continue;
+          if (term === '斩' && text.includes('斩进阶')) continue;
+          if (term === '焚毁' && VERB_OK.some(re => re.test(text))) continue;
+          bad.push(`${def.id}: 裸用「${term}」→ ${text}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('主题色：通用灰卡走偏白（与体修/灵脉主题色可区分）', () => {
+    const common = cardTheme({ pack: 'common', type: 'normal' });
+    expect(common).toBe('#e8e6e0');
+    expect(cardTheme({ series: 'punch', type: 'normal' })).not.toBe(common); // 体修灰
+    expect(cardTheme({ series: 'ignite', type: 'fire' })).not.toBe(common);  // 火灵脉红
+  });
+
+  it('咏唱卡：正文前缀「咏唱N：」进卡面（named 热区），页脚不重复', () => {
+    const mock = createMockCanvas();
+    const r = bakeCardFace({
+      ...CARD, cardMode: 'chant', chantWeight: 2, text: '获得格挡1', keywords: ['消耗'],
+    }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    const names = r.hitRegions.filter(h => h.type === 'named').map(h => h.payload.name);
+    expect(names).toContain('咏唱2'); // 正文前缀（带咏唱值）
+    expect(names).toContain('消耗');  // 页脚关键词 chip
+  });
+
+  it('页脚词条行：冷却进词条行（系统数值不写进效果文本）', () => {
+    const mock = createMockCanvas();
+    bakeCardFace({ ...CARD, charges: { max: 1, cooldownTurns: 8 } }, {
+      createCanvas: mock.factory, measure: (t) => t.length * 10,
+    });
+    expect(mock.texts).toContain('冷却8');
   });
 
   it('无卡图 → 系列字形占位水印（series 优先，回落 type，未知回落「技」）', () => {

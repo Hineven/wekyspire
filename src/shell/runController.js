@@ -85,12 +85,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const isStory = save?.storyMode ?? storyMode; // 读档优先用存档自身的模式
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
-    player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3 }),
+    player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3 }),
   }));
   if (save) restoreFromSave(run, save);
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
-    run.player.abilities = ['battleFocus'];
   }
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 

@@ -116,15 +116,15 @@ registerSkill({
     addEffect(sctx, 'heatCharge', 1);
     return true;
   },
-  describe: () => '8伤害，获得/effect{蓄热}（造成的伤害+12）',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 8)}，获得/effect{蓄热}（造成的伤害+12）`,
+  describe: () => '8伤害，/effect{蓄热}（伤害+12）',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 8)}，/effect{蓄热}（造成的伤害+12）`,
 });
 
 // ====================================================================
 // §1.1 爆裂术系列（咏唱输出：激活期蓄能，终止时群伤爆发）
 // ====================================================================
 
-// 爆裂术工厂。语义假设（设计稿「咏唱1：每消耗1魏启伤害+5。终止：30群伤」）：
+// 爆裂术工厂。语义假设（设计稿「每消耗1魏启伤害+5。终止：30群伤」）：
 // - 发动（4魏启）仅点亮咏唱，无即时效果；发动费在订阅注册前结算，**不计入**蓄能。
 // - 激活期间玩家**任意来源**的魏启消耗（其他卡的费用、X 费全耗等）每 1 点为
 //   终止伤害 +系数（计数挂 skillRuntime，不藏闭包）。
@@ -151,10 +151,8 @@ function burstChantCard({ id, name, tier, base, perMana }) {
         aoeDamage(sctx, total);
       },
     },
-    describe: () => `咏唱1：激活期间每消耗1魏启，终止伤害+${perMana}。终止：${base}群伤`,
-    battleDescribe: (sctx) => (sctx.self.isActivated
-      ? `已激活：终止${base}群伤（当前+${sctx.self.burstPool ?? 0}）；再次打出（免费）解除并结算`
-      : `咏唱1：激活期间每消耗1魏启，终止伤害+${perMana}。终止：${base}群伤`),
+    describe: () => `每消耗1魏启，终止伤害+${perMana}。终止：${base}群伤`,
+    battleDescribe: () => `每消耗1魏启，终止伤害+${perMana}；终止：${base}群伤`,
   });
 }
 burstChantCard({ id: 'smallBurst', name: '小爆裂术', tier: 'B', base: 30, perMana: 5 });
@@ -165,28 +163,27 @@ burstChantCard({ id: 'qimingBlaze', name: '齐明天炎', tier: 'S', base: 50, p
 // §1.1 凝焰系列（X魏启 = 消耗所有现有魏启，NAMED「消耗为X」）
 // ====================================================================
 
-// 凝焰工厂。X = 打出时点的全部现有魏启（本系列定义费用为 0，不存在先扣定义费
-// 再读余量的问题）。语义假设：「施加燃烧3X/4X」未写目标，按副作用语言自施
-// （与高热系列一致：爆炎体系里燃烧是代价）。X=0 时仍可打出：只给纳气、不上燃烧。
+// 凝焰工厂。X = 打出时点的全部现有魏启——**走费用系统**（cost.mana = 'X'，卡面只出
+// X 徽章，文本不再解释）；实付量由费用指令记在 runtime.xCost 上供效果读取。
+// 燃烧施加给**目标敌人**（2026-09 修正：此前误按自施代价实现）。X=0 时只给纳气。
 function condenseFlameCard({ id, name, tier, naqi, burnPerX, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'condense',
-    cost: { mana: 0, actionPoint: 0 },
+    cost: { mana: 'X', actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'normal', targetMode: 'none',
+    cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {
-      const X = sctx.player.mana; // 全耗：读打出时点全部现有魏启
-      if (X > 0) sctx.kernel.submitInstruction(new ConsumeManaInstruction({ amount: X }));
+      const X = sctx.self.xCost?.mana ?? 0;
       addEffect(sctx, 'naqi', naqi);
-      if (X > 0) addEffect(sctx, 'burn', burnPerX * X); // 自施燃烧（代价语言）
+      const target = enemyTarget(sctx);
+      if (X > 0 && target) addEffect(sctx, 'burn', burnPerX * X, target);
       return true;
     },
-    describe: () => `消耗为X（全部现有魏启）：/effect{纳气}${naqi}，自身/effect{燃烧}${burnPerX}X`,
+    describe: () => `/effect{纳气}${naqi}，施加/effect{燃烧}${burnPerX}X`,
     battleDescribe: (sctx) => {
-      const X = sctx.player.mana;
-      return `消耗全部魏启（当前${X}）：/effect{纳气}${naqi}` +
-        (X > 0 ? `，自身/effect{燃烧}${burnPerX * X}` : '');
+      const X = sctx.self.xCost?.mana ?? sctx.player.mana; // 未打出时按当前魏启预估
+      return `/effect{纳气}${naqi}，施加/effect{燃烧}${burnPerX * X}`;
     },
   });
 }
@@ -198,7 +195,7 @@ condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 5, bur
 // §1.1 高热系列（回蓝：激活即一次性 纳气 + 自施燃烧；消耗咏唱）
 // ====================================================================
 
-// 高热工厂。语义假设：「咏唱：纳气N，燃烧4」为**激活时一次性效果**（battle.md C5
+// 高热工厂。语义假设：「纳气N，燃烧4」为**激活时一次性效果**（battle.md C5
 // 「部分咏唱卡只提供激活时的效果」），挂 onEnable——只有激活成功才结算；解除
 // 打出时 use 为空操作，不会重复发动。设计稿未写咏唱值，按默认咏唱2计手牌压力。
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
@@ -217,7 +214,7 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
         addEffect(sctx, 'burn', 4); // 自施燃烧（代价语言）
       },
     },
-    describe: () => `咏唱：/effect{纳气}${naqi}，自身/effect{燃烧}4；再次打出（免费）解除并/named{消耗}`,
+    describe: () => `/effect{纳气}${naqi}，自身/effect{燃烧}4`,
   });
 }
 feverChantCard({ id: 'fever', name: '发烧', tier: 'C', naqi: 1, promotesTo: 'highFever' });
@@ -238,7 +235,7 @@ registerSkill({
     aoeDamage(sctx, 12);
     return true;
   },
-  describe: () => '对所有敌人12伤害',
+  describe: () => '群伤12',
 });
 
 // 火流（A）：两波群伤。分两个 stage 提交——第二波提交时重读存活敌人，
@@ -252,7 +249,7 @@ registerSkill({
     aoeDamage(sctx, 12);
     return stage === 0 ? false : true; // stage 0 第一波，stage 1 第二波（重读存活）
   },
-  describe: () => '对所有敌人12伤害2次',
+  describe: () => '群伤12×2',
 });
 
 // ====================================================================
@@ -346,7 +343,7 @@ registerSkill({
 });
 
 // ====================================================================
-// §1.1 先发系列（固有消耗快速咏唱：开场爆发）
+// §1.1 先发系列（固有消耗快速开场爆发）
 // ====================================================================
 
 // 先发工厂：0 费直伤 + /named{快速咏唱}（提前触发一次咏唱节拍，P5 挂载点复用）。
@@ -364,8 +361,8 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
       triggerChant(sctx);
       return true;
     },
-    describe: () => `/named{固有}；${damage}伤害，/named{快速咏唱}；/named{消耗}`,
-    battleDescribe: (sctx) => `/named{固有}；${resolvedDamageText(sctx, damage)}，/named{快速咏唱}；/named{消耗}`,
+    describe: () => `${damage}伤害，/named{快速咏唱}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{快速咏唱}`,
   });
 }
 firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 8, promotesTo: 'firstArrow' });
@@ -401,7 +398,7 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱1：每累计受到5点/effect{燃烧}伤害，获得1魏启（余数保留）',
+  describe: () => '每累计受到5点/effect{燃烧}伤害，获得1魏启（余数保留）',
 });
 
 // 突破极限（A，消耗，咏唱4）：激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
@@ -417,10 +414,8 @@ registerSkill({
   activated: {
     canUseSkill: (sctx) => sctx.player.mana > 0,
   },
-  describe: () => '咏唱4：蓝量大于0时，可以透支蓝量出牌',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：蓝量大于0时可透支出牌'
-    : '咏唱4：蓝量大于0时，可以透支蓝量出牌'),
+  describe: () => '蓝量大于0时，可以透支蓝量出牌',
+  battleDescribe: () => '蓝量大于0时，可以透支蓝量出牌',
 });
 
 // ====================================================================
@@ -579,7 +574,7 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱：每消耗1魏启，获得3护盾；再次打出（免费）解除并/named{消耗}',
+  describe: () => '每消耗1魏启，获得3护盾',
 });
 
 // 火焰亲和（B，消耗，咏唱3）：激活期间火灵脉牌的魏启消耗 -1。
@@ -607,7 +602,7 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱3：火灵脉牌的魏启消耗-1；再次打出（免费）解除并/named{消耗}',
+  describe: () => '火灵脉牌的魏启消耗-1',
 });
 
 // type 读取（定义缺失防御：非注册卡不参与减免）

@@ -28,8 +28,11 @@ export function canUseSkill(ctx, self) {
   }
   if (def.canUse && !def.canUse(makeSkillCtx(ctx, self))) return false;
   const free = freeChantToggle(def, self);
-  const manaOk = free || ctx.player.mana >= (def.cost?.mana ?? 0);
-  const apOk = free || ctx.player.actionPoints >= (def.cost?.actionPoint ?? 0);
+  // X 费（'X'）消耗全部现有资源，X 可为 0 → 恒可打出
+  const manaCost = def.cost?.mana ?? 0;
+  const apCost = def.cost?.actionPoint ?? 0;
+  const manaOk = free || manaCost === 'X' || ctx.player.mana >= manaCost;
+  const apOk = free || apCost === 'X' || ctx.player.actionPoints >= apCost;
   if (manaOk && apOk) return true;
   const budget = { manaOk, apOk };
   for (const id of ctx.player.abilities ?? []) {

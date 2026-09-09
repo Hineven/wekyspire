@@ -49,7 +49,7 @@ export function enemyTarget(sctx) {
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'D', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   promotesTo: 'solidShield',
   use(sctx) {
@@ -101,8 +101,6 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱3：回合开始时魏启+1；再次打出（免费）解除并回牌库',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：回合开始时魏启+1；再次打出（免费）解除并回牌库'
-    : '咏唱3：回合开始时魏启+1；再次打出（免费）解除并回牌库'),
+  describe: () => '回合开始时魏启+1',
+  battleDescribe: (sctx) => '回合开始时魏启+1',
 });

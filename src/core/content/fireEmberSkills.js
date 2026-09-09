@@ -95,7 +95,7 @@ registerSkill({
     filter: () => (sctx.self.gainedMaxMana ?? 0) > 0,
     react: (instr, ctx) => { ctx.player.maxMana -= sctx.self.gainedMaxMana; },
   }],
-  describe: () => '/named{消耗}；敌方每有4层/effect{燃烧}，魏启上限+1（本场战斗内）',
+  describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1（本场战斗内）',
   battleDescribe: (sctx) => {
     const total = totalEnemyBurn(sctx);
     return `敌方/effect{燃烧}共${total}层：魏启上限+${Math.floor(total / 4)}（本场战斗内）`;
@@ -240,7 +240,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'C', 3, 'enemy',
     });
     return true;
   },
-  describe: () => '下次你造成的攻击：每造成4伤害，赋予目标/effect{燃烧}1',
+  describe: () => '你下次造成伤害时，每4点伤害赋予目标/effect{燃烧}1',
 });
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
@@ -322,10 +322,10 @@ registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 6, 'enemy
     }
     return true;
   },
-  describe: () => '消耗所有敌人的全部/effect{燃烧}，每层对全体敌人造成1伤害',
+  describe: () => '消耗所有敌人的全部/effect{燃烧}，每层群伤1',
   battleDescribe: (sctx) => {
     const total = totalEnemyBurn(sctx);
-    return `消耗所有敌人的全部/effect{燃烧}（共${total}层），对全体敌人造成${total}伤害`;
+    return `消耗所有敌人的全部/effect{燃烧}（共${total}层），群伤${total}`;
   },
 });
 

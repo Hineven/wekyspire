@@ -51,6 +51,8 @@ export function projectUnit(u) {
 // 导出供 shell 侧同源卡面预览（CardFacePreview）复用同一映射。
 export const KEYWORD_LABELS = Object.freeze({
   exhaust: '消耗',
+  innate: '固有',
+  transient: '短暂',
   slowStart: '缓启',
   anchored: '锁定',
 });
@@ -68,6 +70,8 @@ export function projectCardFull(battle, rt) {
     cost: def.cost ?? { mana: 0, actionPoint: 0 },
     keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
+    chantWeight: def.chantWeight ?? null,
+    pack: def.pack ?? null, // 'common' = 通用灰卡：卡面走偏白主题色
     // 前端交互声明：'enemy' = 需指定敌方目标（瞄准交互）；'none' = 免目标（拖拽出牌）
     targetMode: def.targetMode ?? 'none',
     charges: def.charges ?? null,

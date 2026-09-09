@@ -34,8 +34,8 @@ function selfImmolate({ id, name, tier, base, burn }) {
       addEffect(sctx, 'burn', burn); // 默认 target = sctx.player：代价给自己
       return true;
     },
-    describe: () => `${base}伤害，获得/effect{燃烧}${burn}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，获得/effect{燃烧}${burn}`,
+    describe: () => `${base}伤害，/effect{燃烧}${burn}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，/effect{燃烧}${burn}`,
   });
 }
 
@@ -71,7 +71,7 @@ flameHealSkill({ id: 'blazingHeal', name: '炽愈', tier: 'B', base: 7, per: 2 }
 flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'A', base: 10, per: 3 });
 
 // ==== 焚原系列（§2.1：死亡传播）==============================================
-// 焚原 B｜咏唱3：敌人死亡时，其燃烧传播给所有敌人。
+// 焚原 B｜敌人死亡时，其燃烧传播给所有敌人。
 // 口径：伤害指令只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
@@ -98,14 +98,12 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱3：敌人死亡时，其燃烧传播给所有敌人',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：敌人死亡时，其燃烧传播给所有敌人'
-    : '咏唱3：敌人死亡时，其燃烧传播给所有敌人'),
+  describe: () => '敌人死亡时，其燃烧传播给所有敌人',
+  battleDescribe: (sctx) => '敌人死亡时，其燃烧传播给所有敌人',
 });
 
 // ==== 镜燃系列（§2.1：获得反哺）==============================================
-// 镜燃 C / 业火 A｜咏唱3：自己获得燃烧时，把本次增加的层数等量施加给
+// 镜燃 C / 业火 A｜自己获得燃烧时，把本次增加的层数等量施加给
 // 随机敌人 / 所有敌人。
 // 口径：「获得」= AddEffect(burn) 落在玩家身上且本次变化量为正
 // （payload.stacks > 0——经 PRE 修饰后的实际生效量；递减 -1 不算获得）；
@@ -134,10 +132,8 @@ function burnMirror({ id, name, tier, spread }) {
         },
       }],
     },
-    describe: () => `咏唱3：获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
-    battleDescribe: (sctx) => (sctx.self.isActivated
-      ? `已激活：获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`
-      : `咏唱3：获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`),
+    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
+    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
   });
 }
 
@@ -163,7 +159,7 @@ burnMirror({
 
 // ==== 咏唱（§2.2）=============================================================
 
-// 燃心决 A｜消耗 + 锁定，咏唱0：每回合 P5 咏唱节拍获得 3 魏启 + 自身燃烧 7。
+// 燃心决 A｜消耗 + 锁定，每回合 P5 咏唱节拍获得 3 魏启 + 自身燃烧 7。
 // chantWeight 0：激活后不占手牌容量；anchored：激活后不可主动打出解除（也不可换下），
 // 与 exhaust 一起表达「激活即钉死在手」——唯一出口是被焚/弃等离手路径。
 // 触发挂点 = ChantTriggerInstruction POST（「快速咏唱」提前触发复用同一挂载点）。
@@ -185,13 +181,11 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱0：每回合触发，获得3魏启，获得/effect{燃烧}7；锁定（无法主动解除）',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：每回合触发，获得3魏启，获得/effect{燃烧}7'
-    : '咏唱0：每回合触发，获得3魏启，获得/effect{燃烧}7；锁定（无法主动解除）'),
+  describe: () => '获得3魏启，/effect{燃烧}7',
+  battleDescribe: (sctx) => '获得3魏启，/effect{燃烧}7',
 });
 
-// 取暖 C｜1AP，咏唱1：每回合 P5 对所有存活敌人施加 1 层燃烧
+// 取暖 C｜1AP，每回合 P5 对所有存活敌人施加 1 层燃烧
 // （无存活敌人时循环体为空，静默落空）。层数走自然递减（敌方回合开始跳伤后 -1），
 // 是叠炎体系的慢速群压引擎。
 registerSkill({
@@ -211,13 +205,11 @@ registerSkill({
       },
     }],
   },
-  describe: () => '咏唱1：每回合触发，对所有敌人施加/effect{燃烧}1',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：每回合触发，对所有敌人施加/effect{燃烧}1'
-    : '咏唱1：每回合触发，对所有敌人施加/effect{燃烧}1'),
+  describe: () => '对所有敌人施加/effect{燃烧}1',
+  battleDescribe: (sctx) => '对所有敌人施加/effect{燃烧}1',
 });
 
-// 绝炎 A｜1AP，咏唱5：任何燃烧层数免疫消耗和下降。
+// 绝炎 A｜1AP，任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
 // 的 AddEffect(burn) 负层数（自然递减 -1 / 驱散 -N）一律 PRE veto；
 // 跳伤结算不受影响：燃烧照常按层数跳穿透伤害，只是不再衰减——
@@ -237,8 +229,6 @@ registerSkill({
       react: (instr, ctx) => ctx.kernel.veto(instr, 'absoluteFlame'),
     }],
   },
-  describe: () => '咏唱5：所有单位的/effect{燃烧}层数免疫消耗和下降',
-  battleDescribe: (sctx) => (sctx.self.isActivated
-    ? '已激活：所有单位的/effect{燃烧}层数免疫消耗和下降'
-    : '咏唱5：所有单位的/effect{燃烧}层数免疫消耗和下降'),
+  describe: () => '所有单位的/effect{燃烧}层数免疫消耗和下降',
+  battleDescribe: (sctx) => '所有单位的/effect{燃烧}层数免疫消耗和下降',
 });

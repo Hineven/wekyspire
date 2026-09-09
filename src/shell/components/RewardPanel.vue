@@ -36,12 +36,11 @@ const packMeta = (id) => PACKS[id] ?? { id, name: id, desc: '' };
       </p>
       <div class="card-choices">
         <button
-          v-for="(id, i) in run.rewards.skillChoices" :key="id"
+          v-for="id in run.rewards.skillChoices" :key="id"
           class="card-choice"
           @click="ctrl.claimReward(id)"
         >
           <CardFacePreview :skill-id="id" :ctx="{ player: run.player }" />
-          <span v-if="run.rewards.commonSlot === i" class="common-tag">通用</span>
         </button>
       </div>
       <button class="skip-link" @click="ctrl.claimReward(null)">跳过奖励</button>
@@ -64,12 +63,6 @@ const packMeta = (id) => PACKS[id] ?? { id, name: id, desc: '' };
   transform: translateY(-3px);
   border-color: #7a8fc0;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
-}
-.card-choice { position: relative; }
-.common-tag {
-  position: absolute; top: 4px; right: 4px; z-index: 2;
-  padding: 1px 7px; border-radius: 999px; font-size: 11px;
-  background: #7ab8ff; color: #0d1b2e; font-weight: bold;
 }
 .pack-name { font-size: 15px; font-weight: bold; }
 .pack-desc { font-size: 12px; color: #9aa3c0; }

@@ -190,7 +190,9 @@ describe('完整 44 层整局（测试计划：胜利/失败两条终局路径�
       d.runToEnd();
       if (d.result === 'victory' || d.floor >= 4) reached++;
     }
-    expect(reached).toBeGreaterThanOrEqual(36); // 36/40 = 90% 过教学段
+    // 2026-09 实测 35/40：早期连续上调难度（第 2 场起双敌 + 移除初始「战意」+1 力量）。
+    // 若再明显下滑，优先查卡池/初始卡组/初始能力/遭遇编成改动。
+    expect(reached).toBeGreaterThanOrEqual(35); // 35/40 ≈ 88% 过教学段
   });
 
   it('失败路径：脆皮玩家首场阵亡 → run 失败终局', () => {

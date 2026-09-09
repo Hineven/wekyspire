@@ -1485,8 +1485,9 @@ export class BattleStage {
     if (pendingId != null) {
       const card = (this._snapshot?.hand ?? []).find(c => c.uniqueID === pendingId);
       if (card?.cost) {
-        ap = card.cost.actionPoint ?? 0;
-        mana = card.cost.mana ?? 0;
+        // X 费预览：高亮全部现有资源（支付时全耗）
+        ap = card.cost.actionPoint === 'X' ? this._resources.ap.current : (card.cost.actionPoint ?? 0);
+        mana = card.cost.mana === 'X' ? this._resources.mana.current : (card.cost.mana ?? 0);
       }
     }
     this._resources.ap.setHoverCost(ap, this._resources.ap.current);

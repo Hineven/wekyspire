@@ -117,8 +117,13 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
       const free = freeChantToggle(def, this.skill);
-      const mana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
-      const ap = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      const rawMana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
+      const rawAp = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      // 【X 费】cost 为 'X' = 打出时点的全部现有资源（NAMED「消耗为X」）。实付量记在
+      // runtime.xCost 上供卡牌效果读取——支付先于 use()，效果读不到余额。
+      const mana = rawMana === 'X' ? ctx.player.mana : rawMana;
+      const ap = rawAp === 'X' ? ctx.player.actionPoints : rawAp;
+      if (rawMana === 'X' || rawAp === 'X') this.skill.xCost = { mana, actionPoint: ap };
       if (mana > 0) ctx.kernel.submitInstruction(new ConsumeManaInstruction({ amount: mana }), this);
       if (ap > 0) ctx.kernel.submitInstruction(new ConsumeActionPointsInstruction({ amount: ap }), this);
       return false;

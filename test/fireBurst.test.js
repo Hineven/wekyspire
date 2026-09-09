@@ -137,14 +137,15 @@ describe('凝焰系列：X费随当前魏启缩放', () => {
     ['flameCondense', 5, 4],
   ];
   for (const [id, naqi, perX] of cases) {
-    it(`${id}：3魏启时全耗，纳气${naqi}，自身燃烧${perX}×3`, () => {
+    it(`${id}：3魏启时全耗，纳气${naqi}，对目标施加燃烧${perX}×3`, () => {
       const d = makeDriver([id, 'punch', 'punch', 'punch'], [tank()]);
       d.player.mana = 3;
       toHand(d, id);
       d.play(id);
       expect(d.player.mana, id).toBe(0);
       expect(d.player.getEffectStacks('naqi'), id).toBe(naqi);
-      expect(d.player.getEffectStacks('burn'), id).toBe(perX * 3);
+      expect(d.player.getEffect('burn'), id).toBeNull(); // 燃烧施加给目标而非自身
+      expect(d.state.enemies[0].getEffectStacks('burn'), id).toBe(perX * 3);
     });
   }
 

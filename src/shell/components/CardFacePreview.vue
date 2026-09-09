@@ -32,6 +32,8 @@ function viewOf(def) {
     cost: def.cost ?? { mana: 0, actionPoint: 0 },
     keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
+    chantWeight: def.chantWeight ?? null,
+    pack: def.pack ?? null,
     charges: def.charges ?? null,
     text: def.describe?.(props.ctx) ?? '',
   };
