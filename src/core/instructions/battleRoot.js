@@ -8,6 +8,7 @@ import { getRelicDefinition } from '../relics/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
+import { DealDamageInstruction } from './combat.js';
 
 // 战斗根指令：完成 = 战斗结束。子节点固定为 战前 → 回合循环 → 战后。
 export class BattleRootInstruction extends BattleInstruction {
@@ -56,6 +57,16 @@ export class PreBattleInstruction extends BattleInstruction {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
       }
+
+      // 玩家最后攻击目标追踪（瑞米索敌口径：跟随主角最后攻击过的敌人）。
+      // POST = 攻击已结算；直接写 battleState 标量（纯记账，非世界变更）。
+      ctx.kernel.addSubscription({
+        when: DealDamageInstruction,
+        phase: 'post',
+        filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy',
+        react: (instr, c) => { c.battleState.lastPlayerTarget = instr.target.uniqueID; },
+        owner: 'tracker:lastPlayerTarget',
+      });
 
       // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；
       // 盟友（瑞米等）同规则——AIUnit 意图不是敌方专利

@@ -28,6 +28,7 @@ export const EventNames = {
   ANIM_CARD_BURNT: 'anim:card-burnt',
   ANIM_CARD_MOVED: 'anim:card-moved',
   ANIM_CARD_ADDED: 'anim:card-added',
+  ANIM_CARD_SHOWCASE: 'anim:card-showcase', // 结算宾语入结算区展示（原位 → 场中央）
   ANIM_CARD_TRANSFORMED: 'anim:card-transformed',
   ANIM_CARD_SWAPPED: 'anim:card-swapped',
   // 状态同步节拍：前端**显示状态**只在此时推进（快照在 start 时拉取，合并此前全部变更）。
@@ -71,6 +72,7 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_CARD_BURNT]: 3000,
   [EventNames.ANIM_CARD_MOVED]: 2500,
   [EventNames.ANIM_CARD_ADDED]: 2500,
+  [EventNames.ANIM_CARD_SHOWCASE]: 2500,
   [EventNames.ANIM_CARD_TRANSFORMED]: 3000,
   [EventNames.ANIM_CARD_SWAPPED]: 2500,
   [EventNames.ANIM_STATE_SYNC]: 2000,   // 实际时长≈0（Stage 应用快照即回 finish），兜底同理

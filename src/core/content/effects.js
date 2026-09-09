@@ -2,7 +2,7 @@ import { registerEffect } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction } from '../instructions/cards.js';
+import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 
 // 燃烧：自己阵营回合开始时受到等于层数的伤害（穿透），然后层数 -1。
@@ -248,3 +248,51 @@ registerEffect({
     },
   }],
 });
+
+// ==== 呼吸系列（刀系·弃牌回补）==================================================
+// 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层
+// （武者/完美另加格挡与力量各层数层）。正面增益：监听器生命周期与效果实例绑定
+// （首获挂载 / 扣尽注销），敌方清除增益时随层数一并拆除；回合末自行消散
+// （提交 -全部层数 → 过零自动注销订阅）。换牌（R3）内部走弃牌指令，同样触发。
+
+// 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
+const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
+  when: PlayerTurnEndInstruction,
+  phase: 'post',
+  filter: () => unit.getEffectStacks(effectId) > 0,
+  react: (instr, ctx) => ctx.kernel.submitInstruction(new AddEffectInstruction({
+    target: unit, effectId, stacks: -unit.getEffectStacks(effectId),
+  }), instr),
+});
+
+function registerBreathEffect({ id, name, enhanced }) {
+  registerEffect({
+    id, type: 'buff', stacking: 'count', name,
+    description: enhanced
+      ? '本回合内每弃 1 张牌：抽 1 张牌、获得格挡与力量各 1 层（每层各 1）。回合结束时消散。'
+      : '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
+    icon: '🌬️',
+    color: 'green',
+    subscriptions: (unit) => [{
+      when: DiscardCardInstruction,
+      phase: 'post',
+      filter: (instr) => Boolean(instr.result.card), // 落空的弃牌（牌不在手）不计
+      react: (instr, ctx) => {
+        const stacks = unit.getEffectStacks(id);
+        if (stacks <= 0) return;
+        ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: stacks }), instr);
+        if (enhanced) {
+          ctx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: 'block', stacks,
+          }), instr);
+          ctx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: 'strength', stacks,
+          }), instr);
+        }
+      },
+    }, clearsAtPlayerTurnEnd(id)(unit)],
+  });
+}
+registerBreathEffect({ id: 'breath', name: '呼吸', enhanced: false });
+registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', enhanced: true });
+registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', enhanced: true });

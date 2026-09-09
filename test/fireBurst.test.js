@@ -259,19 +259,19 @@ describe('添柴系列：焚卡换魏启', () => {
   });
 });
 
-describe('先发系列：固有 + 快速咏唱', () => {
+describe('先发系列：固有消耗直伤 + 抽1', () => {
   const cases = [['firstShot', 8], ['firstArrow', 14], ['firstFireBall', 22]];
   for (const [id, dmg] of cases) {
-    it(`${id}：不占抽牌位起手在手，${dmg}伤害并触发一次咏唱（+探针5）`, () => {
-      const d = makeDriver([id, 'chantPing', 'punch', 'punch', 'punch', 'punch'], [tank()]);
+    it(`${id}：不占抽牌位起手在手，${dmg}伤害并抽1（2026-09 修订：快速咏唱换抽牌）`, () => {
+      const d = makeDriver([id, 'punch', 'punch', 'punch', 'punch'], [tank()]);
       // initialDraw 0 下固有卡仍起手在手
       expect(d.handIds(), id).toContain(id);
-      const card = toHand(d, id);
-      toHand(d, 'chantPing');
-      d.play('chantPing'); // 激活咏唱探针
-      d.play(id); // 直伤 + 快速咏唱 → 探针触发 5 伤
-      expect(d.state.enemies[0].hp, id).toBe(500 - dmg - 5);
+      const card = d.state.zones.hand.find(c => c.defId === id);
+      const deckLen = d.state.zones.deck.length;
+      d.play(id); // 直伤 + 抽 1
+      expect(d.state.enemies[0].hp, id).toBe(500 - dmg);
       expect(zoneOf(d.state, card.uniqueID), id).toBe('burnt'); // 消耗
+      expect(d.state.zones.deck.length, id).toBe(deckLen - 1);  // 抽 1
     });
   }
 });

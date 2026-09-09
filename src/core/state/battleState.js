@@ -26,6 +26,7 @@ export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) 
       pending: [],    // 结算区（正在发动/被跨节拍结算搬运的卡；正常时序在结算树内清空，终局由 PostBattle 兜底）
     },
     turn: { count: 0, side: 'player' },             // side: 'player' | 'enemy'
+    lastPlayerTarget: null, // 主角最后攻击过的敌人 uniqueID（瑞米索敌口径；null = 本场尚未攻击过）
     swapCount: 0,       // 本场换牌次数（换牌费用 = swapBaseCost + swapCount，刀客/刀圣用 cap 封顶）
     swapCostCap: null,  // 换牌费用上限（能力在 onBattleStart 设置；null = 无上限）
     history: freshHistory(),

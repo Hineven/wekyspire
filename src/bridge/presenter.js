@@ -127,7 +127,22 @@ export function createBridgePresenter({
         anim(EventNames.ANIM_CARD_ADDED, p);
       }
     },
-    cardTransformed: (p) => { syncState(); anim(EventNames.ANIM_CARD_TRANSFORMED, p); },
+    // 宾语展示（转化等）：入场类——先 sync（离区入 pending，区域计数先变）再飞中央。
+    // cardView 由 bridge 代为投影：牌库/结算区卡不在 hand 投影内，Stage 无从取卡面
+    cardShowcased: (p) => {
+      syncState();
+      anim(EventNames.ANIM_CARD_SHOWCASE, {
+        ...p, cardView: projectCard?.(p.card) ?? null,
+      });
+    },
+    // 转化：先 sync 后演出。held/deck 来源卡不经 hand 内容同步，换脸由节拍内
+    // setCard(cardView) 承担（同 cardShowcased 的代投影理由）
+    cardTransformed: (p) => {
+      syncState();
+      anim(EventNames.ANIM_CARD_TRANSFORMED, {
+        ...p, cardView: projectCard?.(p.card) ?? null,
+      });
+    },
 
     // ---- 离场类：先离场飞行动画，后 sync（飞进坟堆数字才+1） ----
     cardDiscarded: (p) => { anim(EventNames.ANIM_CARD_DISCARDED, p); syncState(); },

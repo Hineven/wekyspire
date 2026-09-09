@@ -104,7 +104,9 @@ export function projectBattle(battle) {
     enemies: battleState.enemies.map(projectUnit),
     allies: battleState.allies.map(projectUnit),
     hand: battleState.zones.hand.map(rt => projectCardFull(battle, rt)),
-    // 结算区（发动中的卡）：仅 id 列表——卡视图已在离手前的 hand 投影中建好，
+    // 结算区（发动/被跨节拍处理的卡）：仅 id 列表——手牌来源的卡视图已在离手前
+    // 的 hand 投影中建好；牌库来源（如斩进阶的宾语转化）无既有卡面，由 presenter
+    // 的 cardShowcased/cardTransformed 载荷代投影 cardView（cardAdded 同款协议）。
     // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）；
     // 咏唱卡结算后回手（发动/关停都留在手牌，激活态 = isActivated）
     pending: battleState.zones.pending.map(rt => rt.uniqueID),

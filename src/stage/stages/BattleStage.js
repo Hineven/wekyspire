@@ -517,6 +517,14 @@ export class BattleStage {
     if (type === EventNames.ANIM_CARD_BURNT) {
       return this._burnOut(id, view, finish);
     }
+    // 回手牌（宾语转化归位/牌库抽卡）：交还手牌跟踪层——_entering 标记待飞，
+    // 锚点算出后从当前位（中央展示位）补间飞回扇形（咏唱回手 ANIM_CHANT_TOGGLED
+    // 同款 held→hand 放行路径：sync 对账的 held 守卫不解除停留，须由本节拍直写）
+    if (type === EventNames.ANIM_CARD_MOVED && payload?.toZone === 'hand') {
+      this.model.setZone(id, 'hand');
+      this._entering.add(id);
+      return finish();
+    }
     // FIFO 单循环区：非焚毁离场（打出/弃置/换牌/解除咏唱/迁移）一律回牌库底
     this.model.setZone(id, 'deck'); // 状态在节拍时点推进（模型权威）
     this._flyOut(id, view, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, finish);
@@ -849,6 +857,14 @@ export class BattleStage {
     if (type === EventNames.ANIM_CARD_SWAPPED) {
       return this._pulsePile('deck', finish);
     }
+    // 结算宾语展示（转化前半）：从原位飞到中央展示位（高于发动展示位，避免叠卡）
+    if (type === EventNames.ANIM_CARD_SHOWCASE) {
+      return this._showcaseBeat(payload, finish);
+    }
+    // 转化闪变（后半）：换脸 + 金色迸发 + 尺寸脉冲——宾语变化的生效反馈主体
+    if (type === EventNames.ANIM_CARD_TRANSFORMED) {
+      return this._transformBeat(payload, finish);
+    }
     if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
     // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
     // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
@@ -954,6 +970,38 @@ export class BattleStage {
         && event !== EventNames.ANIM_CARD_MOVED) return false;
       const pid = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID;
       return pid === id;
+    });
+  }
+
+  // 结算宾语展示（转化前半）：从原位（牌库图标/手牌扇形）飞到中央展示位——
+  // 高于发动展示位（y 4 > -2），同屏不叠卡。牌库来源视图常隐形且从未烘面：
+  // 先以 bridge 代投影的 cardView 换脸再显形起飞（cardAdded 同款协议）。
+  _showcaseBeat(payload, finish) {
+    const id = payload?.card?.uniqueID ?? null;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) return finish(); // 无载体（异常/未来机制）：直接打节拍
+    if (payload?.cardView) view.setCard(payload.cardView);
+    view.visible = true;
+    this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+      durationMs: 240,
+      onComplete: finish,
+    });
+  }
+
+  // 转化闪变（宾语变化生效反馈主体）：卡面换绑 cardView + 金色迸发 + 尺寸脉冲。
+  // held/deck 来源卡不经 _syncCardContents（只扫手牌），换脸只能由本节拍承担。
+  _transformBeat(payload, finish) {
+    const id = payload?.card?.uniqueID ?? null;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) return finish();
+    if (payload?.cardView) view.setCard(payload.cardView);
+    const p = view.position;
+    this.particles.spawn(p.x, p.y, { count: 22, color: 0xffd76a, speed: 12, ttl: 0.7, size: 1.6, z: p.z ?? 0 });
+    this.particles.spawn(p.x, p.y, { count: 10, color: 0xfff3c0, speed: 18, ttl: 0.5, size: 1.1, z: p.z ?? 0 });
+    const s0 = view.scale.x || 1;
+    this.animator.animate(id, { scale: s0 * 1.25 }, {
+      durationMs: 150,
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: finish }),
     });
   }
 

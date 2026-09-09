@@ -506,6 +506,7 @@ describe('描述双轨与投放', () => {
 
   it('promotesTo 晋升链（表序线性；S 阶梯外不作目标）', () => {
     const run = createRunState({ seed: 1 });
+    run.player.bodyLevel = 2; // 等阶门禁全开（A 封顶）：晋升链测试不受门禁干扰
     const chains = [
       ['perfectStrike', 'carefulStrike'],
       ['carefulStrike', 'foldWillow'],

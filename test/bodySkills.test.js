@@ -670,6 +670,7 @@ describe('描述双轨（应用前 describe / 应用后 battleDescribe）', () =
 describe('体修卡组：晋升链与投放', () => {
   it('拳组合晋升链（promotesTo，真拳/崩拳/敏捷连击/虚形拳/蓄力/肘击/太极/武学）', () => {
     const run = createRunState({ seed: 1 });
+    run.player.bodyLevel = 2; // 等阶门禁全开（A 封顶）：晋升链测试不受门禁干扰
     const chains = [
       ['punch', 'fastPunch'], ['fastPunch', 'cannonFist'], ['cannonFist', 'trueFist'],
       ['fierceFist', 'boomFist'], ['boomFist', 'collapseFist'],

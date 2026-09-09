@@ -519,7 +519,9 @@ describe('呼吸系列：弃牌回补', () => {
     d.dispatch(new DiscardCardInstruction({ uniqueID: victim.uniqueID }));
     expect(zoneOf(d.state, victim.uniqueID)).toBe('deck');
     expect(d.state.zones.hand.length).toBe(before);           // 弃1 → 抽1 回补
+    expect(d.player.getEffectStacks('breath'), '呼吸效果在身').toBe(1);
     d.endTurn();
+    expect(d.player.getEffect('breath'), '回合末呼吸消散').toBeNull();
     expect(zoneOf(d.state, breath.uniqueID)).toBe('deck');    // 短暂：回合结束回牌库
   });
 

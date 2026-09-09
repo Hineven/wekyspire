@@ -180,10 +180,13 @@ export class SwapCardInstruction extends BattleInstruction {
   }
 }
 
-// 转化：原地换绑 defId——uniqueID、zone、位置、power 全部延续（与焚+造的本质区别）。
+// 转化：换绑 defId——uniqueID、power 延续（与焚+造的本质区别）。
 // 白名单 ['toDefId']：PRE 可改写转化结果（"转化升阶"类能力）。
-// 换绑走 leaveBattle → enterBattle：旧 def 订阅（常驻 + activated）注销，新 def 订阅注册，
-// 充能按新 def 重置；keepPower: false 时顺带清空强化偏移。
+// 手牌/牌库来源（结算宾语，如斩进阶的目标卡）走三节拍往返（AGENTS pending 惯例）：
+//   ① 离开原区入 pending（cardShowcased：原位 → 场中央展示动画）
+//   ② 换绑（leaveBattle → enterBattle：旧 def 订阅注销、新 def 注册，充能按新 def 重置）
+//   ③ 回原区原位（cardMoved：中央 → 原位飞行动画；期间被效果另行安置则静默让位）
+// 已在结算区（发动卡自我转化——UseSkill stage 1 已入 pending）维持原地换绑。
 export class TransformCardInstruction extends BattleInstruction {
   constructor({ uniqueID, toDefId, keepPower = true }, opts = {}) {
     super(opts);
@@ -197,21 +200,46 @@ export class TransformCardInstruction extends BattleInstruction {
   buildPayload() { this.payload.toDefId = this.toDefId; }
 
   execute(ctx) {
-    const zone = zoneOf(ctx.battleState, this.uniqueID);
-    if (!zone) throw new Error(`卡牌 ${this.uniqueID} 不在任何 zone，无法转化`);
-    const arr = ctx.battleState.zones[zone];
-    const card = arr.find(c => c.uniqueID === this.uniqueID);
-
-    // 手牌中的激活咏唱先熄灭（旧 def 的 activated 能力随转化终止）
-    if (zone === 'hand') deactivateChant(ctx, card, 'leave-hand');
-    const fromDefId = card.defId;
-    leaveBattle(ctx, this.uniqueID);
-    card.defId = this.payload.toDefId;
-    if (!this.keepPower) card.power = 0;
-    enterBattle(ctx, card);
-
-    this.result = { card, fromDefId, toDefId: card.defId };
-    ctx.presenter?.cardTransformed?.({ card, fromDefId, toDefId: card.defId });
-    return true;
+    switch (this._stage) {
+      case 0: {
+        const zone = zoneOf(ctx.battleState, this.uniqueID);
+        if (!zone) throw new Error(`卡牌 ${this.uniqueID} 不在任何 zone，无法转化`);
+        this._roundtrip = zone === 'hand' || zone === 'deck';
+        if (!this._roundtrip) return false;
+        const arr = ctx.battleState.zones[zone];
+        this._fromZone = zone;
+        this._fromIndex = arr.findIndex(c => c.uniqueID === this.uniqueID);
+        const card = arr[this._fromIndex];
+        // 手牌中的激活咏唱先熄灭（旧 def 的 activated 能力随转化终止）
+        if (zone === 'hand') deactivateChant(ctx, card, 'leave-hand');
+        moveCard(ctx.battleState, this.uniqueID, 'pending'); // 裸迁移：展示演出交给 presenter 节拍
+        ctx.presenter?.cardShowcased?.({ card, fromZone: zone });
+        return false;
+      }
+      case 1: {
+        const zone = zoneOf(ctx.battleState, this.uniqueID);
+        const card = ctx.battleState.zones[zone].find(c => c.uniqueID === this.uniqueID);
+        const fromDefId = card.defId;
+        leaveBattle(ctx, this.uniqueID);
+        card.defId = this.payload.toDefId;
+        if (!this.keepPower) card.power = 0;
+        enterBattle(ctx, card);
+        this.result = { card, fromDefId, toDefId: card.defId };
+        ctx.presenter?.cardTransformed?.({ card, fromDefId, toDefId: card.defId });
+        return false;
+      }
+      default: {
+        if (!this._roundtrip) return true;
+        // 落位校验：期间被效果另行安置（焚毁/迁移）则静默让位（pending 惯例）
+        if (zoneOf(ctx.battleState, this.uniqueID) !== 'pending') return true;
+        const zones = ctx.battleState.zones;
+        const card = zones.pending.find(c => c.uniqueID === this.uniqueID);
+        // 回原区原位；手牌位次可能已变（展示期间抽/弃），钳到当前长度内
+        const index = Math.min(this._fromIndex, zones[this._fromZone].length);
+        moveCard(ctx.battleState, this.uniqueID, this._fromZone, { index });
+        ctx.presenter?.cardMoved?.({ card, toZone: this._fromZone });
+        return true;
+      }
+    }
   }
 }

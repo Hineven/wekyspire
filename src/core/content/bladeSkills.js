@@ -5,7 +5,7 @@
 //   回旋斩 —— 牌库末抽牌（与牌库顶抽牌形成规划语言）；
 //   飞刀   —— 邻牌献祭（两侧语义统一读「打出那一刻」，helpers.handNeighborsAtPlay）；
 //   藏锋   —— 高伤换滞气（stall：无法抽牌）；
-//   呼吸   —— 弃牌回补（本回合每弃 1 抽 1，turn 窗口订阅）；
+//   呼吸   —— 弃牌回补（同名效果承担弃牌监听 + 回合末自清，见 content/effects.js）；
 //   培植/开刃（深入卡砺刀系）—— 以 runtime.power / SkillCooldownInstruction 表达的养刀轴；
 //   刀法咏唱 —— 抽弃循环的持续引擎。
 // 通用约定（与 bodySkills/blockSkills 一致）：
@@ -32,7 +32,6 @@ import {
   TransformCardInstruction,
 } from '../instructions/cards.js';
 import { DealDamageInstruction } from '../instructions/combat.js';
-import { AddEffectInstruction } from '../instructions/effects.js';
 import { ChantTriggerInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import {
   attackDamage, resolvedDamageText, gainBlock, addEffect,
@@ -492,10 +491,10 @@ sheathCard('hiddenEdge', '潜锋', 'B', 23, 2);
 sheathCard('sheathEdge', '藏锋', 'A', 48, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
-// 本回合每弃 1 牌触发一次（turn 窗口订阅 DiscardCardInstruction POST——回合结束
-// 随 P8 清扫；只算真实弃掉的，过期引用静默落空不算）。换牌（R3）也走弃牌指令，
-// 同样计入。打出自身不是弃牌（pending→burnt 的消耗路径）。
-const breathCard = (id, name, tier, { block = 0, strength = 0, fleeting = true }) => registerSkill({
+// 打出即获得同名「呼吸」效果（content/effects.js：弃牌 POST 监听 + 回合末自清，
+// 生命周期与效果实例绑定——被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，
+// 同样计入；打出自身不是弃牌（pending→burnt 的消耗路径）。
+const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, fleeting = true }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: fleeting ? ['exhaust', 'transient'] : ['exhaust'],
   cost: { mana: 0, actionPoint: 1 },
@@ -503,23 +502,7 @@ const breathCard = (id, name, tier, { block = 0, strength = 0, fleeting = true }
   cardMode: 'normal',
   use(sctx) {
     if (fleeting) returnToDeckAtTurnEnd(sctx);   // 【短暂】：焚毁后回合结束回牌库
-    sctx.kernel.addSubscription({
-      when: DiscardCardInstruction, phase: 'post', window: 'turn',
-      filter: (instr) => Boolean(instr.result.card),
-      react: (instr, ctx) => {
-        ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
-        if (block > 0) {
-          ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: ctx.player, effectId: 'block', stacks: block,
-          }), instr);
-        }
-        if (strength > 0) {
-          ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: ctx.player, effectId: 'strength', stacks: strength,
-          }), instr);
-        }
-      },
-    });
+    addEffect(sctx, effectId, 1);
     return true;
   },
   describe: () => '本回合每弃1牌：抽1牌'
@@ -529,9 +512,9 @@ const breathCard = (id, name, tier, { block = 0, strength = 0, fleeting = true }
     + (block > 0 ? '，/effect{格挡}1' : '')
     + (strength > 0 ? '，/effect{力量}1' : ''),
 });
-breathCard('breath', '呼吸', 'C', {});
-breathCard('warriorBreath', '武者呼吸', 'B', { block: 1, strength: 1 });
-breathCard('perfectBreath', '完美呼吸', 'A', { block: 1, strength: 1, fleeting: false });
+breathCard('breath', '呼吸', 'C', { effectId: 'breath' });
+breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, strength: 1 });
+breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 1, strength: 1, fleeting: false });
 
 // ==== 培植系列（养刀）==========================================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
