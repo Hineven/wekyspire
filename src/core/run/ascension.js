@@ -69,26 +69,46 @@ export function abilityOffering(_run) {
 
 // ---- 种子包（首次 0→1）----
 
-// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡
+// 进阶链只开链头（链中最低级）：凡被任何卡的 promotesTo 指向的定义都不是链头，
+// 从种子池剔除——高阶形态由局外晋升获得，同链 D/C 并列出现是噪音（用户 2026-09 定）。
+// 注意只认 promotesTo（局外晋升链）；battlePromotesTo（斩局内转化链）与晋升无关，
+// 且斩链进阶卡已被 canSpawnAsReward === false 排除。
+function chainTargets() {
+  const targets = new Set();
+  for (const def of allSkills()) {
+    if (def.promotesTo) for (const id of [def.promotesTo].flat()) targets.add(id);
+  }
+  return targets;
+}
+
+// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡 + 进阶链只留链头
 export function seedPool(run, dimension) {
+  const chained = chainTargets();
   return allSkills().filter(def =>
     packOf(def) === dimension
     && (def.tier === 'D' || def.tier === 'C')
     && def.canSpawnAsReward !== false
     && def.seedEligible !== false
-    && !SEED_EXCLUDED.has(def.id));
+    && !SEED_EXCLUDED.has(def.id)
+    && !chained.has(def.id));
 }
 
-// 抽 N 张互不重复（走 run rng；exclude 用于刷新时优先避开已出现过的卡）
+// 抽 N 张互不重复（走 run rng；exclude 用于刷新时优先避开已出现过的卡）。
+// 必出卡（def.seedGuaranteed === true，如火的点火——体系的燃烧入口，九选三缺它等于
+// 发不出体系骨架）始终占位，不受刷新避让影响；落位洗牌，必出卡不固定占头部格子。
 export function rollSeedCards(run, dimension, exclude = []) {
   const excluded = new Set(exclude);
   let pool = seedPool(run, dimension).filter(def => !excluded.has(def.id));
   if (pool.length < SEED_OFFERING.cards) pool = seedPool(run, dimension); // 池子太小：允许重复出现
-  const remaining = [...pool];
-  const picks = [];
+  const picks = pool.filter(def => def.seedGuaranteed === true);
+  const remaining = pool.filter(def => def.seedGuaranteed !== true);
   while (picks.length < SEED_OFFERING.cards && remaining.length) {
     const i = run.rng.int(0, remaining.length - 1);
     picks.push(remaining.splice(i, 1)[0]);
+  }
+  for (let i = picks.length - 1; i > 0; i--) { // Fisher–Yates 落位洗牌（同走 run rng）
+    const j = run.rng.int(0, i);
+    [picks[i], picks[j]] = [picks[j], picks[i]];
   }
   return picks.map(def => def.id);
 }

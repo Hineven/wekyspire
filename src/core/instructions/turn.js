@@ -44,7 +44,7 @@ export class EnemyTurnEndInstruction extends TurnEndInstruction {
 
 // 咏唱触发挂载点（battle.md P5「主角咏唱卡触发」）：本身无结算，激活咏唱卡的
 // 触发效果 = 其 POST 订阅（activated.subscriptions 注册，owner = 卡牌，熄灭时注销）。
-// 「快速咏唱」（先发火系列）等价于提前提交一次本指令——同一挂载点复用，触发逻辑单一。
+// 「快速咏唱」等价于提前提交一次本指令——同一挂载点复用，触发逻辑单一。
 export class ChantTriggerInstruction extends BattleInstruction {
   execute() { return true; }
 }
@@ -124,9 +124,14 @@ export class EnemyTurnInstruction extends BattleInstruction {
         }
         return false;
       case 2:
+        // 下回合意图预算：敌我 AI 单位同刷（盟友行动在玩家回合 P7，此处一并预告）
         for (const e of aliveEnemies(ctx.battleState)) {
           const def = getEnemyDefinition(e.defId);
           e.intention = def.getIntention ? def.getIntention(e, ctx.battleState) : { kinds: ['unknown'] };
+        }
+        for (const a of aliveAllies(ctx.battleState)) {
+          const def = getAllyDefinition(a.defId);
+          a.intention = def.getIntention ? def.getIntention(a, ctx.battleState) : { kinds: ['unknown'] };
         }
         ctx.kernel.submitInstruction(new EnemyTurnEndInstruction(), this);
         return false;

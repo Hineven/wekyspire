@@ -2,7 +2,7 @@
 // 卡面预览（战斗同源）：直接调战场牌面烘焙器 bakeCardFace 出 dataURL，
 // 与战场卡走同一渲染管线（等阶边框/费用徽章/富文本正文/卡图）——所见即所得，
 // 无需在 Vue 面板里维护第二套卡面样式。
-// 富文本热区（named/effect/skill）与战斗共用同一 tooltip 契约：命中判定走
+// 富文本热区（named/effect/card）与战斗共用同一 tooltip 契约：命中判定走
 // layout.hitTestRegions（与 CardObject 3D 拾取同一实现），内容与浮层走
 // tooltipHub（App.vue 的 TooltipOverlay 统一渲染）。
 // 卡图异步加载：未命中先按无图出卡，加载完成订阅重出（与战场 addOnLoad 重烘同语言）。

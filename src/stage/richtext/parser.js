@@ -1,23 +1,41 @@
 // RichTextEngine 解析器：markup 文本 → token 流。
 // 语法与旧 ColoredText.vue 完全等价：
-//   /颜色{文本}     颜色名（red/blue/green/purple 等，排除保留字 effect/named/skill）
+//   /颜色{文本}     颜色名（red/blue/green/purple 等，排除保留字 effect/named/card）
 //   /effect{效果名}  行内效果引用：图标（定义 emoji，无图标回落徽章）+ 特征色名称文本，
 //                    两段都是热区（tooltip 由 Shell 消费）；外观经 resolveEffect/drawIcon 注入
 //   /named{实体名}   命名实体（可交互热区，tooltip 由 Shell 消费）
-//   /skill{卡名}     行内卡牌引用，支持末尾 +N/-N 威力差值
+//   /card{卡id, k=v, ...}  行内卡牌引用：卡名按 id 从注册表反查（卡面印出的名字永远等于
+//                    定义名，改名不失配）；k=v 为卡参数（字符串值，消费方自行 Number()），
+//                    预览时经 ctx.params 透传给 def.describe 插值；热区 tooltip 为整卡预览
 // 解析器是纯函数，不依赖任何渲染环境；icon/color 等外观解析是 layout/texture 的职责。
 
 const COLOR_RE = /\/(\w+)\{([^}]+)\}/g;
 const EFFECT_RE = /\/effect\{([^}]+)\}/g;
 const NAMED_RE = /\/named\{([^}]+)\}/g;
-const SKILL_RE = /\/skill\{([^}]+)\}/g;
+const CARD_RE = /\/card\{([^}]+)\}/g;
 
-const RESERVED = ['effect', 'named', 'skill'];
+const RESERVED = ['effect', 'named', 'card'];
+
+/**
+ * 解析 /card{...} 的参数体：'instantStrike' / 'ironShard, damage=10, tier=B'
+ * → { cardId, params }（params 值恒为字符串；无参数时为 {}）。
+ */
+export function parseCardRef(raw) {
+  const parts = String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  const cardId = parts.shift() ?? '';
+  const params = {};
+  for (const kv of parts) {
+    const eq = kv.indexOf('=');
+    if (eq <= 0) continue; // 无 = 的裸段静默丢弃（前向兼容）
+    params[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+  }
+  return { cardId, params };
+}
 
 /**
  * 解析 markup 文本为 token 流。
  * @param {string} text
- * @returns {Array<{type:string, content?:string, color?:string, effectName?:string, powerDelta?:number}>}
+ * @returns {Array<{type:string, content?:string, color?:string, effectName?:string, cardId?:string, params?:object}>}
  */
 export function parseRichText(text) {
   if (typeof text !== 'string' || text.length === 0) return [];
@@ -41,17 +59,9 @@ export function parseRichText(text) {
     matches.push({ index: match.index, lastIndex: NAMED_RE.lastIndex, type: 'named', content: match[1] });
   }
 
-  SKILL_RE.lastIndex = 0;
-  while ((match = SKILL_RE.exec(text)) !== null) {
-    const raw = match[1].trim();
-    let skillName = raw;
-    let powerDelta = 0;
-    const m2 = raw.match(/^(.*?)([+-]\d+)$/);
-    if (m2) {
-      skillName = m2[1].trim();
-      powerDelta = parseInt(m2[2], 10) || 0;
-    }
-    matches.push({ index: match.index, lastIndex: SKILL_RE.lastIndex, type: 'skill', content: skillName, powerDelta });
+  CARD_RE.lastIndex = 0;
+  while ((match = CARD_RE.exec(text)) !== null) {
+    matches.push({ index: match.index, lastIndex: CARD_RE.lastIndex, type: 'card', ...parseCardRef(match[1]) });
   }
 
   matches.sort((a, b) => a.index - b.index);
@@ -76,8 +86,8 @@ function stripRange(match) {
 }
 
 /**
- * token 是否为可交互热区（named/skill/effect 会弹 tooltip）。
+ * token 是否为可交互热区（named/card/effect 会弹 tooltip）。
  */
 export function isInteractiveToken(token) {
-  return token.type === 'named' || token.type === 'skill' || token.type === 'effect';
+  return token.type === 'named' || token.type === 'card' || token.type === 'effect';
 }

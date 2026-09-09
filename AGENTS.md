@@ -67,7 +67,7 @@ MapStage 与 BattleStage 共享同一 canvas，由 `StageManager` 切换。run �
   - **跳过进阶**：不选灵脉，改记 1 点隐藏体修等级（`player.bodyLevel`，体修卡包门禁），同样享受全恢复与魏启上限 +1，但不触发种子包——故事模式暗线（体修大成）。
   - **种子包**（2026-09）：灵脉**首次 0→1** 时开九选三（可刷新一次），种子池限定该维度 D/C 基石卡并排除「需前置储备才生效」的组合件（排除表见 `ascension.js` 的 `SEED_EXCLUDED`，内容侧也可用 `seedEligible: false` 标注）。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 工厂产出同构注册表：skills/、abilities/、enemies/、allies/、relics/、effects/。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
-- **`content/`** — 最小内容实现（技能/体修卡组/敌人/能力/遗物/效果/盟友）。技能设计意图见 **`skills/SKILL_DESIGN_PRINCIPLES.md`**（等阶 D→C→B→A，S/Z 阶梯外；升阶=局外 Transform；powerUp 养成轴已废弃）。
+- **`content/`** — 最小内容实现（技能/体修卡组/敌人/能力/遗物/效果/盟友）。技能设计意图见 **`skills/SKILL_DESIGN_PRINCIPLES.md`**（等阶 D→C→B→A，S/Z 阶梯外；升阶=局外 Transform；powerUp 养成轴已废弃）。晋升字段分离：**局外晋升**（营地/训练场 `promotion.js`）走 `promotesTo`；**局内转化链**（斩系列「打出后进阶」）走 `battlePromotesTo`——两者互不可见，斩卡永不出现在局外升级候选（用户 2026-09 定）。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。
 - **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。
 
@@ -87,6 +87,7 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环；`CAMERA
 
 ## 测试
 
+- **测试维护暂停（用户 2026-09 定，提速优先）**：新改动不再新增/同步测试，也不再以 `npm test` 全绿为验收门槛——存量测试随之失效属预期，不要为其花工时。浏览器行为由用户验收。本条与下方各条冲突时以本条为准。
 - 全部测试在 `test/*.test.js`，Vitest 直接跑，无 setup 文件。命名按主题（kernel / battle / fireVein / runFlow / cardFace …）。
 - 战斗类测试用 headless SDK（`BattleDriver` / `RunDriver`）驱动真实结算，不 mock Core；断言依赖注册表内容时先 `import '../src/core/content/index.js'` 触发登记。
 - **测试范围方针**：只测后端结算逻辑、程序骨干逻辑（gameflow/路由/状态机）与基础设施逻辑（资源加载卸载、订阅退订、前端绘制同步竞态、几何绕序回归等）。**前端视觉样式与演出特效一律不写测试**——布局/颜色/淡入淡出曲线/脉动，以及一切演出特效参数（粒子数量/颜色/尺寸、震荡与渐晕的强度/时长曲线、动画时长/缓动/位移距离、死亡倒地演出等）：这些是必然反复调整的视觉调参，精确断言改动即炸、维护纯属浪费；浏览器视觉由用户验收。若测试必须触碰演出路径，只保留**鲁棒的语义/骨架断言**（如「节拍正常 finish 不卡队列」「A 场景比 B 场景粒子多」「对象最终退场」），绝不断言具体数值。
@@ -108,6 +109,7 @@ Three.js 表现层：`StageManager`（舞台切换/resize/渲染循环；`CAMERA
 - 卡面描述双轨：`describe`（应用前，无战斗上下文，纯文本）/ `battleDescribe`（结算中，数字按实时局面）。
 - **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词（消耗/固有/短暂/锁定/缓启）走徽章与页脚词条行（`cardFace.js` 的 `drawFooter`），**不要在 `describe`/`battleDescribe` 里复述**（如「冷却8」「消耗。」）；系统信息复述是卡面臃肿的主要来源。咏唱卡的「**咏唱N：**」前缀由渲染层自动加（`cardFace.js` 的 `chantPrefixedText`，named 热区），**激活前后文案不变**——不写「已激活」。
 - **通用机制词走 named 术语**：跨卡复用的机制关键词（斩/衰败等）定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数如 `衰败2`），卡面 markup 用 `/named{术语}`（热区自动接 tooltip）；机制本体写进 def 字段/订阅（如 `cooldownZones`、`decay`），不要把长机制文本摊在卡面上。
+- **卡间引用走 `/card{卡id, k=v, ...}`**：卡面文本提及另一张卡（洗入/发现的衍生牌等）一律用 id 引用（卡面印出的名字按 id 反查，改名不失配），hover 热区弹**整卡预览**（TooltipOverlay 内嵌 CardFacePreview，应用前口径，params 经 `ctx.params` 透传 `describe` 插值）；不要写「卡名」裸文本。
 - 注意：`.trae/rules/project_rules.md` 中关于 `backendGameState/displayGameState`、`animationSequencer.js` 的描述是**旧架构**残留——现行架构见本文件与 README（Bridge + projection + EventNames），以代码为准。
 
 ## 权威设计文档

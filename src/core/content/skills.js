@@ -60,6 +60,7 @@ registerSkill({
 });
 
 // ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
+// 点火是火体系的燃烧入口，种子包必出（seedGuaranteed）——九选三缺它发不出体系骨架（用户 2026-09 定）
 registerSkill({
   id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
@@ -67,6 +68,7 @@ registerSkill({
   cardMode: 'normal',
   targetMode: 'enemy',
   promotesTo: 'blaze',
+  seedGuaranteed: true,
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({

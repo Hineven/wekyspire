@@ -40,12 +40,17 @@ describe('richtext/layout', () => {
     expect(r.hitRegions[1].rect).toEqual({ x: 0, y: 22, w: 30, h: 22 });
   });
 
-  it('skill token = 图标 + 文字，两段都是热区', () => {
-    const r = layout('/skill{斩击+2}');
+  it('card token = 图标 + 反查卡名文本（特征色），两段都是热区且携带 id 与参数', () => {
+    const r = layout('/card{ironShard, damage=10}', {
+      resolveCard: (id) => (id === 'ironShard' ? { name: '碎铁', color: '#c9a06a' } : {}),
+    });
     const icon = r.placements.find(p => p.kind === 'icon');
-    expect(icon).toMatchObject({ iconType: 'skill', name: '斩击' });
+    expect(icon).toMatchObject({ iconType: 'card', name: '碎铁' });
+    // 印出的是反查到的卡名而非 id
+    expect(r.placements.filter(p => p.kind === 'glyph').map(g => g.char).join('')).toBe('碎铁');
     expect(r.hitRegions.length).toBe(2);
-    expect(r.hitRegions.every(h => h.type === 'skill' && h.payload.powerDelta === 2)).toBe(true);
+    expect(r.hitRegions.every(h => h.type === 'card'
+      && h.payload.cardId === 'ironShard' && h.payload.params.damage === '10')).toBe(true);
   });
 
   it('effect token = 图标 + 特征色名称文本，两段都是热区', () => {

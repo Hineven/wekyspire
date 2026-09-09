@@ -8,7 +8,7 @@
 export const DEFAULT_TEXT_STYLE = Object.freeze({
   fontSize: 16,
   lineHeight: 22,
-  iconSize: 18,       // /effect{} /skill{} 行内图标边长
+  iconSize: 18,       // /effect{} /card{} 行内图标边长
   iconGap: 2,         // 图标与相邻文本的间距
   color: '#ffffff',
   fontWeight: 'normal', // 'bold' 等（伤害数字等强调文本用）
@@ -31,10 +31,11 @@ export const DEFAULT_COLOR_TABLE = Object.freeze({
  *   colorTable: 颜色名 → css 颜色
  *   resolveNamed: (name) => ({ color? }) 命名实体外观
  *   resolveEffect: (name) => ({ color? }) 效果外观（名称特征色；css 颜色或颜色表颜色名）
+ *   resolveCard: (cardId) => ({ name?, color? }) 卡牌外观（id → 显示名 + 特征色）
  * @returns {{ width:number, height:number, placements:Array, hitRegions:Array }}
  *   placement: { kind:'glyph', char, x, y, width, style:{fontSize,color} }
- *            | { kind:'icon', iconType:'effect'|'skill', name, x, y, size }
- *   hitRegion: { type:'named'|'skill'|'effect', payload:{name, powerDelta?}, rect:{x,y,w,h} }
+ *            | { kind:'icon', iconType:'effect'|'card', name, x, y, size }
+ *   hitRegion: { type:'named'|'card'|'effect', payload:{name}|{cardId, params}, rect:{x,y,w,h} }
  */
 export function layoutRichText(tokens, options) {
   const {
@@ -43,6 +44,7 @@ export function layoutRichText(tokens, options) {
     colorTable = DEFAULT_COLOR_TABLE,
     resolveNamed = () => ({}),
     resolveEffect = () => ({}),
+    resolveCard = () => ({}),
   } = options;
   if (typeof measure !== 'function') throw new Error('layoutRichText: measure(text, style) is required');
 
@@ -115,13 +117,16 @@ export function layoutRichText(tokens, options) {
         }
         break;
       }
-      case 'skill': {
-        const iconRun = placeIcon('skill', token.content);
-        hitRegions.push({ type: 'skill', payload: { name: token.content, powerDelta: token.powerDelta || 0 }, rect: { x: iconRun.x, y: iconRun.y, w: iconRun.w, h: st.lineHeight } });
-        const label = token.powerDelta ? `${token.content}${token.powerDelta > 0 ? '+' : ''}${token.powerDelta}` : token.content;
-        const runs = placeText(label, { color: st.color });
+      case 'card': {
+        // 卡名按 id 反查（resolveCard 注入，缺省回落原文 id）；图标 + 名称文本两段热区
+        const look = resolveCard(token.cardId) || {};
+        const label = look.name ?? token.cardId;
+        const payload = { cardId: token.cardId, params: token.params ?? {} };
+        const iconRun = placeIcon('card', label);
+        hitRegions.push({ type: 'card', payload, rect: { x: iconRun.x, y: iconRun.y, w: iconRun.w, h: st.lineHeight } });
+        const runs = placeText(label, { color: colorTable[look.color] || look.color || st.color });
         for (const run of runs) {
-          if (run.w > 0) hitRegions.push({ type: 'skill', payload: { name: token.content, powerDelta: token.powerDelta || 0 }, rect: { x: run.x, y: run.y, w: run.w, h: st.lineHeight } });
+          if (run.w > 0) hitRegions.push({ type: 'card', payload, rect: { x: run.x, y: run.y, w: run.w, h: st.lineHeight } });
         }
         break;
       }

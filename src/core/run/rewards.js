@@ -8,6 +8,8 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 // 等阶门禁按**该体系自己的等级**（专精昂贵是设计意图，用户 2026-09 定调）：
 //   灵脉包看 leino[维度]，体修包看隐藏的 player.bodyLevel（跳过进阶时 +1）；
 //   0 级 → 只出 D/C；1 级 → 解锁 B；2 级 → 解锁 A。
+// 门禁之内按等阶加权生成（TIER_WEIGHTS，用户 2026-09 定）：相对上限本阶 20% /
+// 低一阶 55% / 低两阶 25%，更低阶不掉落；战后开包与训练抓牌共用同一加权口径。
 // 通用包（汲取/魏启罐/激发/杂技）**不可直接选择**：以 COMMON_INJECT 概率混入任意卡包，
 // 并有保底计数（每 pity 次开包必出一次）；「保证其价值」= 池内存在 C 以上卡时剔除 D。
 // S（事件投放）与 Z（诅咒）恒不入池；canSpawnAsReward=false 的衍生牌不入池。
@@ -18,7 +20,7 @@ export const REWARDS_PLACEHOLDER = {
   skillChoiceCount: 3,
 };
 
-const TIER_RANK = { D: 0, C: 1, B: 2, A: 3 };
+export const TIER_RANK = { D: 0, C: 1, B: 2, A: 3 };
 export const TIER_UNLOCK_LEINO = { B: 1, A: 2 }; // 该维度灵脉等级 → 解锁等阶
 
 // ---- 卡包（维度）定义：id 与 player.leino 的键同名 ----
@@ -78,6 +80,52 @@ export function commonPool(run, capTier) {
   return pool;
 }
 
+// ---- 等阶加权抽取（用户 2026-09 定）：战后奖励与训练抓牌统一的卡牌生成概率 ----
+// 相对本次抽取的等阶上限：本阶 20% / 低一阶 55% / 低两阶 25%，更低阶不掉落。
+// 最低档（D）吸收其下无归属的权重：上限 C 时 D = 55+25 = 80%（即开局体修 C 恰为 20%）。
+export const TIER_WEIGHTS = Object.freeze([20, 55, 25]);
+
+// 单卡权重：def 等阶相对上限 capTier 的档位权重（超上限 → 0；差三阶以上 → 0）
+export function tierWeight(def, capTier) {
+  const rank = TIER_RANK[def.tier];
+  const cap = TIER_RANK[capTier];
+  if (rank == null || cap == null) return 0;
+  const offset = cap - rank;
+  if (offset < 0) return 0;
+  if (offset >= TIER_WEIGHTS.length) return 0; // 差三阶以上（上限 A 时的 D）：不掉落
+  if (rank === 0) return TIER_WEIGHTS.slice(offset).reduce((a, b) => a + b, 0); // D 吸收低档余量
+  return TIER_WEIGHTS[offset];
+}
+
+// 加权不放回抽取（走 run rng，确定性）。按**档位**（权重值分组）先掷档位、再在档内均匀
+// 取卡——档级概率恒为 20/55/25，与池内各等阶卡数无关（卡数只影响档内哪张，不影响档间比例）。
+function rollWeighted(run, defs, weightOf, count) {
+  const classes = new Map(); // 档位权重 -> 该档剩余卡
+  for (const def of defs) {
+    const w = weightOf(def);
+    if (w <= 0) continue;
+    if (!classes.has(w)) classes.set(w, []);
+    classes.get(w).push(def);
+  }
+  const picks = [];
+  while (picks.length < count && classes.size) {
+    let total = 0;
+    for (const w of classes.keys()) total += w;
+    let r = run.rng.next() * total;
+    let chosenW = null;
+    for (const w of classes.keys()) {
+      r -= w;
+      if (r <= 0) { chosenW = w; break; }
+    }
+    if (chosenW == null) chosenW = [...classes.keys()].at(-1);
+    const group = classes.get(chosenW);
+    const i = run.rng.int(0, group.length - 1); // 档内均匀取一张
+    picks.push(group.splice(i, 1)[0]);
+    if (!group.length) classes.delete(chosenW); // 档抽空 → 整档移出，后续按剩余档归一
+  }
+  return picks;
+}
+
 // 可开卡包：体修恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
@@ -102,15 +150,11 @@ export function spawnableCardPool(run = null) {
   return out;
 }
 
-// 包内抽 3 选 1 候选（走 run rng，确定性；不重复）
+// 包内抽 3 选 1 候选（走 run rng，确定性；不重复；等阶加权见 TIER_WEIGHTS）
 export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLDER.skillChoiceCount) {
-  const remaining = packCardPool(run, packId);
-  const picks = [];
-  while (picks.length < count && remaining.length) {
-    const i = run.rng.int(0, remaining.length - 1); // 需 splice 去重故手取下标；与 rng.pick 同消耗
-    picks.push(remaining.splice(i, 1)[0]);
-  }
-  return picks.map(def => def.id);
+  const cap = maxRewardTier(run, packId);
+  return rollWeighted(run, packCardPool(run, packId), def => tierWeight(def, cap), count)
+    .map(def => def.id);
 }
 
 // 进入 reward 阶段：金币自动入账 + 列出可选卡包；只有一个包时自动开包（少一步点击）
@@ -162,15 +206,14 @@ export function chooseRewardPack(run, packId) {
   return run;
 }
 
-// 训练房抓牌：从**所有已解锁卡包的并集**抽 3（各包按各自门禁），并同样注入通用卡。
-// 门禁取已解锁卡包中的最高档，供通用池筛选。
+// 训练房抓牌：从**所有已解锁卡包的并集**抽 3（各包按各自门禁 + 各自等阶加权），
+// 并同样注入通用卡。门禁取已解锁卡包中的最高档，供通用池筛选。
 export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount) {
-  const remaining = [...spawnableCardPool(run)];
-  const picks = [];
-  while (picks.length < count && remaining.length) {
-    const i = run.rng.int(0, remaining.length - 1);
-    picks.push(remaining.splice(i, 1)[0].id); // 先取 id：注入会原地替换元素
-  }
+  const picks = rollWeighted(
+    run, spawnableCardPool(run),
+    def => tierWeight(def, maxRewardTier(run, packOf(def))), // 每卡按所属包的门禁加权
+    count,
+  ).map(def => def.id); // 先取 id：注入会原地替换元素
   const caps = availablePacks(run).map(p => TIER_RANK[maxRewardTier(run, p.id)]);
   const capTier = Object.keys(TIER_RANK).find(t => TIER_RANK[t] === Math.max(...caps)) ?? 'C';
   injectCommon(run, picks, capTier); // 训练抓牌不展示通用角标，注入结果直接生效

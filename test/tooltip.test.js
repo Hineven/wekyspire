@@ -5,7 +5,7 @@ import { tooltipState, tooltipShow, tooltipMove, tooltipHide } from '../src/shel
 
 // tooltip 契约：tooltipModel(kind, payload) 是唯一内容解析器（渲染在 App.vue 的
 // TooltipOverlay）；effect 优先 effectId 反查、缺省按显示名（markup 快照语义）；
-// skill/named/shift/intention 各按契约；未注册回落方括号标识。
+// card 按 id 反查出整卡预览模型，named/shift/intention 各按契约；未注册回落方括号标识。
 // tooltipHub 是 hover 生命周期状态机（同 token 抑制 / 跟随 / hide 后不复活）。
 
 describe('tooltipModel：内容契约', () => {
@@ -16,18 +16,19 @@ describe('tooltipModel：内容契约', () => {
     expect(tooltipModel('effect', { effectId: 'burn', name: '燃烧' }).title).toContain('燃烧');
   });
 
-  it('skill：按名反查，含费用行与威力增量', () => {
-    const m = tooltipModel('skill', { name: '收刃', powerDelta: 2 });
+  it('card：按 id 反查，模型带整卡预览（skillId + params + 估算尺寸）', () => {
+    const m = tooltipModel('card', { cardId: 'storeEdge', params: { a: '1' } });
     expect(m.title).toBe('收刃');
-    expect(m.delta).toBe(2);
-    expect(m.body).toContain('AP1');
-    expect(tooltipModel('skill', { name: '不存在' }).title).toBe('[skill] 不存在');
+    expect(m.cardPreview).toEqual({ skillId: 'storeEdge', params: { a: '1' } });
+    expect(m.size).toBeDefined(); // 边缘翻转用的估算尺寸
+    expect(tooltipModel('card', { cardId: '不存在' }).title).toBe('[card] 不存在');
+    expect(tooltipModel('card', { cardId: '不存在' }).cardPreview).toBeUndefined();
   });
 
   it('named：经术语表反查（参数插值），未注册回落原文标题', () => {
     expect(tooltipModel('named', { name: '瑞米' })).toEqual({ title: '瑞米', body: '' });
     expect(tooltipModel('named', { name: '斩' }))
-      .toEqual({ title: '斩', body: '此卡无法被焚毁（改为回牌库，冷却1）；打出后进阶；只在牌库中冷却充能' });
+      .toEqual({ title: '斩', body: '此卡无法被焚毁（改为回牌库，冷却1）；打出后进阶；只在牌库中冷却充能；不可局外晋升' });
     expect(tooltipModel('named', { name: '衰败2' }))
       .toEqual({ title: '衰败2', body: '在手牌中持有且未完全冷却时，回合结束时反向冷却2' });
   });
@@ -42,6 +43,9 @@ describe('tooltipModel：内容契约', () => {
       .toBe('下回合将造成 8 点伤害，强化自身');
     expect(tooltipModel('intention', { intention: { kinds: ['unknown'] } }).body).toBe('下回合行动未知');
     expect(tooltipModel('intention', { intention: { kinds: ['defend'] } }).title).toBe('意图');
+    // note：行动逻辑补充说明（瑞米固定索敌规则）
+    expect(tooltipModel('intention', { intention: { kinds: ['attack'], hits: 1, damage: 2, note: '目标：最靠前的存活敌人' }, unitName: 'remi' }))
+      .toEqual({ title: 'remi的意图', body: '下回合将造成 2 点伤害；目标：最靠前的存活敌人' });
   });
 
   it('shift：详情方标提示直出热区携带的文案', () => {

@@ -200,7 +200,7 @@ function registerChargeShuffle({ id, name, tier, count, promotesTo = null }) {
       for (let i = 0; i < count; i++) addCard(sctx, 'instantStrike', { index: 'random' });
       return true;
     },
-    describe: () => `/named{洗入}${count}「瞬击」`,
+    describe: () => `/named{洗入${count}}/card{instantStrike}`,
   });
 }
 
@@ -229,8 +229,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '/named{洗入}4「瞬击」',
-  battleDescribe: (sctx) => '/named{洗入4}「瞬击」',
+  describe: () => '/named{洗入4}/card{instantStrike}',
+  battleDescribe: (sctx) => '/named{洗入4}/card{instantStrike}',
 });
 
 // 一瞬千击（A）：1AP 消耗——发现 5 张瞬击（直接进手牌；满手按 §7.3 溢入牌库）。
@@ -244,7 +244,7 @@ registerSkill({
     for (let i = 0; i < 5; i++) addCard(sctx, 'instantStrike', { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}5「瞬击」',
+  describe: () => '/named{发现}5/card{instantStrike}',
 });
 
 // 瞬击（蓄力系列衍生牌）：0 费即抛——7 伤 + 抽 1，打出即焚毁。
@@ -436,7 +436,7 @@ registerSkill({
     for (let i = 0; i < 2; i++) addCard(sctx, 'voidCard', { index: 'random' });
     return true;
   },
-  describe: () => '抽2牌，/named{洗入}2「虚无」',
+  describe: () => '抽2牌，/named{洗入}2/card{voidCard}',
 });
 
 // 虚无（假动作衍生牌）：0 费无效果消耗牌——纯粹的牌库噪音，只经造牌入场。

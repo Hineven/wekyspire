@@ -4,6 +4,7 @@ import { createRun, completeRoom } from '../src/core/run/runFlow.js';
 import {
   ASCENSION_PLACEHOLDER, LEINO_DIMENSIONS, totalLeino, SEED_OFFERING,
   ascensionReady, chooseAscension, chooseAscensionAbility, chooseSeedCards,
+  seedPool, rollSeedCards, rerollSeedOffering,
 } from '../src/core/run/ascension.js';
 
 // 构造"刚离开训练房"的 run：floor 1 训练房，手动设置训练次数
@@ -106,5 +107,35 @@ describe('进阶事件结算', () => {
   it('能力授予占位：无待授予能力时直接调用 chooseAscensionAbility 抛错', () => {
     const run = createRun({ seed: 1 });
     expect(() => chooseAscensionAbility(run, 'x')).toThrow(/没有待授予的能力/);
+  });
+});
+
+describe('种子包构成（用户 2026-09 定）', () => {
+  const firePoolIds = () => seedPool(createRun({ seed: 1 }), 'fire').map(d => d.id);
+
+  it('进阶链只开链头：同链 C 阶（晋升目标）不进池，D 阶链头在池', () => {
+    const ids = firePoolIds();
+    // 火箭链 fireBolt(D)→fireArrow(C)→fireBall(B)、首发射链 firstShot(D)→firstArrow(C)→…
+    expect(ids).toContain('fireBolt');
+    expect(ids).toContain('firstShot');
+    expect(ids).not.toContain('fireArrow');   // 链中 C 阶是晋升目标，与 D 并列是噪音
+    expect(ids).not.toContain('firstArrow');
+    expect(ids).not.toContain('flameSurge');  // flameBirth(C)→flameSurge(B) 同理
+  });
+
+  it('必出卡：点火（seedGuaranteed）每次开包都在，刷新后仍在', () => {
+    for (const seed of [1, 2, 3, 42, 99]) {
+      const cards = rollSeedCards(createRun({ seed }), 'fire');
+      expect(cards.length).toBe(SEED_OFFERING.cards);
+      expect(cards).toContain('inflame');
+      expect(new Set(cards).size).toBe(cards.length); // 互不重复
+    }
+    // 刷新（exclude 避让已见卡）不挤掉必出卡
+    const run = leaveTraining(1);
+    completeRoom(run);
+    chooseAscension(run, 'fire');
+    expect(run.cardOffering.cards).toContain('inflame');
+    rerollSeedOffering(run);
+    expect(run.cardOffering.cards).toContain('inflame');
   });
 });

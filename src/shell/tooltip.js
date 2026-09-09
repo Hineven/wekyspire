@@ -7,19 +7,24 @@
 //   effect   优先 effectId 反查（单位效果行——投影自带 id，注册表按 id 命中）；
 //            缺省按显示名反查（卡面富文本 markup 以显示名为载体——烘焙即快照，
 //            名字匹配与卡面上印的文本天然一致，这是有意为之的快照语义）
-//   skill    markup 快照语义，按显示名反查 + powerDelta 增量
+//   card     卡牌整卡预览：按 id 反查（markup 只存 id，印出的名字永远等于定义名）；
+//            模型带 cardPreview { skillId, params }，TooltipOverlay 渲染 CardFacePreview
+//            （应用前口径 describe，params 经 ctx.params 透传插值）
 //   named    术语文档（namedTerms，键即术语名，含参数如「衰败2」）
 //   intention 意图投影数据直译短句（与 UnitObject 意图条图标一一对应）
 //   shift    Shift 详情方标（文案由热区携带）
 
 import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
-import { allSkills } from '../core/skills/registry.js';
+import { getSkillDefinition, hasSkill } from '../core/skills/registry.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
+
+// 整卡预览的估算尺寸（tooltipHub 边缘翻转用）：CardFacePreview 宽 200 + 宿主 padding
+export const CARD_PREVIEW_SIZE = Object.freeze({ w: 216, h: 294 });
 
 export function tooltipModel(kind, payload = {}) {
   switch (kind) {
     case 'effect': return effectModel(payload);
-    case 'skill': return skillModel(payload);
+    case 'card': return cardModel(payload);
     case 'named': return namedModel(payload);
     case 'intention': return intentionModel(payload);
     case 'shift': return { title: payload.name ?? '', body: '' };
@@ -34,13 +39,17 @@ function effectModel({ effectId, name }) {
   return { title: `${def.icon ?? ''}${def.name}`, body: def.description ?? '' };
 }
 
-function skillModel({ name, powerDelta }) {
-  const def = allSkills().find(d => d.name === name);
-  if (!def) return { title: `[skill] ${name ?? ''}`, body: '' };
-  const cost = def.cost
-    ? `费${def.cost.mana === 'X' ? 'X（全部魏启）' : def.cost.mana} AP${def.cost.actionPoint === 'X' ? 'X' : def.cost.actionPoint}`
-    : '';
-  return { title: def.name, delta: powerDelta || null, body: cost, tint: '#8af' };
+// card：整卡预览模型——文字只有标题兜底（定义缺失时），正常路径 TooltipOverlay
+// 渲染 CardFacePreview 整卡（自身已含卡名/费用/正文，不再重复文本摘要）
+function cardModel({ cardId, params }) {
+  const def = (cardId != null && hasSkill(cardId)) ? getSkillDefinition(cardId) : null;
+  if (!def) return { title: `[card] ${cardId}`, body: '' };
+  return {
+    title: def.name,
+    body: '',
+    cardPreview: { skillId: def.id, params: params ?? {} },
+    size: CARD_PREVIEW_SIZE,
+  };
 }
 
 function namedModel({ name }) {
@@ -65,7 +74,8 @@ const INTENTION_ACTS = Object.freeze({
 
 function intentionSentence(intention) {
   const kinds = (intention?.kinds?.length ? intention.kinds : ['unknown']).slice(0, 2);
-  if (kinds.includes('unknown')) return '下回合行动未知';
+  const note = intention?.note ? `；${intention.note}` : ''; // 行动逻辑补充说明（固定索敌规则等）
+  if (kinds.includes('unknown')) return `下回合行动未知${note}`;
   const parts = kinds.map((k) => {
     if (k !== 'attack') return INTENTION_ACTS[k] ?? '行动';
     if (intention.damage == null) return '进行攻击';
@@ -73,5 +83,5 @@ function intentionSentence(intention) {
       ? `造成 ${intention.hits}×${intention.damage}（共 ${intention.hits * intention.damage}）点伤害`
       : `造成 ${intention.damage} 点伤害`;
   });
-  return `下回合将${parts.join('，')}`;
+  return `下回合将${parts.join('，')}${note}`;
 }

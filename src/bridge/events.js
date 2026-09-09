@@ -43,7 +43,7 @@ export const EventNames = {
   ANIMATION_INSTRUCTION_FINISHED: 'animation-instruction-finished', // { id }
 
   // ---- UI 协议（Stage Picker → Shell 消费） ----
-  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'skill'|'effect'|'intention'|'shift', payload, x, y }（x/y 为 canvas 内像素；payload 即热区契约，见 shell/tooltip.js）
+  TOOLTIP_SHOW: 'tooltip:show',   // { kind:'named'|'card'|'effect'|'intention'|'shift', payload, x, y }（x/y 为 canvas 内像素；payload 即热区契约，见 shell/tooltip.js）
   TOOLTIP_MOVE: 'tooltip:move',   // { x, y }
   TOOLTIP_HIDE: 'tooltip:hide',   // {}
   CARD_HOVER: 'card:hover',       // { uniqueID } 整卡悬浮（token 未命中时）

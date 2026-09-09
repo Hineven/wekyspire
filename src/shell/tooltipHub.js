@@ -22,9 +22,21 @@ let tokenKey = null; // 当前浮层的 token 键（null = 未显示）
 
 const keyOf = (kind, payload) => `${kind}:${JSON.stringify(payload ?? {})}`;
 
+// 指针右下偏移落点；浮层估算尺寸（model.size，缺省按文本浮层）越出 #game-frame 右/下缘时
+// 翻到左/上侧——整卡预览（216x294）比文本摘要大得多，不翻会频繁出框
 function place(x, y) {
-  tooltipState.x = x + 14;
-  tooltipState.y = y + 14;
+  const est = tooltipState.model?.size ?? { w: 260, h: 120 };
+  let px = x + 14;
+  let py = y + 14;
+  if (typeof document !== 'undefined') {
+    const frame = document.getElementById('game-frame')?.getBoundingClientRect();
+    if (frame) {
+      if (px + est.w > frame.width) px = x - 14 - est.w;
+      if (py + est.h > frame.height) py = y - 14 - est.h;
+    }
+  }
+  tooltipState.x = px;
+  tooltipState.y = py;
 }
 
 /** 悬浮命中（或同 token 移动）：x/y 为 #game-frame 局部像素（见 framePoint）。 */

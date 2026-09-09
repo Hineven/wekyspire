@@ -19,7 +19,7 @@ import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/res
 import { PostBattleInstruction } from '../instructions/battleRoot.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
-  drawCards, burnCard, requestHandSelection, selected, triggerChant,
+  drawCards, burnCard, requestHandSelection, selected,
 } from './cardKit.js';
 
 // ====================================================================
@@ -346,8 +346,8 @@ registerSkill({
 // §1.1 先发系列（固有消耗快速开场爆发）
 // ====================================================================
 
-// 先发工厂：0 费直伤 + /named{快速咏唱}（提前触发一次咏唱节拍，P5 挂载点复用）。
-// 固有保证起手上手；消耗保证不沉淀。
+// 先发工厂：0 费直伤 + 抽1牌（第一轮爆发 + 不亏手牌，FIRE_VEIN_CARDS §先发 2026-09 修订：
+// 原「快速咏唱」提前节拍不够直观，换抽牌）。固有保证起手上手；消耗保证不沉淀。
 function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'firstStrike',
@@ -358,11 +358,11 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
     promotesTo,
     use(sctx) {
       attackDamage(sctx, damage);
-      triggerChant(sctx);
+      drawCards(sctx, 1);
       return true;
     },
-    describe: () => `${damage}伤害，/named{快速咏唱}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{快速咏唱}`,
+    describe: () => `${damage}伤害，抽1牌`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，抽1牌`,
   });
 }
 firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 8, promotesTo: 'firstArrow' });
@@ -398,7 +398,7 @@ registerSkill({
       },
     }],
   },
-  describe: () => '每累计受到5点/effect{燃烧}伤害，获得1魏启（余数保留）',
+  describe: () => '每累计受到5点/effect{燃烧}伤害，获得1魏启',
 });
 
 // 突破极限（A，消耗，咏唱4）：激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令

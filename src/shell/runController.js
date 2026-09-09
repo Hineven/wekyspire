@@ -8,7 +8,7 @@ import {
   assembleBattle, isBossFloor, advanceFloor,
 } from '../core/run/runFlow.js';
 import { chooseSkillReward, chooseRewardPack as chooseRewardPackCore } from '../core/run/rewards.js';
-import { promotionTargets } from '../core/run/promotion.js';
+import { gatedPromotionTargets } from '../core/run/promotion.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
@@ -371,8 +371,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     sequencer: runSequencer, animBus, dispose,
     LEINO_DIMENSIONS, SLOT_PLACEHOLDER,
     skillName: (id) => getSkillDefinition(id)?.name ?? id,
-    // 升级预览：该卡晋升后的目标定义（与 trainUpgrade 缺省取的第一个可用目标一致）
-    promoteTargetOf: (rt) => promotionTargets(getSkillDefinition(rt.defId))[0] ?? null,
+    // 升级预览：该卡晋升后的目标定义（过等阶门禁，与 trainUpgrade 缺省取的第一个可用目标一致）
+    promoteTargetOf: (rt) => gatedPromotionTargets(run, getSkillDefinition(rt.defId))[0] ?? null,
     // encounter 元素是楼层缩放 descriptor {defId,maxHp,attack}（兼容裸 id 字符串）
     enemyName: (e) => {
       const id = e?.defId ?? e;

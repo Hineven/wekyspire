@@ -14,7 +14,7 @@ export const TRAINING_PLACEHOLDER = {
 };
 
 export function upgradableCards(run) {
-  return run.player.deck.filter(canPromoteRuntime);
+  return run.player.deck.filter(rt => canPromoteRuntime(rt, run));
 }
 
 // 本次训练的首个交互形态：有可升级卡 → 'upgrade'；否则 → 'draw'（退化抓牌）

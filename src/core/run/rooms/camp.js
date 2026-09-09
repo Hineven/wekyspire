@@ -11,7 +11,7 @@ export function campOptions(run) {
   const opts = [];
   if (run.remi.drivenOff) opts.push('recoverRemi');
   opts.push('rest');
-  if (run.player.deck.some(canPromoteRuntime)) opts.push('upgrade');
+  if (run.player.deck.some(rt => canPromoteRuntime(rt, run))) opts.push('upgrade');
   return opts;
 }
 

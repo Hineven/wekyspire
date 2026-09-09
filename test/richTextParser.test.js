@@ -22,34 +22,34 @@ describe('richtext/parser', () => {
     ]);
   });
 
-  it('effect / named / skill 不被颜色正则吞掉', () => {
-    const tokens = parseRichText('/effect{燃烧} /named{瑞米} /skill{斩击}');
+  it('effect / named / card 不被颜色正则吞掉', () => {
+    const tokens = parseRichText('/effect{燃烧} /named{瑞米} /card{slash}');
     expect(tokens).toEqual([
       { type: 'effect', effectName: '燃烧' },
       { type: 'text', content: ' ' },
       { type: 'named', content: '瑞米' },
       { type: 'text', content: ' ' },
-      { type: 'skill', content: '斩击', powerDelta: 0 },
+      { type: 'card', cardId: 'slash', params: {} },
     ]);
   });
 
-  it('skill 威力差值解析', () => {
-    expect(parseRichText('/skill{斩击+2}')).toEqual([
-      { type: 'skill', content: '斩击', powerDelta: 2 },
+  it('card 卡参数解析（k=v 对，值恒为字符串；裸段丢弃）', () => {
+    expect(parseRichText('/card{ironShard, damage=10, tier=B}')).toEqual([
+      { type: 'card', cardId: 'ironShard', params: { damage: '10', tier: 'B' } },
     ]);
-    expect(parseRichText('/skill{斩击 -1}')).toEqual([
-      { type: 'skill', content: '斩击', powerDelta: -1 },
+    expect(parseRichText('/card{instantStrike}')).toEqual([
+      { type: 'card', cardId: 'instantStrike', params: {} },
     ]);
   });
 
   it('多段混合保持源顺序', () => {
-    const tokens = parseRichText('用 /named{瑞米} 的 /skill{飞刀} 造成 /red{5} 伤害');
-    expect(tokens.map(t => t.type)).toEqual(['text', 'named', 'text', 'skill', 'text', 'color', 'text']);
+    const tokens = parseRichText('用 /named{瑞米} 的 /card{throwingKnife} 造成 /red{5} 伤害');
+    expect(tokens.map(t => t.type)).toEqual(['text', 'named', 'text', 'card', 'text', 'color', 'text']);
   });
 
-  it('named / skill / effect 是可交互热区，其余不是', () => {
+  it('named / card / effect 是可交互热区，其余不是', () => {
     expect(isInteractiveToken({ type: 'named' })).toBe(true);
-    expect(isInteractiveToken({ type: 'skill' })).toBe(true);
+    expect(isInteractiveToken({ type: 'card' })).toBe(true);
     expect(isInteractiveToken({ type: 'effect' })).toBe(true);
     expect(isInteractiveToken({ type: 'text' })).toBe(false);
     expect(isInteractiveToken({ type: 'color' })).toBe(false);

@@ -144,9 +144,9 @@ function findSlashCard(sctx) {
 // 而非 zone/资源指令域（与 deckCraft 开刃原型的直改同范式）。已是链尾返回 false。
 function transformSlashCard(sctx, card, parentInstr = null) {
   const def = getSkillDefinition(card.defId);
-  if (!def.promotesTo) return false;   // 链尾（断神斩）：已无可进之阶
+  if (!def.battlePromotesTo) return false;   // 链尾（断神斩）：已无可进之阶
   const wasExhausted = card.remainingUses <= 0;
-  const nextId = def.promotesTo;
+  const nextId = def.battlePromotesTo;
   sctx.kernel.addSubscription({
     when: TransformCardInstruction, phase: 'post', window: 'once',
     filter: (instr) => instr.uniqueID === card.uniqueID && instr.result?.toDefId === nextId,
@@ -186,7 +186,9 @@ const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
   charges: { max: 1, cooldownTurns: cd },
   cooldownZones: ['deck'],
   cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: nextId ?? null,
+  // 局内进阶链走 battlePromotesTo（局内转化专用字段）——斩不可局外晋升
+  // （营地/训练场的 promoteCard 只认 promotesTo，对斩链天然不可见）
+  battlePromotesTo: nextId ?? null,
   // 斩（D）可入池作为链条起点；进阶卡只经局内转化获得，永不洗入奖励卡包
   canSpawnAsReward: tier === 'D',
   use(sctx) {
@@ -218,8 +220,8 @@ const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
       ]);
     },
   }],
-  describe: () => `${damage}伤害，/named{洗入3}碎铁，/named{斩}`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}碎铁，/named{斩}`,
+  describe: () => `${damage}伤害，/named{洗入3}/card{ironShard}，/named{斩}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}，/named{斩}`,
 });
 for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);

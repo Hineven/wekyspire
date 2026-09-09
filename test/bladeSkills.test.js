@@ -3,6 +3,8 @@ import '../src/core/content/index.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { spawnableCardPool } from '../src/core/run/rewards.js';
 import { getSkillDefinition } from '../src/core/skills/registry.js';
+import { canPromoteRuntime } from '../src/core/run/promotion.js';
+import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { canUseSkill, makeSkillCtx } from '../src/core/skills/helpers.js';
 import { zoneOf, moveCard } from '../src/core/state/battleState.js';
 import {
@@ -87,7 +89,8 @@ describe('斩系列：局内进阶链', () => {
       expect(def.name).toBe(name);
       expect(def.tier).toBe(tier);
       expect(def.charges.cooldownTurns).toBe(cd);
-      expect(def.promotesTo).toBe(next);
+      expect(def.battlePromotesTo).toBe(next);        // 局内进阶链（非局外晋升字段）
+      expect(def.promotesTo).toBeUndefined();          // 斩不可局外晋升：对营地/训练场不可见
       expect(def.cooldownZones).toEqual(['deck']);                // 全链只在牌库冷却
 
       const d = new BattleDriver({ deck: [id, 'punch', 'punch', 'punch'], enemies: [tank(999)], seed: 7 });
@@ -111,7 +114,14 @@ describe('斩系列：局内进阶链', () => {
     expect(hp0 - enemyHp(d)).toBe(741);
     expect(god.defId).toBe('godCleave');
     expect(god.currentCooldown).toBe(8);
-    expect(getSkillDefinition('godCleave').promotesTo).toBeNull();
+    expect(getSkillDefinition('godCleave').battlePromotesTo).toBeNull();
+    expect(getSkillDefinition('godCleave').promotesTo).toBeUndefined();
+  });
+
+  it('斩链不可局外晋升：营地/训练场的晋升口径（promotesTo）对全链不可见', () => {
+    for (const id of ['slash', 'rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave']) {
+      expect(canPromoteRuntime(createSkillRuntime(id))).toBe(false);
+    }
   });
 
   it('只在牌库中冷却：手中渡过回合不推进，回牌库后推进', () => {
@@ -154,11 +164,11 @@ describe('斩系列：局内进阶链', () => {
 
   it('描述双轨：应用前纯文本，应用后带 /named{斩} 热区', () => {
     const def = getSkillDefinition('slash');
-    expect(def.describe()).toBe('16伤害，/named{洗入3}碎铁，/named{斩}');
+    expect(def.describe()).toBe('16伤害，/named{洗入3}/card{ironShard}，/named{斩}');
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const rt = toHand(d, 'slash');
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，/named{洗入3}碎铁，/named{斩}');
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，/named{洗入3}/card{ironShard}，/named{斩}');
   });
 });
 

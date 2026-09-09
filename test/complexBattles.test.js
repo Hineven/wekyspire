@@ -217,6 +217,22 @@ describe('复杂战斗：结算期输入（完美花刀）', () => {
 });
 
 describe('复杂战斗：队友死亡', () => {
+  it('瑞米意图：开局即预告固定行动（2伤害 + 索敌说明），回合轮转后仍有效', () => {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch', 'punch', 'punch'],
+      enemies: ['slime'], allies: ['remi'], seed: 3,
+    });
+    d.start();
+    const remi = d.state.allies[0];
+    // 开局预告（与实际 act 同口径：固定 2 伤害 + 最靠前存活敌人）
+    expect(remi.intention).toMatchObject({ kinds: ['attack'], hits: 1, damage: 2 });
+    expect(remi.intention.note).toContain('最靠前的存活敌人');
+
+    d.endTurn(); // 瑞米行动（P7）+ 敌方回合末意图重刷
+    expect(d.state.enemies[0].hp).toBeLessThan(d.state.enemies[0].maxHp);
+    expect(remi.intention).toMatchObject({ kinds: ['attack'], hits: 1, damage: 2 });
+  });
+
   it('瑞米被杀后不再行动，战斗继续，猎人转火玩家', () => {
     const d = new BattleDriver({
       deck: ['punch', 'punch', 'punch', 'punch'],

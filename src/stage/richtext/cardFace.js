@@ -20,6 +20,7 @@ import { layoutRichText, DEFAULT_COLOR_TABLE } from './layout.js';
 import { drawPlacements, createCanvasMeasurer, defaultDrawIcon } from './texture.js';
 import { allEffects } from '../../core/effects/registry.js';
 import { getNamedTerm } from '../../core/skills/namedTerms.js';
+import { getSkillDefinition, hasSkill } from '../../core/skills/registry.js';
 
 // 效果外观解析（markup 里是效果显示名，按 name 反查定义；Stage→Core 查表是允许方向）。
 // 特征色：def.color 是 richtext 颜色名，经颜色表转 css；未注册/无色 → null（回落正文色）
@@ -183,6 +184,12 @@ export function bakeCardFace(card, options = {}) {
     resolveNamed: options.resolveNamed ?? ((name) => {
       const term = getNamedTerm(name);
       return term?.color ? { color: term.color } : {};
+    }),
+    // card 引用：id 反查显示名（印出的名字永远等于定义名）+ 卡面主题色作特征色；
+    // 未注册 id 不抛错——回落印原文 id（注册表 get 对未知 id 抛异常，先 has 兜底）
+    resolveCard: options.resolveCard ?? ((cardId) => {
+      const def = hasSkill(cardId) ? getSkillDefinition(cardId) : null;
+      return def ? { name: def.name, color: cardTheme(def) } : {};
     }),
   });
   drawPlacements(ctx, layout.placements, { style: BODY_FONT, drawIcon, offsetX: 12, offsetY: bodyTop });

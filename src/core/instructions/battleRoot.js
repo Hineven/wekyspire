@@ -6,6 +6,7 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
+import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
 
 // 战斗根指令：完成 = 战斗结束。子节点固定为 战前 → 回合循环 → 战后。
@@ -56,10 +57,15 @@ export class PreBattleInstruction extends BattleInstruction {
         }
       }
 
-      // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）
+      // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；
+      // 盟友（瑞米等）同规则——AIUnit 意图不是敌方专利
       for (const e of battleState.enemies) {
         const def = getEnemyDefinition(e.defId);
         e.intention = def.getIntention ? def.getIntention(e, battleState) : { kinds: ['unknown'] };
+      }
+      for (const a of battleState.allies) {
+        const def = getAllyDefinition(a.defId);
+        a.intention = def.getIntention ? def.getIntention(a, battleState) : { kinds: ['unknown'] };
       }
 
       ctx.presenter?.battleStart?.({ battleState, runState });
