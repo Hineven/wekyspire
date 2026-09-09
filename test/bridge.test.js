@@ -112,7 +112,7 @@ describe('Bridge：动画队列屏障与超时', () => {
       EventNames.ANIM_CARD_MOVED,
     ]);
     const at = (t) => types.indexOf(t);
-    // 方向性：效果/离场 = 先动画后 sync（演完再变数字 / 飞进坟堆数字才+1）
+    // 方向性：效果/离场 = 先动画后 sync（演完再变数字 / 飞回牌库底数字才+1）
     expect(types[at(EventNames.ANIM_DAMAGE) + 1]).toBe(EventNames.ANIM_STATE_SYNC);
     expect(types[at(EventNames.ANIM_CARD_MOVED) + 1]).toBe(EventNames.ANIM_STATE_SYNC);
     // 入场 = 先 sync 后动画（先转移再播动画）
@@ -272,7 +272,8 @@ describe('Bridge：结算期输入仲裁', () => {
     expect(bridge.interaction.activeRequest).toBeNull();
     expect(bridge.getProjection().pendingInput).toBeNull();
     expect(bridge.getProjection().waitingPlayerInput).toBe(true);
-    expect(bridge.getProjection().counts.discard).toBe(2); // askDiscard 自身 + 被弃牌
+    expect(bridge.getProjection().counts.deck).toBe(2); // 弃牌落牌库底：askDiscard 自身 + 被弃牌
+    expect(bridge.getProjection().zones.deck.at(-1).defId).toBe('askDiscard'); // FIFO：发动卡收尾居末位
 
     // 无挂起请求时应答被拒
     expect(bridge.interaction.respond([target])).toBe(false);

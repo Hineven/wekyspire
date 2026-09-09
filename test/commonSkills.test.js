@@ -18,7 +18,7 @@ const enemyHp = (d) => d.state.enemies[0].hp;
 
 // 把指定 defId 的卡弄回手牌（从任意 zone；已在手则原样返回）
 function toHandKeep(d, defId) {
-  const card = [d.state.zones.deck, d.state.zones.discard, d.state.zones.burnt]
+  const card = [d.state.zones.deck, d.state.zones.burnt]
     .flat().find(c => c.defId === defId);
   if (card) moveCard(d.state, card.uniqueID, 'hand');
   return d.state.zones.hand.find(c => c.defId === defId);
@@ -28,7 +28,7 @@ const toHand = toHandKeep;
 // 清空手牌中除指定卡外的所有卡（构造「唯一手牌」）
 function keepOnly(d, defId) {
   for (const other of [...d.state.zones.hand.filter(c => c.defId !== defId)]) {
-    moveCard(d.state, other.uniqueID, 'discard');
+    moveCard(d.state, other.uniqueID, 'deck'); // 挪走置牌库底（弃牌堆已不存在，FIFO）
   }
 }
 

@@ -70,7 +70,8 @@ describe('换牌：费用阶梯', () => {
     const first = d.state.zones.hand[0];
     d.swap(first.uniqueID); // 0 AP
     expect(d.player.actionPoints).toBe(3);
-    expect(zoneOf(d.state, first.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, first.uniqueID)).toBe('deck'); // 换牌弃置 = 落牌库底（FIFO 数组尾）
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(first.uniqueID);
     expect(d.state.zones.hand).toHaveLength(4); // 弃 1 抽 1
     expect(d.state.swapCount).toBe(1);
 
@@ -225,7 +226,8 @@ describe('燃心决：锁定（anchored）不可主动解除', () => {
     // 离手（换牌弃掉）：物理熄灭——订阅注销、效果终止（锁定只挡主动解除）
     d.swap(mantra.uniqueID);
     expect(mantra.isActivated).toBe(false);
-    expect(zoneOf(d.state, mantra.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, mantra.uniqueID)).toBe('deck'); // 被弃（离手）= 落牌库底
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(mantra.uniqueID); // FIFO 数组尾
     expect(owned()).toHaveLength(0);
   });
 });

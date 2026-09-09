@@ -209,7 +209,8 @@ describe('复杂战斗：结算期输入（完美花刀）', () => {
 
     const target = d.state.zones.hand.find(s => s.defId === 'punch');
     d.respond([target.uniqueID]);
-    expect(zoneOf(d.state, target.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, target.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO）
+    expect(d.state.zones.deck.at(-1).defId).toBe('perfectCut'); // 被弃牌先落位，完美花刀收尾居末位
     expect(d.pendingInput).toBeNull();
     expect(d.isWaiting()).toBe(true);                // 回到回合级等待
   });

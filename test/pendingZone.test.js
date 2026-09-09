@@ -11,7 +11,7 @@ import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 
 // ---- pending 结算区 ----
 // 铁律：发动卡在 UseSkillInstruction stage 1 离手（hand→pending），收尾落位
-// （回手点亮/burnt/discard）；落地指令 zoneOf 校验、目标不在预期区静默落空；
+// （回手点亮/burnt/牌库底）；落地指令 zoneOf 校验、目标不在预期区静默落空；
 // 效果逻辑自行安置时收尾不二次搬动；终局 abort 由 PostBattle 清扫。
 // （「discardRightmost 无特判」的刀背行为由 bodySkills.test.js 同步更新覆盖，此处不重复。）
 
@@ -68,7 +68,7 @@ registerSkill({
   },
 });
 
-// 回库拳（测试卡）：use 内自行安置——回牌库顶（「这张牌不入弃牌堆」类自改去向）
+// 回库拳（测试卡）：use 内自行安置——回牌库顶（自改去向，收尾不二次搬动）
 registerSkill({
   id: 'topLoader', name: '回库拳',
   cost: { mana: 0, actionPoint: 1 },
@@ -112,7 +112,7 @@ registerSkill({
 });
 
 describe('pending 结算区', () => {
-  it('发动中离手：WAIT 挂起时卡在 pending、不在手牌；应答结算后落弃牌堆', () => {
+  it('发动中离手：WAIT 挂起时卡在 pending、不在手牌；应答结算后落牌库底', () => {
     const d = new BattleDriver({
       deck: ['stallProbe', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5,
@@ -127,7 +127,8 @@ describe('pending 结算区', () => {
 
     d.respond([d.pendingInput.request.candidates[0]]);
     expect(d.pendingInput).toBeNull();
-    expect(zoneOf(d.state, rt.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, rt.uniqueID)).toBe('deck'); // 非消耗卡收尾落牌库底
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(rt.uniqueID); // FIFO 数组尾
   });
 
   it('咏唱卡经 pending 回手点亮激活（无槽：住手牌）', () => {
@@ -151,7 +152,8 @@ describe('pending 结算区', () => {
     d.presenter.clear();
     d.dispatch(new DiscardCardInstruction({ uniqueID: a.uniqueID }));
     d.dispatch(new DiscardCardInstruction({ uniqueID: a.uniqueID })); // 同卡双弃：第二次落空
-    expect(zoneOf(d.state, a.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, a.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(a.uniqueID); // FIFO 数组尾
     expect(d.state.history.battle.discarded).toBe(before + 1);
     expect(d.presenter.calls.filter(c => c.method === 'cardDiscarded')).toHaveLength(1);
 
@@ -188,8 +190,11 @@ describe('pending 结算区', () => {
     const outer = d.state.zones.hand.find(c => c.defId === 'outerProbe');
     d.play('outerProbe');
     expect(innerZones).toEqual([{ self: 'pending', outerInPending: true }]);
-    expect(zoneOf(d.state, inner.uniqueID)).toBe('discard');
-    expect(zoneOf(d.state, outer.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, inner.uniqueID)).toBe('deck'); // 内层先收尾落牌库底
+    expect(zoneOf(d.state, outer.uniqueID)).toBe('deck');
+    // FIFO：内层先落位，外层收尾居末位
+    expect(d.state.zones.deck.at(-2).uniqueID).toBe(inner.uniqueID);
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(outer.uniqueID);
     expect(d.state.history.battle.played).toBe(2);
   });
 
@@ -203,10 +208,10 @@ describe('pending 结算区', () => {
     d.play('topLoader');
     expect(zoneOf(d.state, rt.uniqueID)).toBe('deck');
     expect(d.state.zones.deck[0].uniqueID).toBe(rt.uniqueID); // 牌库顶 = index 0
-    expect(d.state.zones.discard.some(c => c.uniqueID === rt.uniqueID)).toBe(false);
+    expect(d.state.zones.deck.filter(c => c.uniqueID === rt.uniqueID)).toHaveLength(1); // 收尾未二次搬动（牌库只此一张）
   });
 
-  it('终局 abort：结算中敌方死亡 → 树被截断，PostBattle 清扫 pending、残卡落弃牌堆', () => {
+  it('终局 abort：结算中敌方死亡 → 树被截断，PostBattle 清扫 pending、残卡落牌库底', () => {
     const d = new BattleDriver({
       deck: ['lethalProbe', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5,
@@ -216,7 +221,8 @@ describe('pending 结算区', () => {
     d.play('lethalProbe');
     expect(d.state.result).toBe('victory');
     expect(d.state.zones.pending).toHaveLength(0);
-    expect(zoneOf(d.state, rt.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, rt.uniqueID)).toBe('deck'); // PostBattle 清扫 pending → 牌库底
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(rt.uniqueID); // FIFO 数组尾
   });
 
   it('弃牌连锁咏唱（POST 范式）：链式弃到手牌清空自然终止，发动卡不被连锁误弃', () => {
@@ -232,9 +238,10 @@ describe('pending 结算区', () => {
 
     d.play('knifeBack'); // 自身弃 1 → 连锁再弃 → 链式到手牌清空（咏唱卡被弃时先熄灭，防自续）
     expect(d.state.zones.hand).toHaveLength(0);
-    const discardIds = d.state.zones.discard.map(c => c.uniqueID);
-    expect(discardIds).toHaveLength(4); // 两次连锁弃牌（punch×2 + 咏唱卡）+ knifeBack 自身收尾，各一次
-    expect(new Set(discardIds).size).toBe(4); // 无同卡双弃
+    const cycledIds = d.state.zones.deck.map(c => c.uniqueID); // 弃牌落牌库底：全卡组 FIFO 循环回 deck
+    expect(cycledIds).toHaveLength(4); // 连锁弃牌（punch×2 + 咏唱卡）+ knifeBack 自身收尾，各一次
+    expect(new Set(cycledIds).size).toBe(4); // 无同卡双弃
+    expect(d.state.zones.deck.at(-1).defId).toBe('knifeBack'); // FIFO：knifeBack 收尾居末位
     expect(d.state.history.battle.discarded).toBe(3); // 三次真弃牌（knifeBack 收尾是 zone 迁移不计弃）
     expect(chant.isActivated).toBe(false); // 离手熄灭（不变量）
   });

@@ -40,7 +40,7 @@ function placeAt(d, defId, index) {
 
 // 任意 zone 查找（初始抽牌后位置不确定，测试布置用）
 function findCard(d, defId) {
-  for (const zone of ['hand', 'deck', 'discard']) {
+  for (const zone of ['hand', 'deck', 'burnt']) {
     const card = d.state.zones[zone].find(c => c.defId === defId);
     if (card) return card;
   }
@@ -142,7 +142,7 @@ describe('描述双轨（应用前 describe / 应用后 battleDescribe）', () =
     placeAt(d, 'mimicFist', 0); // 手中多牌 → 非唯一
     expect(def.battleDescribe(sctxOf(d, rt))).toBe('7伤害');
     for (const other of [...d.state.zones.hand.filter(c => c.defId !== 'mimicFist')]) {
-      moveCard(d.state, other.uniqueID, 'discard');
+      moveCard(d.state, other.uniqueID, 'deck'); // 挪出牌库外置牌（FIFO：落牌库底，弃牌堆已不存在）
     }
     expect(def.battleDescribe(sctxOf(d, rt))).toBe('14伤害，抽1牌');
   });
@@ -304,7 +304,7 @@ describe('拳组合：过牌引擎', () => {
     // 清空手牌后只留仿形拳：唯一手牌位
     const again = toHand(d, 'mimicFist');
     for (const other of [...d.state.zones.hand.filter(c => c.defId !== 'mimicFist')]) {
-      moveCard(d.state, other.uniqueID, 'discard');
+      moveCard(d.state, other.uniqueID, 'deck'); // 挪出牌库外置牌（FIFO：落牌库底，弃牌堆已不存在）
     }
     again.currentCooldown = 0; // 冷却 1 回合，测试直改解锁
     again.remainingUses = 1;
@@ -381,7 +381,10 @@ describe('刀组合：卡序机制', () => {
     const hp0 = enemyHp(d);
     d.play('knifeBack');
     expect(hp0 - enemyHp(d)).toBe(6);
-    expect(zoneOf(d.state, rightmost.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, rightmost.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO）
+    // FIFO：被弃牌先落牌库底，刀背打击自身收尾居末位
+    expect(d.state.zones.deck.at(-2).uniqueID).toBe(rightmost.uniqueID);
+    expect(d.state.zones.deck.at(-1).defId).toBe('knifeBack');
 
     // 边界：自身位于最右端 → 出牌即离手（pending），剩余手牌的最右 = 次右一张
     const d2 = new BattleDriver({
@@ -392,7 +395,7 @@ describe('刀组合：卡序机制', () => {
     placeAt(d2, 'knifeBack', d2.state.zones.hand.length - 1);
     const secondRight = d2.state.zones.hand.at(-2);
     d2.play('knifeBack');
-    expect(zoneOf(d2.state, secondRight.uniqueID)).toBe('discard');
+    expect(zoneOf(d2.state, secondRight.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底
     expect(d2.state.zones.hand).toHaveLength(2);
   });
 
@@ -407,8 +410,8 @@ describe('刀组合：卡序机制', () => {
     const hp0 = enemyHp(d);
     d.play('flyingDagger');
     expect(hp0 - enemyHp(d)).toBe(6 + 10);
-    expect(zoneOf(d.state, left.uniqueID)).toBe('discard');
-    expect(zoneOf(d.state, right.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, left.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO）
+    expect(zoneOf(d.state, right.uniqueID)).toBe('deck');
 
     // 缺一侧：不可用
     toHand(d, 'flyingDagger');
@@ -481,7 +484,7 @@ describe('体修卡组：晋升链与投放', () => {
     expect(d.state.zones.hand.some(c => c.defId === 'badOmen')).toBe(false);
     // 等量重抽：手牌回到打出前数量 - 1（自身离手）；6 张卡全部仍在（无丢失）
     expect(d.state.zones.hand.length).toBe(4);
-    const all = ['hand', 'deck', 'discard', 'burnt'].flatMap(z => d.state.zones[z]);
+    const all = ['hand', 'deck', 'burnt', 'pending'].flatMap(z => d.state.zones[z]);
     expect(all.length).toBe(6);
   });
 

@@ -97,24 +97,25 @@ describe('火灵脉：焚卡（burn zone）', () => {
     expect(d.state.zones.hand).toHaveLength(2); // 4 - pyreRite - 焚1
   });
 
-  it('焚毁区不参与洗牌回库', () => {
+  it('焚毁区永不回库（牌库抽空直接落空，无重洗）', () => {
     const d = new BattleDriver({
       deck: ['pyreRite', 'punch', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
     });
     d.start();
     const burntId = d.state.zones.hand.find(c => c.defId !== 'pyreRite').uniqueID;
-    d.play('pyreRite'); // 焚 1 张；pyreRite 与剩 1 张 punch 进弃牌/手中
+    d.play('pyreRite'); // 焚 1 张；pyreRite 收尾落牌库底，剩 1 张 punch 留手
 
     // 指令级压测：焚牌库顶
     const deckTop = d.state.zones.deck[0];
     if (deckTop) d.dispatch(new BurnCardInstruction({ uniqueID: deckTop.uniqueID }));
 
-    // 打空手牌逼出洗牌回库，焚毁牌不得复活
+    // 焚空手牌并抽空牌库：无重洗机制，焚毁牌不得复活
     for (const id of d.state.zones.hand.map(c => c.uniqueID)) {
       d.dispatch(new BurnCardInstruction({ uniqueID: id }));
     }
-    d.endTurn(); // 回合 2 抽牌：牌库空则洗弃牌堆
+    d.endTurn(); // 回合 2 抽牌：牌库已空，抽牌直接落空（无重洗）
+    expect(d.state.zones.hand).toHaveLength(0); // 无牌可抽：手牌保持空（证明无洗回）
     expect(zoneOf(d.state, burntId)).toBe('burnt');
     for (const card of d.state.zones.burnt) {
       expect(zoneOf(d.state, card.uniqueID)).toBe('burnt');

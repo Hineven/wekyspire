@@ -27,7 +27,7 @@ describe('tooltipModel：内容契约', () => {
   it('named：经术语表反查（参数插值），未注册回落原文标题', () => {
     expect(tooltipModel('named', { name: '瑞米' })).toEqual({ title: '瑞米', body: '' });
     expect(tooltipModel('named', { name: '斩' }))
-      .toEqual({ title: '斩', body: '此卡打出后进阶，以进入牌库代替焚毁' });
+      .toEqual({ title: '斩', body: '此卡打出后进阶；只在牌库中冷却充能' });
     expect(tooltipModel('named', { name: '衰败2' }))
       .toEqual({ title: '衰败2', body: '回合开始时，若在手牌中，反向冷却2' });
   });

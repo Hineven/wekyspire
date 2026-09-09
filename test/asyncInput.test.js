@@ -197,8 +197,12 @@ describe('异步结算：连续多段输入（双问）', () => {
     expect(zoneOf(d.state, a.uniqueID)).toBe('hand'); // 弃牌发生在全部应答之后
 
     d.respond([b.uniqueID]);
-    expect(zoneOf(d.state, a.uniqueID)).toBe('discard');
-    expect(zoneOf(d.state, b.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, a.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO 数组尾）
+    expect(zoneOf(d.state, b.uniqueID)).toBe('deck');
+    // FIFO：先 a 后 b 依次压尾，双问自身收尾居末位
+    expect(d.state.zones.deck.at(-3).uniqueID).toBe(a.uniqueID);
+    expect(d.state.zones.deck.at(-2).uniqueID).toBe(b.uniqueID);
+    expect(d.state.zones.deck.at(-1).defId).toBe('doubleAsk');
     expect(d.pendingInput).toBeNull();
     expect(d.isWaiting()).toBe(true);
     expect(d.calls('requestInput')).toHaveLength(2);

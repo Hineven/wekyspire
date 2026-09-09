@@ -67,10 +67,11 @@ function make(deck = ['punch', 'punch', 'punch', 'punch']) {
 }
 
 describe('演出', () => {
-  it('发动展示：卡本体飞中央放大→停留→同一对象衔接离场飞行进坟墓（无替身）', () => {
+  it('发动展示：卡本体飞中央放大→停留→同一对象衔接离场飞行回牌库（无替身）', () => {
     const { bridge, stage, tween } = make();
     bridge.start();
     tween.completeAll();
+    const deckBefore = stage._piles.deck.count; // 差值断言：deck 计数含牌库原有卡
 
     const first = bridge.getProjection().hand[0];
     bridge.intents.playCard(first.uniqueID);
@@ -81,17 +82,17 @@ describe('演出', () => {
     expect(display).toBeTruthy();
 
     tween.completeAll(); // 停留 → 衔接离场弧线飞行（淡出）→ 停车
-    // 全程同一视觉实体：展示对象 == 终态视图，弧线落位坟堆
+    // 全程同一视觉实体：展示对象 == 终态视图，弧线落位牌库图标
     const view = stage._views.get(first.uniqueID);
     expect(view).toBe(display.obj);
     expect(view.position.x).toBe(80);
-    expect(view.position.y).toBe(-38);
+    expect(view.position.y).toBe(-55);
     // 展示结束后不回手牌跟踪（无折返）：展示记录之后没有 hand 锚点记录
     const cardRecords = tween.records.filter(r => r.obj.uniqueID === first.uniqueID);
     const iDisplay = cardRecords.indexOf(display);
     expect(cardRecords.slice(iDisplay + 1).some(r => r.to.containerKey === 'hand')).toBe(false);
     expect(stage.animator.getObject(first.uniqueID)).toBe(display.obj); // 停车留存：注册健在
-    expect(stage._piles.discard.count).toBe(1);
+    expect(stage._piles.deck.count).toBe(deckBefore + 1); // 非消耗打出卡回牌库底
   });
 
   it('受伤：敌人闪红震动两段补间 + 粒子爆发，粒子寿命尽归零', () => {

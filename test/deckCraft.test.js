@@ -162,7 +162,7 @@ describe('开刃：即刻冷却手中刀法牌 + 回合结束回牌库', () => {
 });
 
 describe('锻刀：选牌强化并丢弃 + 回合结束回牌库', () => {
-  it('选刀 power +3 入弃牌堆；锻刀焚毁后回合结束回库；洗牌后强化保留', () => {
+  it('选刀 power +3 落牌库底；锻刀焚毁后回合结束回库；FIFO 循环后强化保留', () => {
     const d = new BattleDriver({
       deck: ['forgeBlade', 'testBlade', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, config: { initialDraw: 4 },
@@ -176,11 +176,12 @@ describe('锻刀：选牌强化并丢弃 + 回合结束回牌库', () => {
 
     d.respond([blade.uniqueID]);
     expect(blade.power).toBe(3);
-    expect(zoneOf(d.state, blade.uniqueID)).toBe('discard');
+    expect(zoneOf(d.state, blade.uniqueID)).toBe('deck'); // 弃牌 = 落牌库底（FIFO 数组尾）
+    expect(d.state.zones.deck.at(-1).uniqueID).toBe(blade.uniqueID);
     const forge = d.state.zones.burnt.find(c => c.defId === 'forgeBlade');
     expect(forge).toBeTruthy();
 
-    d.endTurn(); // 锻刀回牌库；回合 2 抽牌把它和被洗回的测试刀都抽上手
+    d.endTurn(); // 锻刀回合结束回牌库（FIFO 落在测试刀之后）；回合 2 从牌库头依次抽回两张
     expect(zoneOf(d.state, forge.uniqueID)).not.toBe('burnt');
     const bladeNow = [...d.state.zones.hand, ...d.state.zones.deck]
       .find(c => c.uniqueID === blade.uniqueID);

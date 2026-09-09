@@ -168,7 +168,7 @@ describe('BattleStage 无头联调', () => {
 
     stage.handlePointerUp(b.x, b.y); // 过线松手 → 打出
     expect(player.shield).toBe(5);
-    expect(stage.model.getZone(guard.uniqueID)).toBe('discard'); // 停车入坟（对象留存）
+    expect(stage.model.getZone(guard.uniqueID)).toBe('deck'); // 停车回牌库底（对象留存）
     expect(stage._views.get(guard.uniqueID).visible).toBe(false);
     const handZoned = [...stage.model.cards.values()].filter(e => e.zone === 'hand');
     expect(handZoned).toHaveLength(bridge.getProjection().hand.length);
@@ -264,8 +264,8 @@ describe('BattleStage 无头联调', () => {
     expect(bridge.battle.ctx.player.hp).toBeLessThan(hpBefore);
   });
 
-  it('换卡按钮：进模式手牌高亮 → 点手牌换出（弃1抽1，费用递增）', () => {
-    // 牌库需多于初始抽牌数，否则换牌弃牌会立刻被洗回牌库
+  it('换卡按钮：进模式手牌高亮 → 点手牌换出（置回牌库底抽1，费用递增）', () => {
+    // 牌库需多于初始抽牌数，否则换牌置回牌库底的卡会立刻被抽回手牌
     const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch', 'punch', 'punch']);
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
@@ -282,17 +282,16 @@ describe('BattleStage 无头联调', () => {
       expect(stage._views.get(c.uniqueID).visualState).toBe('highlighted');
     }
 
-    // 点一张手牌换出：手牌数不变、弃牌+1、换卡费用递增、模式退出
+    // 点一张手牌换出：手牌数不变、换出的牌置回牌库底、换卡费用递增、模式退出
     const target = bridge.getProjection().hand[0];
     const handBefore = bridge.getProjection().hand.length;
-    const discardBefore = bridge.getProjection().counts.discard;
     const tPos = stage._views.get(target.uniqueID).position;
     click(stage, [tPos.x, tPos.y, tPos.z]);
 
     const proj1 = bridge.getProjection();
     expect(stage._swapMode).toBe(false);
-    expect(proj1.hand.length).toBe(handBefore);          // 抽回 1 张
-    expect(proj1.counts.discard).toBe(discardBefore + 1); // 换出的牌进弃牌堆
+    expect(proj1.hand.length).toBe(handBefore);                     // 抽回 1 张
+    expect(proj1.zones.deck.at(-1).uniqueID).toBe(target.uniqueID); // 换出的牌在牌库底（FIFO 尾）
     expect(proj1.hand.some(c => c.uniqueID === target.uniqueID)).toBe(false);
     expect(proj1.swapCost).toBe(1);
     // 退出模式后手牌恢复可发动性着色（不再是换卡高亮）
@@ -338,13 +337,13 @@ describe('BattleStage 无头联调', () => {
     const candidateId = proj.pendingInput.request.candidates[0];
     expect(stage._views.get(candidateId).visualState).toBe('highlighted');
 
-    const discardBefore = proj.counts.discard;
+    const deckBefore = proj.counts.deck;
     const cPos = stage._views.get(candidateId).position;
     click(stage, [cPos.x, cPos.y, cPos.z]); // 点选候选牌
 
     expect(bridge.getProjection().pendingInput).toBeNull();
-    // +2：候选牌弃掉 + 问询卡本身在 stage 2 收尾进弃牌堆
-    expect(bridge.getProjection().counts.discard).toBe(discardBefore + 2);
+    // +2：候选牌弃置回牌库底 + 问询卡本身在 stage 2 收尾回牌库底
+    expect(bridge.getProjection().counts.deck).toBe(deckBefore + 2);
   });
 
   it('hover 手牌触发扇形撑开（布局重排）', () => {
@@ -586,10 +585,11 @@ describe('BattleStage 无头联调', () => {
     bridge.intents.playCard(bridge.getProjection().hand[0].uniqueID); // 冲拳
     // sequencer 编排：发动节拍 → 伤害节拍 → 离场节拍（各自阻塞，instantTween 同步播完）
     expect(order).toEqual(['display', 'damage', 'flyOut']);
-    // 打出的卡停车入坟（持久模型：对象留存，zone 迁移）
+    // 打出的卡停车回牌库底（持久模型：对象留存，zone 迁移）
     expect([...stage.model.cards.values()].filter(e => e.zone === 'hand')).toHaveLength(3);
-    expect(stage.model.getZone(bridge.getProjection() ? bridge.battle.battleState.zones.discard[0]?.uniqueID : null) ?? 'x').toBe('discard');
-    expect(stage._piles.discard.count).toBe(1); // 飞进坟堆后 sync 才 +1
+    const played = bridge.battle.battleState.zones.deck.at(-1); // FIFO：非消耗打出卡回牌库底
+    expect(stage.model.getZone(played.uniqueID)).toBe('deck');
+    expect(stage._piles.deck.count).toBe(bridge.getProjection().counts.deck); // 飞进牌库后 sync 才应用
   });
 
   it('回归·打出卡的空窗期不被弹簧拉回手牌：展示毕（held）即摘弹簧目标', () => {
@@ -627,7 +627,7 @@ describe('BattleStage 无头联调', () => {
     expect(stage.springs._targets.has(id)).toBe(false); // 弃管契约：目标表已摘
 
     while (pending.length) pending.shift()(); // 离场飞行等余下节拍播完
-    expect(stage.model.getZone(id)).toBe('discard');
+    expect(stage.model.getZone(id)).toBe('deck');
     expect(view.visible).toBe(false);
   });
 
@@ -691,14 +691,15 @@ describe('BattleStage 无头联调', () => {
     expect(stage.model.getZone(ask.uniqueID)).toBe('held');
 
     const victim = bridge.getProjection().pendingInput.request.candidates[0];
+    const deckBefore = bridge.getProjection().counts.deck;
     bridge.interaction.respond([victim]);
-    // 应答后：被弃卡的 cardDiscarded 节拍 + 打出卡的 cardMoved 节拍依次播完
-    expect(stage.model.getZone(victim)).toBe('discard');
-    expect(stage.model.getZone(ask.uniqueID)).toBe('discard');
-    expect(bridge.getProjection().counts.discard).toBe(2);
+    // 应答后：被弃卡的 cardDiscarded 节拍 + 打出卡的 cardMoved 节拍依次播完（均回牌库底）
+    expect(stage.model.getZone(victim)).toBe('deck');
+    expect(stage.model.getZone(ask.uniqueID)).toBe('deck');
+    expect(bridge.getProjection().counts.deck).toBe(deckBefore + 2);
   });
 
-  it('焚毁离场：原地燃烧殆尽 → 瞬移入坟，节拍阻塞至燃尽（sync 在燃尽后）', () => {    const { bridge, stage } = make(['burnStageCard', 'punch', 'punch', 'punch']);
+  it('焚毁离场：原地燃烧殆尽 → 瞬移到牌库图标位销毁，节拍阻塞至燃尽（sync 在燃尽后）', () => {    const { bridge, stage } = make(['burnStageCard', 'punch', 'punch', 'punch']);
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const rt = bridge.getProjection().hand.find(c => c.defId === 'burnStageCard');
@@ -719,7 +720,7 @@ describe('BattleStage 无头联调', () => {
     expect(stage._burning.has(obj)).toBe(true);
     expect(obj.burning).toBe(true);
     // 焚毁在哪烧就在哪（弹簧未步进时停在展示位；浏览器中是归途上的任意点），
-    // 只要没瞬移去坟堆图标位——"原地燃烧"语义
+    // 只要没瞬移去牌库图标位——"原地燃烧"语义
     expect(Number.isFinite(obj.position.x)).toBe(true);
     expect(obj.position.x).not.toBeCloseTo(80, 0);
 
@@ -729,12 +730,12 @@ describe('BattleStage 无头联调', () => {
     expect(obj._emberPool.length).toBeGreaterThan(0);
     expect(stage._burning.size).toBe(1);
 
-    // 燃尽：瞬移落位坟墓（不可见即不可察）→ 销毁 → 节拍 finish → 队列跑完 sync
+    // 燃尽：瞬移落位牌库图标（不可见即不可察）→ 销毁 → 节拍 finish → 队列跑完 sync
     stage._updateBurning(0.4);
     expect(stage._burning.size).toBe(0);
     expect(stage.uiScene.children.includes(obj)).toBe(false);
-    expect(obj.position.x).toBe(80); // 坟墓图标位
-    expect(obj.position.y).toBe(-38);
+    expect(obj.position.x).toBe(80); // 牌库图标位
+    expect(obj.position.y).toBe(-55);
     // sync 节拍已跑完：模型手牌数与后端一致
     expect([...stage.model.cards.values()].filter(e => e.zone === 'hand')).toHaveLength(bridge.getProjection().hand.length);
   });
@@ -772,7 +773,7 @@ describe('BattleStage 无头联调', () => {
     expect(stage.uiScene.children.filter(c => String(c.uniqueID || '').startsWith('spawn:'))).toHaveLength(0);
   });
 
-  it('持久对象：离场停车 → 洗回重抽，同一视图身份跨 zone 稳定（无建毁/无注册丢失）', () => {
+  it('持久对象：离场停车回牌库 → FIFO 轮转重抽，同一视图身份跨 zone 稳定（无建毁/无注册丢失）', () => {
     const pending = [];
     // 手动 tween：不自动完成，测试逐跳推进
     const manualTween = (obj, to, opts = {}) => {
@@ -787,11 +788,11 @@ describe('BattleStage 无头联调', () => {
     const view = stage._views.get(guard.uniqueID);
     expect(view.visible).toBe(true);
 
-    // 直接驱动离场节拍（弃牌飞行）：zone 即时推进，飞行挂起中
+    // 直接驱动离场节拍（回牌库飞行）：zone 即时推进，飞行挂起中
     // （弧线飞行为进度代理补间：带 onUpdate 采样回调；起手入场飞行同款，取最新压栈者）
     const pendingBefore = pending.length;
-    stage._departureBeat(guard.uniqueID, EventNames.ANIM_CARD_MOVED, { toZone: 'discard' }, () => {});
-    expect(stage.model.getZone(guard.uniqueID)).toBe('discard');
+    stage._departureBeat(guard.uniqueID, EventNames.ANIM_CARD_MOVED, { toZone: 'deck' }, () => {});
+    expect(stage.model.getZone(guard.uniqueID)).toBe('deck');
     const flight = pending.slice(pendingBefore)
       .find(h => typeof h.opts?.onUpdate === 'function' && typeof h.opts.onComplete === 'function');
     expect(flight).toBeTruthy();
@@ -801,7 +802,8 @@ describe('BattleStage 无头联调', () => {
     expect(view.visible).toBe(false);
     expect(stage.animator.getObject(guard.uniqueID)).toBe(view);
 
-    // 洗回重抽：backend 移回手牌 + sync 应用 → 同一对象显形归位
+    // FIFO 轮转重抽：backend 置回牌库底后再被抽回手牌 + sync 应用 → 同一对象显形归位
+    moveCard(bridge.battle.battleState, guard.uniqueID, 'deck');
     moveCard(bridge.battle.battleState, guard.uniqueID, 'hand');
     stage._applySnapshot(bridge.getProjection());
     expect(stage._views.get(guard.uniqueID)).toBe(view); // 身份不变：无重建
@@ -832,7 +834,7 @@ describe('BattleStage 无头联调', () => {
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
 
-    // 离场飞行：从手牌到坟堆 (80, -38)
+    // 离场飞行：从手牌到牌库 (80, -55)
     const first = bridge.getProjection().hand[0];
     const home = stage._views.get(first.uniqueID).position.clone();
     const flights = samples.filter(s => s.to?.t === 1);
@@ -842,9 +844,9 @@ describe('BattleStage 无头联调', () => {
     const mat = view.faceMesh.material;
 
     // 弧线：中段采样点高于直线中点（向上拱）
-    const straightMidY = (home.y + -38) / 2;
+    const straightMidY = (home.y + -55) / 2;
     // 手动驱动一次离场，捕获其飞行
-    stage._departureBeat(first.uniqueID, EventNames.ANIM_CARD_MOVED, { toZone: 'discard' }, () => {});
+    stage._departureBeat(first.uniqueID, EventNames.ANIM_CARD_MOVED, { toZone: 'deck' }, () => {});
     const dep = samples.filter(s => s.to?.t === 1).at(-1);
     dep.opts.onUpdate(0.5);
     expect(view.position.y).toBeGreaterThan(straightMidY); // 弧线拱起
@@ -854,7 +856,7 @@ describe('BattleStage 无头联调', () => {
     dep.opts.onComplete();
     // 落地硬化：位置精确、转正、不透明度复位（淡出不残留）、隐形停车
     expect(view.position.x).toBe(80);
-    expect(view.position.y).toBe(-38);
+    expect(view.position.y).toBe(-55);
     expect(view.rotation.z).toBe(0);
     expect(mat.opacity).toBe(1);
     expect(view.visible).toBe(false);
@@ -898,9 +900,9 @@ describe('BattleStage 无头联调', () => {
     }
   });
 
-  it('回归·弃牌离场飞行：真 gsap 下全程有限且可见，落地停车入坟', async () => {
+  it('回归·换牌离场飞行：真 gsap 下全程有限且可见，落地停车回牌库', async () => {
     // 复现路径：进度补间的 onUpdate 曾拿不到进度实参 → sample(NaN) → NaN 变换，
-    // 飞行全程不可见（弃牌"直接消失"）。真 gsap 异步时序驱动，断言飞行中段状态
+    // 飞行全程不可见（离场卡"直接消失"）。真 gsap 异步时序驱动，断言飞行中段状态
     const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch', 'punch', 'punch'], 1, 'gsap');
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
@@ -909,18 +911,20 @@ describe('BattleStage 无头联调', () => {
     const victim = bridge.getProjection().hand[0];
     const view = stage._views.get(victim.uniqueID);
     const homeX = view.position.x;
-    bridge.intents.swapCard(victim.uniqueID); // 弃 1 抽 1：弃牌节拍同步起飞
-    expect(stage.model.getZone(victim.uniqueID)).toBe('discard'); // 节拍时点即推进
+    bridge.intents.swapCard(victim.uniqueID); // 置回牌库底抽 1：离场节拍同步起飞
+    expect(stage.model.getZone(victim.uniqueID)).toBe('deck'); // 节拍时点即推进
 
     await new Promise(r => setTimeout(r, 170)); // 飞行中段（340ms 补间，ease power1.in）
     expect(stage.animator.getState(victim.uniqueID)).toBe('animating');
     expect(view.visible).toBe(true);
     expect(Number.isFinite(view.position.x)).toBe(true);
-    expect(view.position.x).toBeGreaterThan(homeX + 5); // 已离开手牌锚点向坟墓飞行
+    expect(view.position.x).toBeGreaterThan(homeX + 5); // 已离开手牌锚点向牌库飞行
 
     await new Promise(r => setTimeout(r, 700)); // 落地 + 后续 sync 应用
-    expect(stage._piles.discard.count).toBe(1);
+    // 换牌 = 置回牌库底 + 抽 1（净零）：图标计数与投影一致
+    expect(stage._piles.deck.count).toBe(bridge.getProjection().counts.deck);
     expect(view.visible).toBe(false); // 停车（隐形），对象留存
-    expect(view.position.x).toBe(80); // 坟墓图标位
+    expect(view.position.x).toBe(80); // 牌库图标位
+    expect(view.position.y).toBe(-55);
   });
 });
