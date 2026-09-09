@@ -25,6 +25,9 @@ const VERT = /* glsl */`
 `;
 
 // march + EMA：输出线性光量（不写屏幕，写历史 RT）
+// 体积区域 = 房间 AABB 外扩少许（用户定 2026-09）：view ray 先与盒求交，t start/t end
+// clamp 在 [tEnter, tExit]——盒外像素（天空盒/远景）零光量直出，天空渲染不被污染；
+// tfar 不再用 nearZ/固定值硬截（相机拉远时截断曾致全场偏暗，干扰视觉判断）。
 const FRAG_MARCH = /* glsl */`
   precision highp float;
   varying vec2 vUv;
@@ -37,12 +40,12 @@ const FRAG_MARCH = /* glsl */`
   uniform vec3 camPos;
   uniform vec3 lightColor;    // 已含强度的光色
   uniform float density;      // 散射密度（每世界单位）
-  uniform float maxDist;      // 行进上限（世界单位）
+  uniform float maxDist;      // 行进上限（安全后闸，非主要界——盒交才是体积边界）
   uniform float frame;        // frame seed（每帧轮转，temporal 收敛的原料）
   uniform float frame_percentage; // 1 / max temporal frames
   uniform float emaAlpha;     // EMA 新帧权重（首帧=1 直接定植，之后=1/30）
-  uniform float nearZ;        // 房间近缘：行进只在此之内（相机→房间的共有路径在房间外，
-                              // 左墙遮挡不到那里（z'≈190 > 墙缘 125），不截断会全场发奶——调试实录）
+  uniform vec3 boxMin;        // 房间体积盒（比房间内稍大）
+  uniform vec3 boxMax;
   uniform float shadowBias;
 
   const int STEPS = 26;
@@ -55,7 +58,7 @@ const FRAG_MARCH = /* glsl */`
 
   void main() {
     float depth = texture2D(tDepth, vUv).x;
-    // 重建世界空间视线端点（深度=1 的天空/窗洞端点落在远平面，行进被 maxDist 截断）
+    // 重建世界空间视线端点（深度=1 的天空/窗洞端点落在远平面，行进被盒交截断）
     vec4 ndc = vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 vpos = camProjInv * ndc;
     vpos /= vpos.w;
@@ -63,42 +66,54 @@ const FRAG_MARCH = /* glsl */`
     vec3 ray = wpos - camPos;
     float sceneDist = length(ray);
     vec3 rd = ray / sceneDist;
-    // 行进起点截到房间近缘（相机在房间外，前段路径无墙可挡，恒亮）
-    float t0 = 0.0;
-    if (rd.z < -1e-5) t0 = max(0.0, (nearZ - camPos.z) / rd.z);
-    float maxT = min(sceneDist, maxDist);
+    // 视线 × 房间体积盒：盒外像素（天空盒/远景）零光量，天空正常渲染
+    vec3 invD = 1.0 / rd;
+    vec3 tA = (boxMin - camPos) * invD;
+    vec3 tB = (boxMax - camPos) * invD;
+    vec3 tSm = min(tA, tB);
+    vec3 tBg = max(tA, tB);
+    float tEnter = max(max(tSm.x, tSm.y), max(tSm.z, 0.0));
+    float tExit = min(min(tBg.x, tBg.y), tBg.z);
     vec3 current = vec3(0.0);
-    if (maxT > t0) {
-      float stepLen = (maxT - t0) / float(STEPS);
-      float jitter = fract(hash12(gl_FragCoord.xy) + frame * frame_percentage); // 抖动去带状条纹
-      float acc = 0.0;
-      for (int i = 0; i < STEPS; i++) {
-        float t = t0 + (float(i) + jitter) * stepLen;
-        vec3 p = camPos + rd * t;
-        vec4 sp = shadowMatrix * vec4(p, 1.0);
-        sp.xyz /= sp.w;
-        // 飞出 shadow 覆盖范围一律按"完全阴影"处理（不累积）——sp.z 还要卡下界：
-        // 负 z（比 shadow 相机近面更近）拿去做 LessEqual 比较会恒亮（调试实录）
-        if (sp.x > 0.001 && sp.x < 0.999 && sp.y > 0.001 && sp.y < 0.999 && sp.z > 0.0 && sp.z < 1.0) {
-          // 硬件阴影比较（与 three PCF getShadow 同约定：比较值 = shadowCoord.z + bias，
-          // LinearFilter 的深度贴图采样自带 4-tap 软化）
-          acc += texture(tShadow, vec3(sp.xy, sp.z + shadowBias));
+    float trans = 1.0; // 透射率：盒内空气对视线方向的吸收（天空也要乘，用户定 2026-09）
+    if (tExit > tEnter) {
+      float t0 = tEnter;
+      float maxT = min(min(sceneDist, tExit), maxDist);
+      if (maxT > t0) {
+        float stepLen = (maxT - t0) / float(STEPS);
+        float jitter = fract(hash12(gl_FragCoord.xy) + frame * frame_percentage); // 抖动去带状条纹
+        float acc = 0.0;
+        for (int i = 0; i < STEPS; i++) {
+          float t = t0 + (float(i) + jitter) * stepLen;
+          vec3 p = camPos + rd * t;
+          vec4 sp = shadowMatrix * vec4(p, 1.0);
+          sp.xyz /= sp.w;
+          // 飞出 shadow 覆盖范围一律按"完全阴影"处理（不累积）——sp.z 还要卡下界：
+          // 负 z（比 shadow 相机近面更近）拿去做 LessEqual 比较会恒亮（调试实录）
+          if (sp.x > 0.001 && sp.x < 0.999 && sp.y > 0.001 && sp.y < 0.999 && sp.z > 0.0 && sp.z < 1.0) {
+            // 硬件阴影比较（与 three PCF getShadow 同约定：比较值 = shadowCoord.z + bias，
+            // LinearFilter 的深度贴图采样自带 4-tap 软化）
+            acc += texture(tShadow, vec3(sp.xy, sp.z + shadowBias));
+          }
         }
+        current = lightColor * acc * density * stepLen;
+        trans = exp(-density * (maxT - t0)); // 单次散射近似：消光系数 = 散射密度
       }
-      current = lightColor * acc * density * stepLen;
     }
     // temporal EMA：mix(历史, 当前帧, 1/30)——jitter 噪声在时间域收敛成稳定柔光
-    vec3 history = texture2D(tHistory, vUv).rgb;
-    gl_FragColor = vec4(mix(history, current, emaAlpha), 1.0);
+    // alpha 通道同步 EMA 透射率（与光量同节拍收敛）
+    vec4 history = texture2D(tHistory, vUv);
+    gl_FragColor = vec4(mix(history.rgb, current, emaAlpha), mix(history.a, trans, emaAlpha));
   }
 `;
 
-// composite：场景色 + EMA 光量 → 屏幕
+// composite：场景色 + EMA 光量 → 屏幕（可选配方 tint 场景调色，缺省白）
 const FRAG_COMPOSITE = /* glsl */`
   precision highp float;
   varying vec2 vUv;
   uniform sampler2D tDiffuse;
   uniform sampler2D tLight; // EMA 后的线性光量
+  uniform vec3 uTint;
 
   // RT 里是线性色，直接渲染到屏幕时 three 会在线性→sRGB 转换（outputColorSpace）；
   // 自写合成 shader 绕过了该链路，必须手动转回，否则画面整体变暗
@@ -109,7 +124,7 @@ const FRAG_COMPOSITE = /* glsl */`
   void main() {
     vec3 sceneCol = texture2D(tDiffuse, vUv).rgb;
     vec3 light = texture2D(tLight, vUv).rgb;
-    gl_FragColor = vec4(linearToSrgb(sceneCol + light), 1.0);
+    gl_FragColor = vec4(linearToSrgb((sceneCol + light) * uTint), 1.0);
   }
 `;
 
@@ -117,15 +132,18 @@ const FRAG_COMPOSITE = /* glsl */`
  * 建体积月光 composer。
  * @param {object} options
  *   light: THREE.DirectionalLight（castShadow，唯一体积光源）
- *   maxDist/density/lightBoost/nearZ: 参数（density 单位：每世界单位散射量）
+ *   box: { min:[x,y,z], max:[x,y,z] } 房间体积盒（比房间内稍大；view ray 与之求交框定
+ *        march 区间，盒外像素零光量——天空盒/远景正常渲染，用户定 2026-09）
+ *   maxDist/density/lightBoost: 参数（density 单位：每世界单位散射量；maxDist 仅安全后闸）
  * @returns { render(renderer, scene, camera), resize(w, h), dispose() }
  */
 export function createVolumetricMoonlight({
   light,
-  maxDist = 300,   // 行进上限：远场空气对演出无贡献还放大漏光面（上缘斜升视线回溯超高）
+  box = { min: [-95, -35, -92], max: [148, 95, 112] }, // 缺省 = 房型房间外扩（walls.js 常量 + 边距）
+  maxDist = 800,   // 安全后闸：盒交才是体积边界（曾用 300 硬截，相机拉远即渲染错误/偏暗——用户指正）
   density = 0.01,   // 光束要 prominent（过低只剩"空气感"，调试实录）
   lightBoost = 0.9,
-  nearZ = 95,        // 房间近缘（= dungeon3D FLOOR_NEAR_Z）：行进截断点
+  tint = null,       // 配方场景调色 [r,g,b]（composeRoom grading.tint 下发；缺省白）
 } = {}) {
   const rt = new THREE.WebGLRenderTarget(2, 2, {
     type: THREE.HalfFloatType,
@@ -151,12 +169,14 @@ export function createVolumetricMoonlight({
     frame: { value: 0 },
     frame_percentage: { value: 1 / 30 }, // 30 帧抖动轮转（与 EMA 速率同周期）
     emaAlpha: { value: EMA_ALPHA },
-    nearZ: { value: nearZ },
+    boxMin: { value: new THREE.Vector3(...box.min) },
+    boxMax: { value: new THREE.Vector3(...box.max) },
     shadowBias: { value: 0.002 },
   };
   const compositeUniforms = {
     tDiffuse: { value: rt.texture },
     tLight: { value: null },
+    uTint: { value: tint ? new THREE.Color(...tint) : new THREE.Color(1, 1, 1) },
   };
   const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const marchScene = new THREE.Scene();

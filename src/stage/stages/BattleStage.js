@@ -81,13 +81,13 @@ export class BattleStage {
    *   bakeFace(cardProjection) / bakeLabel(text)：烘焙函数，缺省浏览器 canvas 实现（可注入 fake）
    *   tween: StageAnimator 的 tween 工厂（缺省 gsap，测试注入手动版）
    */
-  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', displayModel = null }) {
+  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', sceneSeed = 'dev', displayModel = null }) {
     this.bridge = bridge;
     this.name = 'battle';
     this.scene = new THREE.Scene();   // 3D 世界 pass：场景/单位/粒子（与地板正确深度交互）
     this.uiScene = new THREE.Scene(); // UI pass：卡牌/按钮/图标/资源点（清深度后渲染，不被地板 z-test 裁掉）
     this._bus = bus || bridge.frontendBus;
-    this._sceneDef = getScene(scene);
+    this._sceneDef = getScene(scene, sceneSeed);
     // 素材缓存 = 应用级共享单例（跨场/跨舞台复用已解码图，预取也进同一份）：
     // node 单测注入 fake bakeFace 时不走卡图链路，缓存保持 null
     this._artCache = (!bakeFace && typeof document !== 'undefined')
@@ -129,8 +129,12 @@ export class BattleStage {
     if (this._scene3D) {
       this.scene.add(this._scene3D.group);
       // 雾：远景没入永夜蓝黑但保留墙/窗剪影（相机 (0,30,235) 斜视；立牌材质 fog:false 不受影响）。
-      // 前后排布局后场景纵深拉长（敌排 z≈-50、远墙 z=-80），雾距拉近让远排沉进暗部强化纵深
-      this.scene.fog = new THREE.Fog(0x060a14, 165, 310);
+      // 前后排布局后场景纵深拉长（敌排 z≈-50、远墙 z=-80），雾距拉近让远排沉进暗部强化纵深。
+      // PCG 房型配方可自带雾处方（火把章没有体积光 wash 抵消雾，需远推）——有则用之。
+      const fogDef = this._scene3D.recipe?.fog;
+      this.scene.fog = fogDef
+        ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
+        : new THREE.Fog(0x060a14, 165, 310);
     }
     // 体积月光 composer（ray marching，场景带投影月光且 renderer 支持 RT 时接管世界 pass；
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）

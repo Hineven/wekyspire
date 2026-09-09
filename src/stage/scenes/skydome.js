@@ -26,6 +26,8 @@ const FRAG = /* glsl */`
   uniform vec3 horizonColor;
   uniform vec3 zenithColor;
   uniform vec3 starColor;
+  uniform vec3 flatColor;
+  uniform float uFlat;
 
   float hash31(vec3 p) {
     p = fract(p * 0.1031);
@@ -49,6 +51,8 @@ const FRAG = /* glsl */`
     float disc = smoothstep(0.99930, 0.99965, ang);
     float halo = pow(max(ang, 0.0), 220.0) * 0.35;
     sky += moonColor * (disc + halo);
+    // 调试平色模式：纯低饱和中调冷蓝直出（区分诊断用）
+    sky = mix(sky, flatColor, uFlat);
     gl_FragColor = vec4(sky, 1.0);
   }
 `;
@@ -57,9 +61,11 @@ const FRAG = /* glsl */`
  * 建程序化夜空穹顶。
  * @param {object} options
  *   moonDir: THREE.Vector3 月亮方向（世界，会归一化）
+ *   flat: 调试模式（用户定 2026-09）——纯低饱和中调冷蓝直出，方便区分「天空透墙洞」
+ *         与「暗墙体」；后续乘 godlight transmittance 的正式版接回完整 shader
  * @returns {THREE.Mesh} 挂进世界场景即可
  */
-export function buildSkydome({ moonDir = new THREE.Vector3(-0.52, -0.15, -0.84) } = {}) {
+export function buildSkydome({ moonDir = new THREE.Vector3(-0.52, -0.15, -0.84), flat = false } = {}) {
   const uniforms = {
     camPos: { value: new THREE.Vector3() },
     moonDir: { value: moonDir.clone().normalize() },
@@ -67,6 +73,8 @@ export function buildSkydome({ moonDir = new THREE.Vector3(-0.52, -0.15, -0.84) 
     horizonColor: { value: new THREE.Color(0x1a1430) }, // 地平线：暗紫
     zenithColor: { value: new THREE.Color(0x04060f) },  // 天顶：蓝黑
     starColor: { value: new THREE.Color(0xbccaf0) },
+    flatColor: { value: new THREE.Color(0x4a5a72) },    // 调试平色：低饱和中调冷蓝
+    uFlat: { value: flat ? 1 : 0 },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -80,7 +88,10 @@ export function buildSkydome({ moonDir = new THREE.Vector3(-0.52, -0.15, -0.84) 
   dome.name = 'skydome';
   dome.renderOrder = -100; // 最先画（深度不写，永不遮挡）
   dome.frustumCulled = false;
-  /** 帧驱动：同步相机位置（方向采样原点）。 */
-  dome.updateSkydome = (camPos) => uniforms.camPos.value.copy(camPos);
+  /** 帧驱动：同步相机位置（方向采样原点 + 球壳跟随——R=800 恒在 far 内，永不裁切）。 */
+  dome.updateSkydome = (camPos) => {
+    dome.position.copy(camPos);
+    uniforms.camPos.value.copy(camPos);
+  };
   return dome;
 }
