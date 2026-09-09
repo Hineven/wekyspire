@@ -51,6 +51,11 @@ const TERMS = {
     color: '#e0a06a',
     describe: () => '触发一次咏唱',
   },
+  // 蓄热：蓄热火球的自我成长——只养自己，不外溢
+  '蓄热': {
+    color: '#e8875a',
+    describe: () => '此卡每次打出后，自身伤害+12（本场战斗内叠加，仅本卡生效）',
+  },
   // 洗入：向牌库注入价值（默认牌库，可指定落区）
   '洗入': {
     color: '#9fc4b8',
@@ -116,4 +121,9 @@ export function getNamedTerm(ref) {
   if (!def) return null;
   const param = m ? parseInt(m[2], 10) : null;
   return { name, param, color: def.color, text: def.describe(param) };
+}
+
+/** 全部词条（headless 文本界面等只读展示用；顺序即声明序）。 */
+export function listNamedTerms() {
+  return Object.entries(TERMS).map(([name, def]) => ({ name, text: def.describe(null) }));
 }

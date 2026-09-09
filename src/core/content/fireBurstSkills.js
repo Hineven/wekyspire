@@ -10,7 +10,6 @@
 // - 设计稿未写费用 = 0 费；未写咏唱值的咏唱卡按默认咏唱2（helpers.handWeightOf 兜底）。
 
 import { registerSkill, getSkillDefinition } from '../skills/registry.js';
-import { registerEffect } from '../effects/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
@@ -21,32 +20,6 @@ import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
   drawCards, burnCard, requestHandSelection, selected,
 } from './cardKit.js';
-
-// ====================================================================
-// 自定义效果：蓄热（蓄热火球 §1.1）
-// ====================================================================
-
-// 蓄热：挂玩家身上的增伤标记。语义假设（设计稿「发动后场内伤害增+12」）：
-// 「场内伤害」= 该单位**作为来源**造成的伤害 +12（每层 +12）；对承伤方向不生效。
-// 只做 PRE payload 修饰（加法、无乘区），可被 preview 干跑安全复算。
-registerEffect({
-  id: 'heatCharge',
-  type: 'buff',
-  stacking: 'count',
-  name: '蓄热',
-  description: '造成的伤害提高 12 点（每层）。',
-  icon: '♨️',
-  color: 'red',
-  subscriptions: (unit) => [{
-    when: DealDamageInstruction,
-    phase: 'pre',
-    filter: (instr) => instr.source === unit && !instr.fixed,
-    react: (instr) => {
-      const stacks = unit.getEffectStacks('heatCharge');
-      if (stacks > 0) instr.setPayload('damage', instr.payload.damage + 12 * stacks);
-    },
-  }],
-});
 
 // ====================================================================
 // 共享原语
@@ -104,8 +77,9 @@ fireBallCard({ id: 'fireBall', name: '火球术', tier: 'B', damage: 28, draw: 2
 fireBallCard({ id: 'fireBarrage', name: '火球连发', tier: 'A', damage: 14, hits: 2, draw: 3 });
 fireBallCard({ id: 'greaterFireBall', name: '大火球术', tier: 'A', damage: 38, draw: 2 });
 
-// 蓄热火球（C）：8 直伤，随后获得蓄热（此后自身全部伤害 +12，战斗内常驻）。
-// 顺序按设计稿「8伤害，发动后…」：本卡伤害不享受自身蓄热。
+// 蓄热火球（C）：8 直伤；每次打出后**自身**伤害永久 +12（本场战斗内，其他卡
+// 吃不到——平衡口径见 2026-09 反馈）。加成由 runtime.power 承载（伤害公式
+// 基数+面板+power 同源，卡面威力直读）；先结算本拍再+12：本次打出不享受。
 registerSkill({
   id: 'heatChargedBall', name: '蓄热火球', type: 'fire', tier: 'C', series: 'fireBall',
   cost: { mana: 2, actionPoint: 0 },
@@ -113,11 +87,11 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
     attackDamage(sctx, 8);
-    addEffect(sctx, 'heatCharge', 1);
+    sctx.self.power += 12;
     return true;
   },
-  describe: () => '8伤害，/effect{蓄热}（伤害+12）',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 8)}，/effect{蓄热}（造成的伤害+12）`,
+  describe: () => '8伤害，/named{蓄热}（伤害+12）',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 8)}，/named{蓄热}（伤害+12）`,
 });
 
 // ====================================================================

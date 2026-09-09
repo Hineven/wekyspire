@@ -79,7 +79,7 @@ describe('火球术系列：直伤与抽牌', () => {
     });
   }
 
-  it('蓄热火球：8伤害不享受自身蓄热，后续伤害+12', () => {
+  it('蓄热火球：每次打出后自身伤害+12（仅本卡，其他卡吃不到）', () => {
     const d = makeDriver(
       ['heatChargedBall', 'fireBolt', 'punch', 'punch', 'punch', 'punch'],
       [tank()], { maxMana: 5 });
@@ -88,11 +88,17 @@ describe('火球术系列：直伤与抽牌', () => {
     toHand(d, 'fireBolt');
 
     d.play('heatChargedBall');
-    expect(d.state.enemies[0].hp).toBe(500 - 8);
-    expect(d.player.getEffectStacks('heatCharge')).toBe(1);
+    expect(d.state.enemies[0].hp).toBe(500 - 8);          // 首打：基数 8，本次不享受 +12
+    const ball = d.state.zones.deck.find(c => c.defId === 'heatChargedBall');
+    expect(ball.power).toBe(12);                          // 加成落 runtime.power（卡面威力直读）
 
-    d.play('fireBolt'); // 18 + 蓄热12
-    expect(d.state.enemies[0].hp).toBe(500 - 8 - 30);
+    d.play('fireBolt');                                   // 火弹 18：不吃蓄热
+    expect(d.state.enemies[0].hp).toBe(500 - 8 - 18);
+
+    d.dispatch(new GainManaInstruction({ amount: 99 }));  // 回满（二打需 2 魏启）
+    toHand(d, 'heatChargedBall');
+    d.play('heatChargedBall');
+    expect(d.state.enemies[0].hp).toBe(500 - 8 - 18 - 20); // 二打：8 + 12
   });
 });
 

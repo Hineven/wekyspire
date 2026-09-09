@@ -21,7 +21,8 @@ import { BODY_STARTER_DECK } from '../src/core/content/bodySkills.js';
 import { createNullPresenter } from '../src/core/presenter.js';
 import { canUseSkill, makeSkillCtx, effectiveHandCount } from '../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../src/core/skills/registry.js';
-import { getEffectDefinition } from '../src/core/effects/registry.js';
+import { listNamedTerms } from '../src/core/skills/namedTerms.js';
+import { getEffectDefinition, allEffects } from '../src/core/effects/registry.js';
 import { getAbilityDefinition } from '../src/core/abilities/registry.js';
 import { getRelicDefinition } from '../src/core/relics/registry.js';
 import { swapCostOf } from '../src/core/state/battleState.js';
@@ -138,7 +139,7 @@ function exec(S, raw) {
   const stage = run.gameStage;
   switch (cmd) {
     case 'note': S.lastOutcome = `记事: ${t.slice(1).join(' ')}`; return;
-    case 'state': case 'deck': case 'help': S.lastOutcome = ''; return;
+    case 'state': case 'deck': case 'terms': case 'help': S.lastOutcome = ''; return;
 
     // ---- 战斗 ----
     case 'fight':
@@ -467,6 +468,16 @@ function renderDeck(S) {
   return L.join('\n');
 }
 
+function renderTerms() {
+  const L = ['【词条表】（卡面关键词的完整释义，等同游戏内悬浮说明）'];
+  for (const { name, text } of listNamedTerms()) L.push(`  ${name} — ${text}`);
+  L.push('【效果表】（状态栏图标释义）');
+  for (const def of allEffects()) {
+    L.push(`  ${def.name}（${def.type === 'buff' ? '增益' : '减益'}） — ${def.description}`);
+  }
+  return L.join('\n');
+}
+
 // ---------- 入口 ----------
 const [, , sessionName, ...argv] = process.argv;
 if (!sessionName || sessionName === 'help') { console.log(HELP); process.exit(0); }
@@ -501,4 +512,5 @@ if (action && action !== 'state' && action !== 'help') {
 }
 if (action === 'help') console.log(HELP);
 else if (action === 'deck') console.log(renderDeck(S));
+else if (action === 'terms') console.log(renderTerms());
 else console.log(render(S));
