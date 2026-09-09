@@ -8,7 +8,8 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
   // 养成字段幂等初始化（测试 fixture 可能传入预构造 Player）
   p.leino = { fire: 0, wood: 0, air: 0, body: 0, ...p.leino }; // 四维独立灵脉等级（§5.1）
   p.trainingCount ??= 0;          // 训练房累计训练次数（进阶主途径，§4.1）
-  p.ascensionCount ??= 0;         // 已完成进阶次数（§5.3，四维总和封顶 6）
+  p.ascensionCount ??= 0;         // 已完成进阶次数（§5.3，总进阶次数封顶 6）
+  p.bodyLevel ??= 0;              // 隐藏体修等级（跳过进阶时 +1，决定体修卡包门禁）
   p.relics ??= [];                // 遗物背包 [relicId]
   p.equippedRelics ??= [];        // 装备中的遗物（受 relicSlots 上限约束，§4.5）
   p.relicSlots ??= 2;
@@ -26,6 +27,8 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     pendingCardRemoval: 0,       // 待使用的删卡机会（Boss 奖励，§2.1）
     relicUses: {},               // 主动遗物剩余次数 { relicId: uses }（§4.5）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）
+    cardOffering: null,          // 种子包待选（首次点亮灵脉：九选三，§5.3 追加）
+    commonPity: 0,               // 通用卡注入保底计数（每 N 次开包必出一次）
     player: p,
     remi: {
       level: profile?.remiBaseLevel ?? 1, // 瑞米状态 = 基线(profile) + 局内增量（§6.4）

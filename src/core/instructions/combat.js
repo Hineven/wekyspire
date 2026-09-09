@@ -3,19 +3,23 @@ import BattleInstruction from '../kernel/BattleInstruction.js';
 // 伤害结算：防御减免 → 护盾吸收（pierce 跳过护盾与防御）→ 扣 HP（不低于 minHp 地板）。
 // payload 白名单 ['damage', 'pierce']：PRE 订阅可改伤害/穿透（斩灭翻倍、易伤加深等）。
 // POST 订阅经 result 读结算明细（暴怒反击、受伤联动等）。
-// tags：机制标记位（如 'aoe' 群伤），供 filter 识别（爆发"群伤单目标三倍"），不可修饰。
+// tags：机制标记位（如 'aoe' 群伤 / 'burn' 燃烧），供 filter 识别（爆发"群伤单目标三倍"、
+// 防火"燃烧结算跳过"），不可修饰。
+// fixed（固定伤害，battle.md F2）：跳过修正步与防御步，仅护盾仍可吸收——payload 白名单
+// 为空（伤害不可被 PRE 改写），但结算仍可被 veto（防火"跳过结算"）。中毒等环境伤害用。
 // minHp 地板：经 getStat('minHp') 读轨（不灭等效果的 statModifiers 提供），默认 0。
 export class DealDamageInstruction extends BattleInstruction {
-  constructor({ source = null, target, amount, pierce = false, tags = [] }, opts = {}) {
+  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [] }, opts = {}) {
     super(opts);
     this.source = source;       // Unit | null（环境伤害等无来源）
     this.target = target;       // Unit
     this.amount = amount;       // 基础伤害（不含攻击面板；攻击面板由调用方算入或经 PRE）
     this.basePierce = pierce;
+    this.fixed = fixed;
     this.tags = tags;
   }
 
-  get modifiablePayload() { return ['damage', 'pierce']; }
+  get modifiablePayload() { return this.fixed ? [] : ['damage', 'pierce']; }
 
   buildPayload() {
     this.payload.damage = this.amount;
@@ -24,12 +28,14 @@ export class DealDamageInstruction extends BattleInstruction {
 
   execute(ctx) {
     const target = this.target;
-    const defense = this.payload.pierce ? 0 : target.getStat('defense');
-    let dmg = Math.max(this.payload.damage - defense, 0);
-    const defenseBlocked = this.payload.damage - dmg;
+    const raw = this.fixed ? this.amount : this.payload.damage;
+    const pierce = this.fixed ? false : this.payload.pierce;
+    const defense = (pierce || this.fixed) ? 0 : target.getStat('defense');
+    let dmg = Math.max(raw - defense, 0);
+    const defenseBlocked = raw - dmg;
 
     let shieldAbsorbed = 0;
-    if (!this.payload.pierce && target.shield > 0) {
+    if (!pierce && target.shield > 0) {
       shieldAbsorbed = Math.min(target.shield, dmg);
       target.shield -= shieldAbsorbed;
       dmg -= shieldAbsorbed;
@@ -38,7 +44,7 @@ export class DealDamageInstruction extends BattleInstruction {
     target.hp = Math.max(target.hp - dmg, target.getStat('minHp'));
 
     this.result = {
-      damage: this.payload.damage,
+      damage: raw,
       defenseBlocked,
       shieldAbsorbed,
       dealt: dmg,
@@ -57,7 +63,7 @@ export class DealDamageInstruction extends BattleInstruction {
 
     ctx.presenter?.damage?.({
       source: this.source, target, dealt: dmg,
-      defenseBlocked, shieldAbsorbed, pierce: this.payload.pierce,
+      defenseBlocked, shieldAbsorbed, pierce,
     });
     if (target.isDead()) ctx.presenter?.unitDeath?.({ unit: target });
     return true;

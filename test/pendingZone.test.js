@@ -15,6 +15,19 @@ import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 // 效果逻辑自行安置时收尾不二次搬动；终局 abort 由 PostBattle 清扫。
 // （「discardRightmost 无特判」的刀背行为由 bodySkills.test.js 同步更新覆盖，此处不重复。）
 
+// 右弃探针（测试卡）：弃最右 1 张手牌。刀背打击已随新设计稿移除，此卡在测试内自备等价行为。
+registerSkill({
+  id: 'discardRightProbe', name: '右弃探针',
+  cost: { mana: 0, actionPoint: 1 },
+  use(sctx) {
+    const rightmost = sctx.battleState.zones.hand.at(-1);
+    if (rightmost) {
+      sctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID: rightmost.uniqueID }));
+    }
+    return true;
+  },
+});
+
 // 停滞卡（测试卡）：结算中段挂起等玩家输入——观察 pending 的窗口
 registerSkill({
   id: 'stallProbe', name: '停滞卡',
@@ -227,7 +240,7 @@ describe('pending 结算区', () => {
 
   it('弃牌连锁咏唱（POST 范式）：链式弃到手牌清空自然终止，发动卡不被连锁误弃', () => {
     const d = new BattleDriver({
-      deck: ['cascadeChant', 'knifeBack', 'punch', 'punch'],
+      deck: ['cascadeChant', 'discardRightProbe', 'punch', 'punch'],
       enemies: ['slime'], seed: 5, player: { maxHp: 200 },
     });
     d.start();
@@ -236,13 +249,13 @@ describe('pending 结算区', () => {
     expect(zoneOf(d.state, chant.uniqueID)).toBe('hand');
     expect(chant.isActivated).toBe(true);
 
-    d.play('knifeBack'); // 自身弃 1 → 连锁再弃 → 链式到手牌清空（咏唱卡被弃时先熄灭，防自续）
+    d.play('discardRightProbe'); // 自身弃 1 → 连锁再弃 → 链式到手牌清空（咏唱卡被弃时先熄灭，防自续）
     expect(d.state.zones.hand).toHaveLength(0);
     const cycledIds = d.state.zones.deck.map(c => c.uniqueID); // 弃牌落牌库底：全卡组 FIFO 循环回 deck
     expect(cycledIds).toHaveLength(4); // 连锁弃牌（punch×2 + 咏唱卡）+ knifeBack 自身收尾，各一次
     expect(new Set(cycledIds).size).toBe(4); // 无同卡双弃
-    expect(d.state.zones.deck.at(-1).defId).toBe('knifeBack'); // FIFO：knifeBack 收尾居末位
-    expect(d.state.history.battle.discarded).toBe(3); // 三次真弃牌（knifeBack 收尾是 zone 迁移不计弃）
+    expect(d.state.zones.deck.at(-1).defId).toBe('discardRightProbe'); // FIFO：探针自身收尾居末位
+    expect(d.state.history.battle.discarded).toBe(3); // 三次真弃牌（探针收尾是 zone 迁移不计弃）
     expect(chant.isActivated).toBe(false); // 离手熄灭（不变量）
   });
 });

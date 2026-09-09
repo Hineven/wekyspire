@@ -1,8 +1,8 @@
 import { promoteCard, canPromoteRuntime } from '../promotion.js';
-import { rollSkillChoices } from '../rewards.js';
+import { rollTrainingChoices } from '../rewards.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 
-// 训练场（RUN_DESIGN §4.1）：进阶主途径，固定出现在 4N-3 层（楼层表见 runFlow）。
+// 训练场（RUN_DESIGN §4.1）：进阶主途径，固定出现在 4N-2 层（2/6/10…42，楼层表见 runFlow）。
 // 访问流程（「先升后抓」强绑，每房至多一次）：
 //   1) 免费升级一张卡（可跳过）；一旦升级，强制三选一抓一张（不可跳过——升级必须换来一张新卡）；
 //   2) 无可升级卡牌时，整房退化为一次可选抓牌（可跳过）。
@@ -27,13 +27,13 @@ export function trainingMode(run) {
 export function trainUpgrade(run, uniqueID, targetId = null) {
   const result = promoteCard(run, uniqueID, targetId);
   if (!result) throw new Error('该卡暂无可用晋升目标，无法升级');
-  run.roomData = { drawChoices: rollSkillChoices(run), forced: true };
+  run.roomData = { drawChoices: rollTrainingChoices(run), forced: true };
   return run;
 }
 
 // 退化模式手动开局：roll 三选一候选待抉择（可领取也可跳过）
 export function trainDrawChoices(run) {
-  run.roomData = { drawChoices: rollSkillChoices(run) };
+  run.roomData = { drawChoices: rollTrainingChoices(run) };
   return run.roomData.drawChoices;
 }
 

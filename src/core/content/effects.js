@@ -1,5 +1,5 @@
 import { registerEffect } from '../effects/registry.js';
-import { TurnStartInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
@@ -23,7 +23,7 @@ registerEffect({
       const stacks = unit.getEffectStacks('burn');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: unit, amount: stacks, pierce: true,
+        source: null, target: unit, amount: stacks, pierce: true, tags: ['burn'],
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'burn', stacks: -1,
@@ -46,7 +46,8 @@ registerEffect({
   subscriptions: (unit) => [{
     when: DealDamageInstruction,
     phase: 'pre',
-    filter: (instr) => instr.target === unit,
+    // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错
+    filter: (instr) => instr.target === unit && !instr.fixed,
     react: (instr, ctx) => {
       instr.setPayload('damage', Math.floor(instr.payload.damage / 2));
       ctx.kernel.submitInstruction(
@@ -154,6 +155,74 @@ registerEffect({
   description: '每层使攻击降低 1 点。',
   icon: '📉',
   color: 'purple',
+});
+
+// 防火（EFFECTS.md）：燃烧结算时跳过伤害（层数照常 -1——燃烧自身的递减在 burn 反应里
+// 独立提交，veto 伤害不影响它）。识别走伤害指令的 'burn' 标记，不做效果名特判。
+registerEffect({
+  id: 'fireproof',
+  type: 'buff',
+  stacking: 'count',
+  name: '防火',
+  description: '此单位燃烧结算时跳过伤害，层数减少 1。',
+  icon: '🧯',
+  color: 'blue',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit && instr.tags?.includes('burn'),
+    react: (instr, ctx) => ctx.kernel.veto(instr, 'fireproof'),
+  }],
+});
+
+// 中毒（EFFECTS.md）：回合结束时受到层数点固定伤害（F2：跳过修正与防御、仍吃护盾），
+// 然后层数 -1。与燃烧的区别：回合末结算 + 固定伤害（不吃格挡减半/易伤等修正）。
+registerEffect({
+  id: 'poison',
+  type: 'debuff',
+  stacking: 'count',
+  name: '中毒',
+  description: '回合结束时受到等于层数的固定伤害，然后层数减少 1。',
+  icon: '☠️',
+  color: 'green',
+  subscriptions: (unit) => [{
+    when: TurnEndInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('poison');
+      if (stacks <= 0) return;
+      ctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: null, target: unit, amount: stacks, fixed: true, tags: ['poison'],
+      }), instr);
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'poison', stacks: -1,
+      }), instr);
+    },
+  }],
+});
+
+// 笨拙（EFFECTS.md）：每次尝试抽牌取消该次抽牌并 -1 层（逐层消耗，区别于滞气的整回合锁）。
+// 用 payload 归零而非 veto：被取消节点的子节点不执行（A4），-1 必须挂在仍然执行的节点上。
+registerEffect({
+  id: 'clumsy',
+  type: 'debuff',
+  stacking: 'count',
+  name: '笨拙',
+  description: '抽牌时取消该次抽牌，然后层数减少 1。',
+  icon: '🐾',
+  color: 'gray',
+  subscriptions: (unit) => [{
+    when: DrawCardsInstruction,
+    phase: 'pre',
+    filter: () => unit.getEffectStacks('clumsy') > 0,
+    react: (instr, ctx) => {
+      instr.setPayload('count', 0); // 本次抽牌落空
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'clumsy', stacks: -1,
+      }), instr);
+    },
+  }],
 });
 
 // 再生：回合开始恢复层数点生命，然后层数 -1（EFFECTS.md 目录既有定义的正式落地）。

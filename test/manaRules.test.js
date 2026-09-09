@@ -24,10 +24,10 @@ describe('魏启：入战半满 + 回合恢复', () => {
   });
 
   it('跨战斗重置：上一场的余量不带入下一场', () => {
-    const d = new BattleDriver({ deck: ['inflame'], enemies: ['slime'], seed: 5 });
+    const d = new BattleDriver({ deck: ['purify'], enemies: ['slime'], seed: 5 });
     d.start();
     expect(d.player.mana).toBe(2); // 半满1 + 回合恢复1
-    d.play('inflame');
+    d.play('purify');
     expect(d.player.mana).toBe(1);
 
     // 复用同一 runState 开启第二场战斗（模拟爬塔进入下一层）

@@ -21,7 +21,7 @@
 ```bash
 npm install        # 安装依赖
 npm run dev        # 开发服务器（localhost:5177）
-npm test           # = vitest run，61 个测试文件 / 1654 用例（截至 2026-11 全绿）
+npm test           # = vitest run，66 个测试文件 / 1811 用例（截至 2026-09 全绿）
 npm run build      # 产出 dist/
 npm run preview    # 本地预览构建产物
 ```
@@ -60,7 +60,12 @@ MapStage 与 BattleStage 共享同一 canvas，由 `StageManager` 切换。run �
 - **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位：`UnitSpawnInstruction` 尾插 enemies/allies，本回合行动循环快照已取、下回合起参战；敌方意图 kinds 含 'summon'）。
 - **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/burnt/pending——牌库为 FIFO 唯一循环区：顶抽底还，**无弃牌堆、无重洗**，离手非消耗卡一律落牌库底=数组尾；咏唱无槽——卡住四区，激活态在 skillRuntime.isActivated，压力走手牌上限加权口径）、种子 rng、`skillRuntime`（定义/运行时分离）。
 - **`flow/battle.js`** — 战斗装配：`createBattle/startBattle/playerUseSkill/playerEndTurn/respondInput`。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
-- **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK）、rewards / ascension / prep、rooms/（camp、event、slotMachine、training）。
+- **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK，自动应答结算期输入、自动开包与种子包）、rewards / ascension / prep、rooms/（camp、event、slotMachine、training）。
+  - **奖励卡包制**（2026-09）：战后先选卡包再包内三选一；**体修包恒开（门禁看隐藏的 `player.bodyLevel`）**，灵脉包需 `leino[维度] ≥1`（门禁看该维度等级：0 级 D/C、1 级 B、2 级 A——专精昂贵是设计意图）；木/空无内容时自动隐藏；训练房抓牌走「已解锁卡包并集」。
+  - **通用卡包**（2026-09）：汲取/魏启罐/激发/杂技等 15 张灰卡以 `pack: 'common'` 独立成包，**不可直接选择**，按 `COMMON_INJECT`（30% + 每 4 次开包保底）替换任意卡包三选一中的一张；门禁达 B 以上时剔除 D 级（保证「出现即有价值」）。
+  - **进阶节奏**（2026-09）：训练房固定 4N-2 层；**首进阶仅需 1 次训练（第 2 层）**，此后每 2 次训练 +1 级（节点约第 2/14/26/34/42 层）；封顶按总进阶次数（`maxAscensions: 6`，含跳过）。
+  - **跳过进阶**：不选灵脉，改记 1 点隐藏体修等级（`player.bodyLevel`，体修卡包门禁），同样享受全恢复与魏启上限 +1，但不触发种子包——故事模式暗线（体修大成）。
+  - **种子包**（2026-09）：灵脉**首次 0→1** 时开九选三（可刷新一次），种子池限定该维度 D/C 基石卡并排除「需前置储备才生效」的组合件（排除表见 `ascension.js` 的 `SEED_EXCLUDED`，内容侧也可用 `seedEligible: false` 标注）。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 工厂产出同构注册表：skills/、abilities/、enemies/、allies/、relics/、effects/。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
 - **`content/`** — 最小内容实现（技能/体修卡组/敌人/能力/遗物/效果/盟友）。技能设计意图见 **`skills/SKILL_DESIGN_PRINCIPLES.md`**（等阶 D→C→B→A，S/Z 阶梯外；升阶=局外 Transform；powerUp 养成轴已废弃）。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。

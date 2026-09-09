@@ -167,7 +167,7 @@ describe('BattleStage 无头联调', () => {
     expect(stage._views.get(guard.uniqueID).position.y).toBeGreaterThan(-5); // 已离开手牌扇区（≈0，z=30 平面反投影略有透视偏移）
 
     stage.handlePointerUp(b.x, b.y); // 过线松手 → 打出
-    expect(player.shield).toBe(5);
+    expect(player.shield).toBe(4);
     expect(stage.model.getZone(guard.uniqueID)).toBe('deck'); // 停车回牌库底（对象留存）
     expect(stage._views.get(guard.uniqueID).visible).toBe(false);
     const handZoned = [...stage.model.cards.values()].filter(e => e.zone === 'hand');
@@ -637,7 +637,7 @@ describe('BattleStage 无头联调', () => {
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
     bridge.intents.playCard(guard.uniqueID); // 格挡 → 玩家 5 盾
-    expect(bridge.getProjection().player.shield).toBe(5);
+    expect(bridge.getProjection().player.shield).toBe(4);
     const unit = stage._units.get(bridge.getProjection().player.uniqueID);
     let flashed = 0;
     const origFlash = unit.flash.bind(unit);
@@ -663,7 +663,7 @@ describe('BattleStage 无头联调', () => {
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
     bridge.intents.playCard(guard.uniqueID); // 玩家 5 盾
-    expect(bridge.getProjection().player.shield).toBe(5);
+    expect(bridge.getProjection().player.shield).toBe(4);
     const unit = stage._units.get(bridge.getProjection().player.uniqueID);
 
     // 部分吸收（5 盾吸 2）：有吸收火花，无破碎碎粒（粒子具体数量属视觉调参，只断言语义）
@@ -763,7 +763,7 @@ describe('BattleStage 无头联调', () => {
     const syncIdx = events.indexOf(EventNames.ANIM_STATE_SYNC, addedIdx);
     expect(syncIdx).toBeGreaterThan(addedIdx);
     // 牌库计数与后端一致（千击已入库；sync 先于断言已应用）
-    expect(bridge.battle.battleState.zones.deck.some(c => c.defId === 'thousandHits')).toBe(true);
+    expect(bridge.battle.battleState.zones.deck.some(c => c.defId === 'instantStrike')).toBe(true);
     expect(bridge.getProjection().counts.deck).toBe(bridge.battle.battleState.zones.deck.length);
     // 演出用瞬态 spawn 卡：出现过且不留残（instantTween 即完即毁）
     // 高 z 断言：生成卡出生 z=70，盖过结算中发动卡的展示位（z=60）——防遮挡

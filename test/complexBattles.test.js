@@ -225,9 +225,10 @@ describe('复杂战斗：队友死亡', () => {
     const hunter = d.state.enemies[0];
     const remi = d.state.allies[0];
     d.start();
-    expect(hunter.hp).toBe(48); // 瑞米先动：50-2
+    expect(hunter.hp).toBe(50); // 盟友在玩家回合结束后行动（P7）：起手瑞米未动
 
-    d.endTurn(); // 猎人打瑞米 8
+    d.endTurn(); // 玩家回合结束 → 瑞米行动（50→48）；敌方回合猎人打瑞米 8
+    expect(hunter.hp).toBe(48);
     expect(remi.hp).toBe(7);
 
     d.endTurn(); // 瑞米再动（48→46），猎人击杀瑞米

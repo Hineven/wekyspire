@@ -19,10 +19,10 @@ describe('塔结构与楼层表（RUN_DESIGN §1/§4）', () => {
     expect(bosses).toEqual([11, 22, 33, 44]);
   });
 
-  it('训练房固定 4N-3 层（Boss 层 33 碰撞时 Boss 优先）', () => {
+  it('训练房固定 4N-2 层（Boss 层 22 无房间；10 层被战前营地顶替）', () => {
     const trainings = [];
     for (let f = 1; f <= TOTAL_FLOORS; f++) if (isTrainingFloor(f)) trainings.push(f);
-    expect(trainings).toEqual([1, 5, 9, 13, 17, 21, 25, 29, 37, 41]); // 33 是 Boss 层
+    expect(trainings).toEqual([2, 6, 10, 14, 18, 26, 30, 34, 38, 42]); // 22 是 Boss 层
   });
 
   it('Boss 战前一层必出营地保底，且优先于训练房', () => {
@@ -34,10 +34,10 @@ describe('塔结构与楼层表（RUN_DESIGN §1/§4）', () => {
   it('Boss 层无奖励房；其余层派发四种房之一', () => {
     const rng = createRng(1);
     expect(roomOfFloor(11, rng)).toBeNull();
-    for (const f of [2, 3, 4, 6, 7, 8, 12]) {
+    for (const f of [3, 4, 7, 8, 12, 15]) {
       expect(['slot', 'camp', 'event']).toContain(roomOfFloor(f, rng));
     }
-    expect(roomOfFloor(1, createRng(1))).toBe('training');
+    expect(roomOfFloor(2, createRng(1))).toBe('training');
   });
 });
 
@@ -85,9 +85,9 @@ describe('阶段机迁移', () => {
     expect(run.gameStage).toBe('reward');
     expect(run.rewards.skillChoices.length).toBe(3);
     chooseSkillReward(run, run.rewards.skillChoices[0]);
-    completeRewards(run); // floor 1 → 训练房
+    completeRewards(run); // floor 1 → 随机房（训练房已移至 4N-2 层）
     expect(run.gameStage).toBe('room');
-    expect(run.currentRoom).toBe('training');
+    expect(['slot', 'camp', 'event']).toContain(run.currentRoom);
     completeRoom(run);
     expect(run.gameStage).toBe('prep');
     expect(run.floor).toBe(2);
@@ -140,12 +140,12 @@ describe('RunDriver 整局驱动（§6.5）', () => {
     const trainingRooms = d.history.filter(h => h.room === 'training').length;
     expect(trainingRooms).toBeGreaterThan(0);
     expect(d.run.player.trainingCount).toBe(trainingRooms);
-    // 进阶缺省处理：次数 = floor(trainingCount/门槛)，四维总和与灵脉分配一致
+    // 进阶缺省处理：门槛曲线 = 首进阶 1 次训练，此后每 2 次训练 +1 级
     const p = d.run.player;
-    const expected = Math.min(
-      Math.floor(p.trainingCount / ASCENSION_PLACEHOLDER.trainingsPerLevel),
-      ASCENSION_PLACEHOLDER.maxTotalLeino,
-    );
+    const { firstTrainings, trainingsPerLevel, maxAscensions } = ASCENSION_PLACEHOLDER;
+    let expected = 0;
+    while (expected < maxAscensions
+      && p.trainingCount >= firstTrainings + expected * trainingsPerLevel) expected += 1;
     expect(p.ascensionCount).toBe(expected);
     expect(totalLeino(d.run)).toBe(p.ascensionCount);
     expect(p.leino.fire).toBe(p.ascensionCount); // 占位缺省策略加火灵脉

@@ -10,8 +10,10 @@ export function makeSkillCtx(ctx, self) {
 
 // 可用性基础检查（充能/咏唱规则/自定义条件/费用），费用修正（PRE 订阅）在结算时作用于
 // 消耗指令，canUse 与结算的费用一致性由"消耗走资源指令"保证（多扣已在结算内，少扣由
-// canUse 兜底）。资源不足时进入能力裁决链：任一能力的 canUseSkill 钩子返回 true 即放行
+// canUse 兜底）。资源不足时进入裁决链：任一能力的 canUseSkill 钩子返回 true 即放行
 // （突破极限"蓝量大于1时可超费使用"等），结算侧由资源指令的 clamp 兜底。
+// 裁决链第二环：手牌中已激活的咏唱卡可提供 activated.canUseSkill 钩子（卡牌级放行，
+// 如「突破极限」——激活期间蓝大于 0 即可透支），与能力钩子同语义、同兜底。
 // 咏唱双态规则：激活态打出 = 免费解除并离场（anchored 锁定除外）；未激活打出 = 付费发动，
 // 发动合法性 = 激活后加权手牌数 ≤ 手牌上限（咏唱压力与手牌压力统一，用户定）。
 export function canUseSkill(ctx, self) {
@@ -29,9 +31,15 @@ export function canUseSkill(ctx, self) {
   const manaOk = free || ctx.player.mana >= (def.cost?.mana ?? 0);
   const apOk = free || ctx.player.actionPoints >= (def.cost?.actionPoint ?? 0);
   if (manaOk && apOk) return true;
+  const budget = { manaOk, apOk };
   for (const id of ctx.player.abilities ?? []) {
-    const verdict = getAbilityDefinition(id).canUseSkill?.(makeSkillCtx(ctx, self), { manaOk, apOk });
+    const verdict = getAbilityDefinition(id).canUseSkill?.(makeSkillCtx(ctx, self), budget);
     if (verdict === true) return true;
+  }
+  for (const card of ctx.battleState.zones.hand) {
+    if (!card.isActivated || card.uniqueID === self.uniqueID) continue;
+    const hook = getSkillDefinition(card.defId).activated?.canUseSkill;
+    if (hook?.(makeSkillCtx(ctx, card), budget) === true) return true;
   }
   return false;
 }

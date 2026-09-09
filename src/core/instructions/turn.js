@@ -42,8 +42,19 @@ export class EnemyTurnEndInstruction extends TurnEndInstruction {
   constructor(opts = {}) { super('enemy', opts); }
 }
 
-// ---- 玩家回合：阶段机。stage 4 挂起（WAIT）等待玩家操作 ----
-// 开始结算 → 冷却推进 → 抽牌 → 队友（瑞米）依次行动 → WAIT 玩家输入 → 回合结束结算
+// 咏唱触发挂载点（battle.md P5「主角咏唱卡触发」）：本身无结算，激活咏唱卡的
+// 触发效果 = 其 POST 订阅（activated.subscriptions 注册，owner = 卡牌，熄灭时注销）。
+// 「快速咏唱」（先发火系列）等价于提前提交一次本指令——同一挂载点复用，触发逻辑单一。
+export class ChantTriggerInstruction extends BattleInstruction {
+  execute() { return true; }
+}
+
+// ---- 玩家回合：阶段机（battle.md §3.1 七阶段映射）----
+// P1 回合开始 → P2 冷却推进 → P3 抽牌 → P4 WAIT 玩家操作 → P5 咏唱触发
+// → P7 盟友行动 → P6/P8 回合结束结算（主角回合结束与"回合结束类触发"合并为一枚指令：
+//   现有机械内容——滞气递减、短暂回库、turn 窗口清扫——全部属于 P8；P6 在本实现里
+//   只是"玩家操作结束"的边界，由 P7 之前的位置天然表达）
+// 注意：盟友在玩家操作**之后**行动（旧实现的"盟友先行动"已废弃）。
 export class PlayerTurnInstruction extends BattleInstruction {
   constructor(opts = {}) {
     super(opts);
@@ -75,15 +86,20 @@ export class PlayerTurnInstruction extends BattleInstruction {
         }
         return false;
       case 3:
+        if (this.endRequested) return false;
+        return WAIT;
+      case 4:
+        // P5 咏唱触发：激活咏唱卡的每回合触发效果（无激活咏唱时本指令空转）
+        ctx.kernel.submitInstruction(new ChantTriggerInstruction(), this);
+        return false;
+      case 5:
+        // P7 盟友行动（玩家操作之后）
         for (const ally of aliveAllies(ctx.battleState)) {
           ctx.kernel.submitInstruction(
             new AIActInstruction({ unit: ally, resolveDef: getAllyDefinition }), this);
         }
         return false;
-      case 4:
-        if (this.endRequested) return false;
-        return WAIT;
-      case 5:
+      case 6:
         ctx.kernel.submitInstruction(new PlayerTurnEndInstruction(), this);
         return false;
       default:

@@ -1,0 +1,370 @@
+// 体修·拆组合（BODY_CULTIVATION_CARDS §3：格挡体系）。
+// 精准（完美/命中）/ 破势（破）/ 格挡 / 盾 / 姿态（龟守·武术·狂战）/ 以无胜有·以有胜无 咏唱。
+// 格挡一律落 block 效果层数（≠ 护盾池）；伤害走 cardKit 统一算式。
+//
+// 机制词（NAMED.md）落地口径：
+//   【完美】canUse 逐张判定左侧手牌可用性（canUseSkill 全量口径：费用/充能冷却/
+//           咏唱规则/各卡自定义条件一并算入）；
+//   【命中】use 多阶段：段 0 提交伤害 + beginHitProbe，段 1 hitLanded（>0 点生命值
+//           伤害；被护盾全吸收/被 veto/打空均算未命中，A4 取消无联动）才给奖励；
+//   【破】  breakAllBlock 一条指令清零格挡，再逐层各提交一枚独立的转化指令
+//           （「每失去一层触发一次」严格同构：每层单独结算、可各自被修饰/取消）。
+
+import { registerSkill } from '../skills/registry.js';
+import { AddEffectInstruction } from '../instructions/effects.js';
+import { DealDamageInstruction } from '../instructions/combat.js';
+import { GainActionPointsInstruction } from '../instructions/resources.js';
+import { ChantTriggerInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { canUseSkill, effectiveHandCount } from '../skills/helpers.js';
+import {
+  attackDamage, dealDamage, resolvedDamageText,
+  gainShield, gainBlock, addEffect,
+  breakAllBlock, beginHitProbe, hitLanded,
+} from './cardKit.js';
+
+// 抱头（格挡系列 D）：+1 层格挡（block 效果，非护盾池）。promotesTo 格挡（C）。
+registerSkill({
+  id: 'duckHead', name: '抱头', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  promotesTo: 'blockGuard',
+  use(sctx) {
+    sctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: sctx.player, effectId: 'block', stacks: 1,
+    }));
+    return true;
+  },
+  describe: () => '/effect{格挡}1',
+});
+
+// 格挡（格挡系列 C）：+2 层格挡。
+registerSkill({
+  id: 'blockGuard', name: '格挡', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  use(sctx) {
+    sctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: sctx.player, effectId: 'block', stacks: 2,
+    }));
+    return true;
+  },
+  describe: () => '/effect{格挡}2',
+});
+
+// ==== 精准系列（位置要求——与刀组共享"位置"语言）================================
+
+// 【完美】判定（NAMED.md）：仅当其前方（手牌更左端）所有卡都可打出时可打出。
+// canUse 只在预览态被调用（自身仍在手），逐张走 canUseSkill 全量口径；左侧若含
+// 同类完美卡则各自向左递归判定，索引严格递减、无环。
+function perfectReady(sctx) {
+  const hand = sctx.battleState.zones.hand;
+  const selfIndex = hand.findIndex(c => c.uniqueID === sctx.self.uniqueID);
+  for (let i = 0; i < selfIndex; i++) {
+    if (!canUseSkill(sctx, hand[i])) return false;
+  }
+  return true;
+}
+
+// 精准一击（精准系列 D）：完美。23 伤害。promotesTo 精心一击（C）。
+registerSkill({
+  id: 'perfectStrike', name: '精准一击', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 2 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'carefulStrike',
+  canUse: perfectReady,
+  use(sctx) {
+    attackDamage(sctx, 23);
+    return true;
+  },
+  describe: () => '完美。23伤害',
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 23)}`,
+});
+
+// 精心一击（精准系列 C）：完美。15 伤害。promotesTo 折杨手（B，机制跃迁到命中）。
+registerSkill({
+  id: 'carefulStrike', name: '精心一击', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'foldWillow',
+  canUse: perfectReady,
+  use(sctx) {
+    attackDamage(sctx, 15);
+    return true;
+  },
+  describe: () => '完美。15伤害',
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 15)}`,
+});
+
+// 精心二击（精准系列 C·延伸卡）：设计稿效果列未带完美（延伸位放弃位置门槛换双击）。
+registerSkill({
+  id: 'doubleStrike', name: '精心二击', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 2 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  use(sctx) {
+    attackDamage(sctx, 15);
+    attackDamage(sctx, 15);
+    return true;
+  },
+  describe: () => '15伤害×2',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 15)}×2`,
+});
+
+// 折杨手/揽云手/摘星手（精准系列 B/A/S）：23 伤害；命中：格挡 N。
+// 两段式：段 0 提交攻击并挂命中探针，段 1 读探针——>0 点生命值伤害才获得格挡。
+const hitStrike = (id, name, tier, per, promotesTo = null) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: 2 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
+  use(sctx, stage) {
+    if (stage === 0) {
+      beginHitProbe(sctx, attackDamage(sctx, 23));
+      return false; // 挂起一拍：等伤害子节点完整落地后再读探针
+    }
+    if (hitLanded(sctx)) gainBlock(sctx, per);
+    return true;
+  },
+  describe: () => `23伤害；命中：格挡${per}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 23)}，/named{命中}：/effect{格挡}${per}`,
+});
+hitStrike('foldWillow', '折杨手', 'B', 3, 'embraceCloud');
+hitStrike('embraceCloud', '揽云手', 'A', 4, null); // S（摘星手）阶梯外，不作晋升目标
+hitStrike('pluckStar', '摘星手', 'S', 7, null);
+
+// ==== 破势系列（格挡转资源）====================================================
+
+// 【破】逐层展开：先 breakAllBlock 一条指令整体清零格挡，再按失去层数逐层提交
+// 独立的转化指令。转化数值取设计稿字面值（不吃攻击面板/power——面板已计入基础
+// 一击，逐层叠加面板会指数化膨胀）。基础伤害仍是标准攻击算式（基数+面板+power）。
+
+// 破势/解体/贯心（破势系列 C/B/A）：7 伤害；破：N 伤害。
+const breakAttack = (id, name, tier, per, promotesTo = null) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
+  use(sctx) {
+    attackDamage(sctx, 7);
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers; i++) dealDamage(sctx, per);
+    return true;
+  },
+  describe: () => `7伤害；破：${per}伤害`,
+  battleDescribe: (sctx) => {
+    const layers = sctx.player.getEffectStacks('block');
+    const bonus = layers > 0 ? `（当前${layers}层 → +${layers * per}）` : '';
+    return `${resolvedDamageText(sctx, 7)}，/named{破}：${per}伤害${bonus}`;
+  },
+});
+breakAttack('breakStance', '破势', 'C', 11, 'disassemble');
+breakAttack('disassemble', '解体', 'B', 16, 'pierceHeart');
+breakAttack('pierceHeart', '贯心', 'A', 24, null);
+
+// 壁垒/堡垒/铜城（破势系列 C/B/A）：破：N 护盾。设计稿未写费用 → 0 费。
+const breakShield = (id, name, tier, per, { exhaust = false, promotesTo = null } = {}) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: exhaust ? ['exhaust'] : [],
+  promotesTo,
+  use(sctx) {
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers; i++) gainShield(sctx, per);
+    return true;
+  },
+  describe: () => `${exhaust ? '消耗。' : ''}破：${per}护盾`,
+  battleDescribe: (sctx) => {
+    const layers = sctx.player.getEffectStacks('block');
+    const bonus = layers > 0 ? `×${layers}层（→${layers * per}护盾）` : '';
+    return `${exhaust ? '/named{消耗}。' : ''}/named{破}：${per}护盾${bonus}`;
+  },
+});
+breakShield('barrier', '壁垒', 'C', 12, { exhaust: true, promotesTo: 'fortress' });
+breakShield('fortress', '堡垒', 'B', 12, { promotesTo: 'bronzeCity' });
+breakShield('bronzeCity', '铜城', 'A', 18, {});
+
+// 武魂（破势系列 A）：消耗。破：1 行动点（每层独立一枚 AP 指令，可各自被修饰）。
+registerSkill({
+  id: 'soulOfWar', name: '武魂', type: 'normal', tier: 'A', series: 'block',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers; i++) {
+      sctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }));
+    }
+    return true;
+  },
+  describe: () => '消耗。破：1行动点',
+  battleDescribe: (sctx) => {
+    const layers = sctx.player.getEffectStacks('block');
+    return `/named{消耗}。/named{破}：1行动点${layers > 0 ? `×${layers}层` : ''}`;
+  },
+});
+
+// ==== 盾系列（自保补全）========================================================
+// 盾（D）已在 skills.js（guard）；promotesTo 链 guard→solidShield 由 skills.js 侧接线。
+
+// 坚固盾（盾系列 C）：8 护盾。
+registerSkill({
+  id: 'solidShield', name: '坚固盾', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  use(sctx) {
+    gainShield(sctx, 8);
+    return true;
+  },
+  describe: () => '8护盾',
+});
+
+// 强化盾（盾系列 C，并行支线）：8 护盾 + 1 层格挡。
+registerSkill({
+  id: 'reinforcedShield', name: '强化盾', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  use(sctx) {
+    gainShield(sctx, 8);
+    gainBlock(sctx, 1);
+    return true;
+  },
+  describe: () => '8护盾，/effect{格挡}1',
+});
+
+// ==== 姿态系列（常驻引擎·咏唱）=================================================
+
+// 龟守链（咏唱4，P5 咏唱触发攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。
+// 笨拙是发动瞬间的一次性代价（activated.onEnable 时获得层数；解除不回收——层数按
+// 笨拙自身规则逐次消耗。设计稿未写解除回收，此为落地假设）。
+const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesTo) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: ap },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 4,
+  promotesTo,
+  use() { return true; },
+  activated: {
+    onEnable: (sctx) => {
+      if (clumsy > 0) addEffect(sctx, 'clumsy', clumsy);
+    },
+    subscriptions: (sctx) => [{
+      when: ChantTriggerInstruction, phase: 'post',
+      react: (instr, ctx) => gainBlock(sctx, blockPerTrigger, ctx.player),
+    }],
+  },
+  describe: () => `咏唱4：咏唱触发时获得/effect{格挡}${blockPerTrigger}`
+    + (clumsy > 0 ? `；发动时获得/effect{笨拙}${clumsy}` : '')
+    + '；再次打出（免费）解除并回牌库',
+  battleDescribe: (sctx) => {
+    const effect = `咏唱触发时获得/effect{格挡}${blockPerTrigger}`
+      + (clumsy > 0 ? `；发动时获得/effect{笨拙}${clumsy}` : '');
+    return sctx.self.isActivated
+      ? `已激活：${effect}；再次打出（免费）解除并回牌库`
+      : `咏唱4：${effect}；再次打出（免费）解除并回牌库`;
+  },
+});
+turtleStanceCard('defensePrep', '防御准备', 'C', 2, 1, 0, 'guardStance');
+turtleStanceCard('guardStance', '守护姿态', 'B', 1, 1, 0, 'turtleStance');
+turtleStanceCard('turtleStance', '龟守姿态', 'B', 1, 2, 2, 'mysticTurtle');
+turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 1, null); // 神龟（S）阶梯外，不接晋升
+turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null);
+
+// 武术链（咏唱3，格挡转攻击）：激活期间，玩家为来源的每一条伤害指令 PRE 加
+// 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。
+// 与贯心的逐层破伤天然咬合（§3「天一+贯心」斩杀线的引擎件）。
+const martialStanceCard = (id, name, tier, ap, per, promotesTo) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: ap },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 3,
+  promotesTo,
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: DealDamageInstruction, phase: 'pre',
+      filter: (instr) => instr.source === sctx.player && !instr.fixed,
+      react: (instr) => {
+        const stacks = sctx.player.getEffectStacks('block');
+        if (stacks > 0) instr.setPayload('damage', instr.payload.damage + stacks * per);
+      },
+    }],
+  },
+  describe: () => `咏唱3：每层/effect{格挡}令你的伤害+${per}；再次打出（免费）解除并回牌库`,
+  battleDescribe: (sctx) => (sctx.self.isActivated
+    ? `已激活：每层/effect{格挡}令你的伤害+${per}；再次打出（免费）解除并回牌库`
+    : `咏唱3：每层/effect{格挡}令你的伤害+${per}；再次打出（免费）解除并回牌库`),
+});
+martialStanceCard('martialStance', '武术姿态', 'C', 2, 2, 'masterStance');
+martialStanceCard('masterStance', '大师姿态', 'B', 1, 4, 'heavenStance');
+martialStanceCard('heavenStance', '天一姿态', 'A', 0, 6, null);
+
+// 狂战链（咏唱4，格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
+// 1 层力量；失去格挡（破的负层数 AddEffect）不触发。
+const berserkStanceCard = (id, name, tier, ap, promotesTo) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: ap },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 4,
+  promotesTo,
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: AddEffectInstruction, phase: 'post',
+      filter: (instr) => instr.target === sctx.player && instr.effectId === 'block'
+        && instr.payload.stacks > 0,
+      react: (instr, ctx) => addEffect(sctx, 'strength', 1, ctx.player),
+    }],
+  },
+  describe: () => '咏唱4：获得/effect{格挡}时也获得1层/effect{力量}；再次打出（免费）解除并回牌库',
+  battleDescribe: (sctx) => (sctx.self.isActivated
+    ? '已激活：获得/effect{格挡}时也获得1层/effect{力量}；再次打出（免费）解除并回牌库'
+    : '咏唱4：获得/effect{格挡}时也获得1层/effect{力量}；再次打出（免费）解除并回牌库'),
+});
+berserkStanceCard('berserkStance', '狂战姿态', 'B', 1, 'berserkMastery');
+berserkStanceCard('berserkMastery', '狂战掌控', 'A', 0, null);
+
+// ==== 咏唱散卡（以无胜有 / 以有胜无）===========================================
+// 与虚形拳"清手"、刀组"囤牌"咬合的双向终端：回合结束按手牌形态给 8 层格挡。
+// 设计稿未给咏唱值 → 取 2（落地假设，与常见轻咏唱位阶一致）。
+const handGateChant = (id, name, conditionText, gate) => registerSkill({
+  id, name, type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 1, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 2,
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: PlayerTurnEndInstruction, phase: 'post',
+      react: (instr, ctx) => {
+        if (gate(sctx, ctx.battleState)) gainBlock(sctx, 8, ctx.player);
+      },
+    }],
+  },
+  describe: () => `咏唱2：回合结束时${conditionText}，获得8层/effect{格挡}；再次打出（免费）解除并回牌库`,
+  battleDescribe: (sctx) => (sctx.self.isActivated
+    ? `已激活：回合结束时${conditionText}，获得8层/effect{格挡}；再次打出（免费）解除并回牌库`
+    : `咏唱2：回合结束时${conditionText}，获得8层/effect{格挡}；再次打出（免费）解除并回牌库`),
+});
+
+// 以无胜有：「没有手牌」按"没有其他手牌"落地——自身驻手是咏唱的物理事实，
+// 严格空手判定将永不成立（落地假设，见注释）。
+handGateChant('winWithout', '以无胜有', '若你没有其他手牌', (sctx, battleState) => {
+  const hand = battleState.zones.hand;
+  return hand.length === 1 && hand[0].uniqueID === sctx.self.uniqueID;
+});
+
+// 以有胜无：「手牌 ≥6 张」按手牌上限同源的加权口径计数（激活咏唱按咏唱值计
+// 多张，自身计 2——落地假设，与 T3 手牌压力语言一致）。
+handGateChant('haveWithout', '以有胜无', '若你的手牌≥6张（加权）', (sctx, battleState) =>
+  effectiveHandCount(battleState) >= 6);

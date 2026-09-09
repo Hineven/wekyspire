@@ -31,8 +31,8 @@ registerSkill({ id: 'testDead', name: '目标缺省卡', type: 'normal', tier: '
 
 describe('promotesTo 晋升机制（RUN_DESIGN §6.2）', () => {
   it('无 promotesTo / 目标未注册 → 不可升级', () => {
-    expect(promotionTargets({ id: 'punch' })).toEqual([]);
-    expect(canPromoteRuntime(createSkillRuntime('punch'))).toBe(false);
+    expect(promotionTargets({ id: 'adrenaline' })).toEqual([]);
+    expect(canPromoteRuntime(createSkillRuntime('adrenaline'))).toBe(false);
     expect(canPromoteRuntime(createSkillRuntime('testDead'))).toBe(false); // 目标内容缺省 → 跳过
   });
 

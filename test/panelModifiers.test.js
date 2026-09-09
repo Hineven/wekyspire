@@ -98,11 +98,11 @@ describe('灼脉术：燃烧转灵能', () => {
     bringToHand(d, 'burnVein');
 
     d.play('burnVein'); // 入咏唱槽
-    d.play('inflame');  // 2 伤 + 2 层燃烧 → 灼脉术转 2 层集中
-    expect(d.player.getEffectStacks('focus')).toBe(2);
+    d.play('inflame');  // 2 伤 + 4 层燃烧 → 灼脉术转 4 层集中
+    expect(d.player.getEffectStacks('focus')).toBe(4);
 
-    d.play('fireBolt'); // 5 + 2
-    expect(slime.hp).toBe(20 - 2 - 7);
+    d.play('fireBolt'); // 5 + 4
+    expect(slime.hp).toBe(20 - 2 - 9);
   });
 });
 

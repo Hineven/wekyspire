@@ -11,6 +11,15 @@ import { ConsumeActionPointsInstruction } from './resources.js';
 // 咏唱离手不变量：激活的咏唱卡离开手牌（弃/焚/移/转化）必先熄灭（deactivateChant：
 // onDisable + 摘旗 + 注销订阅 + 播报）——「激活只在手牌中成立」由指令层统一保证。
 
+// battle.md §7.3（卡牌移动）：目标区为手牌而加权手牌已满时，改尝试进牌库；仍失败则焚毁。
+// 返回实际落区。手牌容量是唯一会让"移动失败"的约束（牌库/坟墓无上限）。
+function resolveTargetZone(ctx, toZone) {
+  if (toZone === 'hand' && effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) {
+    return 'deck';
+  }
+  return toZone;
+}
+
 // 抽牌：白名单 ['count']（PRE 可改抽牌数）。
 // from: 'top'（默认）| 'bottom'（回旋斩"牌库末抽牌"类机制）。
 // reason: 抽牌缘由标记（'turnStart' = 回合开始抽牌），供 filter 区分
@@ -107,9 +116,10 @@ export class MoveCardInstruction extends BattleInstruction {
     if (zoneOf(ctx.battleState, this.uniqueID) === 'hand') {
       deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
     }
-    const card = moveCard(ctx.battleState, this.uniqueID, this.toZone, { index: this.index });
-    this.result = { card, toZone: this.toZone };
-    ctx.presenter?.cardMoved?.({ card, toZone: this.toZone });
+    const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    const card = moveCard(ctx.battleState, this.uniqueID, toZone, { index: toZone === this.toZone ? this.index : null });
+    this.result = { card, toZone };
+    ctx.presenter?.cardMoved?.({ card, toZone });
     return true;
   }
 }
@@ -127,14 +137,15 @@ export class AddCardInstruction extends BattleInstruction {
 
   execute(ctx) {
     const card = createSkillRuntime(this.defId, this.overrides);
-    const arr = ctx.battleState.zones[this.toZone];
+    const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    const arr = ctx.battleState.zones[toZone];
     let at = this.index;
     if (at === 'random') at = ctx.battleState.rng.int(0, arr.length);
     if (at === null) arr.push(card);
     else arr.splice(at, 0, card);
     enterBattle(ctx, card); // 新卡走"进入战斗"元语：充能初始化 + 常驻订阅注册
-    this.result = { card, index: at ?? arr.length - 1 };
-    ctx.presenter?.cardAdded?.({ card, toZone: this.toZone, index: this.result.index });
+    this.result = { card, index: at ?? arr.length - 1, toZone };
+    ctx.presenter?.cardAdded?.({ card, toZone, index: this.result.index });
     return true;
   }
 }
