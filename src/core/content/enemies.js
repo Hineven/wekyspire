@@ -40,10 +40,13 @@ registerEnemy({
 // config.maxEnemies，与前端槽位数对齐）、且上一回合没召唤过（lastSummonTurn
 // 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），满足三条才召唤；否则攻 10 + 盾 5。
 // 召唤出的史莱姆尾插 enemies（本回合行动循环快照已取，下回合起参战）。
-function bigSlimeCanSummon(unit, battleState) {
+function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
   const noSlime = !aliveEnemies(battleState).some(e => e.defId === 'slime');
   const hasSlot = battleState.enemies.length < (battleState.config?.maxEnemies ?? 4);
-  const notSummonedLastTurn = unit.lastSummonTurn !== battleState.turn.count - 1;
+  // atTurn：行动侧传缺省（当前回合）；意图预告传 turn.count+1（预告发生在敌方回合末，
+  // 为下一回合预告——冷却闸门按行动时点的回合计算，否则系统性差一拍「预告攻击、
+  // 实际召唤」）。noSlime/hasSlot 仍可能被玩家回合行动改变，属预告的天然残差）
+  const notSummonedLastTurn = unit.lastSummonTurn !== atTurn - 1;
   return noSlime && hasSlot && notSummonedLastTurn;
 }
 registerEnemy({
@@ -64,8 +67,8 @@ registerEnemy({
     }));
     actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 5 }));
   },
-  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState)
-    ? { kinds: ['summon'] }
+  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
+    ? { kinds: ['summon'], note: '召唤史莱姆' }
     : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
@@ -85,7 +88,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 3 === 2
-    ? { kinds: ['debuff'] }
+    ? { kinds: ['debuff'], note: '赋予玩家燃烧2' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
@@ -105,7 +108,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['buff'] }
+    ? { kinds: ['buff'], note: '自身荆棘+2' }
     : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }),
 });
 
@@ -129,7 +132,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['buff'] };
+    if (phase === 1) return { kinds: ['buff'], note: '自身蓄势+2（攻击+2）' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 14) + unit.getStat('attack') };
   },
 });
@@ -150,7 +153,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 1
-    ? { kinds: ['debuff'] }
+    ? { kinds: ['debuff'], note: '赋予玩家虚弱2（攻击-2）' }
     : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
 });
 
@@ -174,7 +177,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['buff'] };
+    if (phase === 0) return { kinds: ['buff'], note: '自身再生3' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
     return { kinds: ['defend'] };
   },
@@ -200,8 +203,8 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 3 === 2
-    ? { kinds: ['debuff'] }
-    : { kinds: ['attack', 'buff'], hits: 1, damage: 8 + unit.getStat('attack') }),
+    ? { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' }
+    : { kinds: ['attack', 'buff'], hits: 1, damage: 8 + unit.getStat('attack'), note: '攻击并自愈3' }),
 });
 
 // ⑧ 岩甲龟：龟缩（盾7 + 荆棘1）→ 重击 循环——盾棘一体的防御压迫，
@@ -222,6 +225,6 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'] }
+    ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
