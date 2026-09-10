@@ -104,11 +104,21 @@
 - 收益主要是「免回滚」，但**已有第二道安全网**：`refreshRunModifiers`（`prep.js:48-65`）每场 PreBattle 从 `baseStats` **覆盖式重算**（`battleRoot.js:32`），任何残留最多污染一场，下场自动纠正。
 - 效果定义承载（`statModifiers: { maxMana }`）看着可行（`unit.js:72-79` 是字段无关累加器，`minHp` 已证明非实体字段可进轨），但**效果表没有 `hidden`/`internal` 标记**，而投影（`projection.js:32-44`）与渲染（`UnitObject.js:354-360`）会对每个效果**无条件**上屏——等于为了实现三条遗物去改投影+渲染+效果定义三处，成本更高、语义更歪。
 
-**采用方案**：在 `createBattleState`（`battleState.js:16-35`）新增 `statDelta: { maxMana: 0, maxHandSize: 0, maxActionPoints: 0 }`，照抄同文件 `swapCount`/`swapCostCap` 的既有范式（battleState 存本场标量 + 纯函数读取）。**每场战斗新建 = 天然清零**。
-- 遗物/技能只调一个共用函数（放 `core/skills/helpers.js` 或 `core/run/`）：`battleScopedStat(ctx, field, delta)` → 同时写 `player[field] += delta` 与 `statDelta[field] += delta`。
-- 回滚**只在 `PostBattleInstruction`（`battleRoot.js:138-150`）一处**执行：把 `statDelta` 全部减回 `player` 并清零。删掉每件遗物各自的 once 订阅，并顺手把燃元/膨胀迁移过来（燃元可删掉 `skillRuntime` 上的 `gainedMaxMana` 动态字段，`skillRuntime` 回归「只有定义字段」的干净口径）。
-- **读取点保持裸字段不动** → 现有测试、投影、渲染零改动；HUD 显示的就是生效值（对海神戟「前 3 回合手牌上限 −1」来说这才是玩家该看到的）。
-- **残留风险**：`BattleKernel._pump` 无 try/finally，异常抛错路径可能跳过 PostBattle；但 `refreshRunModifiers` 兜底，且存档只在 prep 检查点落盘（`runController.js:85`），实际影响 = 一场内的显示残留。**接受**（与现有 燃元/膨胀 同级风险，且集中回滚后风险面比现状更小）。
+**采用方案（2026-09-11 定案：修正 + 运行时重算，无回滚）**：遗物（以及一切数值修正源）一律看成 **modifier**——修正跟着它的**生命周期**存在（装上 / 战斗中 / 卸下），run 时**重算**（base + 全部生效修正）。战斗级修正的生命周期 = 一场战斗，所以它随 `battleState` 一起消失，**根本不需要回滚动作**：重算函数在战后被调一次，值自然回到基准。
+
+- `battleState.modifiers = { maxMana, maxActionPoints, attack, defense, maxHandSize }`（新增；照抄同文件 `swapCount` 的「battleState 存本场标量」范式。battleState 每场新建 → 生命周期天然正确）。
+- `refreshRunModifiers(run, battleState = null)` 的公式扩成**一条**：`值 = baseStats + Σ已激活遗物 runModifiers + Σ本场 battleModifiers`。不传 battleState（prep 装备/卸下/拾取）时本场项为 0，**行为与现状逐字一致**。
+- 内容侧只留**一个 helper**（放 `prep.js`）：`applyBattleModifier(ctx, field, delta)` → 改 `battleState.modifiers` 并**立刻重算**，杜绝「忘了重算导致字段失配」。`ctx` 同时持有 `runState` 与 `battleState`，是天然的收口点（注意 `battleState` 目前**没有** run 反向引用，见 `flow/battle.js:31-37`，所以必须传 ctx）。
+- 遗物增可选声明字段 `battleModifiers`（本场恒定不变的那些，如「本场手牌上限 +1」）→ PreBattle 在重算前统一折入；战斗中会变的（海神戟第 4 回合、燃元的战中获得）走 helper 触发重算。
+- 战后：`PostBattleInstruction` 里调一次 `refreshRunModifiers(runState, null)`（本场项归零）。**这一步看起来像"回滚"，但它不是特殊机制，就是同一个重算函数在战后被调一次**——幂等、顺序无关、无记账。
+
+**为什么这版比前两版都好**：
+- 读取点**零改动**（值仍写在 `player` 字段上）→ 现有测试、投影、渲染全不动，HUD 显示的就是生效值；
+- 不需要逐字段 delta 记账、也不需要 once 订阅——顺手删掉燃元的 `skillRuntime.gainedMaxMana` 动态字段与膨胀「每打一次注册一条回滚订阅」的写法；
+- 校验点收敛为**一个纯函数**，可以直接写「重算幂等」「重算 = base + Σ修正」的单元测试；
+- 与既有 `refreshRunModifiers` 是同一条路，不引入新概念。
+
+**唯一纪律**：任何战斗级修正的变更都必须经 helper（否则字段不重算 → 静默失配）。收口到单一 helper 就是为了让内容侧无处可忘。
 
 ### 2. 缺失的效果定义（脆弱 / 伤残 / 易伤）→ **纯内容层，无框架改动**
 
@@ -136,10 +146,11 @@
 
 | 不做 | 理由 |
 | --- | --- |
-| 战斗级数值「读轨层」（`scopedStat` 改全部读取点） | §四-1：7 文件 8 点 + 投影双通道同步，收益被 `refreshRunModifiers` 安全网抵消 |
+| 战斗级数值「读轨层」（`scopedStat` 改全部读取点） | §四-1 定案：走「修正 + 运行时重算」即可，读取点零改动；读轨层要多改 7 文件 8 点且把上限变成前后端双通道，收益为负 |
 | 用效果定义承载上限修正 | 无 `hidden` 标记 → 要改投影 + 渲染，且语义错位 |
 | 声明式 `battleStartPick` 字段 | §四-3：复制语义仍需专属分支，`battleRoot` 固定 stage 无法处理 WAIT 回来后的循环位置 |
 | 让战斗订阅直写 run 状态 | §四-4：用 run 层 `onBattleVictory` 钩子代替 |
+| 「逐字段 delta 记账 + 战后减回去」的回滚 | 上两版方案的产物；定案口径下副作用随 `battleState` 消失，重算一次即可，不需要记账 |
 | 跨战斗计时器（「下一场/下三场」） | **本批 17 件遗物一件都不需要**（皇晶石是即时结算、海神戟/古书序章/微型 AWFD 是本场、界尘是本场）；恶魔 roll 需要时再一起做，`onBattleVictory` 已留好承接点 |
 
 ### 6. 收敛后的改动清单（按「新增点是否单一」排序）
@@ -152,3 +163,12 @@
 | ④ 纯钩子 8 件（澈晶石/谐振弹/冉晶石/埃文斯冠冕/黑晶剑残片/霜雪胸针/古书序章/微型 AWFD/海神戟/界尘） | `relics.js` | 若干订阅 | 否 |
 | ⑤ run 层胜利钩子 + 皇晶石 | `relics/registry.js` 契约注释、`runFlow.js` `finishBattle` 一处循环 | 1 个可选钩子字段 | 是（唯一一处，且是未来跨战斗承接点） |
 | ⑥ 选牌原语 + 胚胎/原初拟态基质 | 新增 `BattleStartPickInstruction`（content 层）+ 2 件遗物；**胚胎另需前端牌库选取入口** | 1 个指令类 | 否 |
+
+### 7. 前置修复：进阶的「魏启上限 +1」被重算抹掉（**现存 bug，优先级最高**）
+
+- 根因：`ascension.js:171` 直写 `run.player.maxMana += ASCENSION_PLACEHOLDER.manaGain` **没有抬 `baseStats`**，而 `refreshRunModifiers` 是**覆盖式重算**（`p.maxMana = base.maxMana + 修正`）。
+- 实测（探针）：进阶后 `maxMana=4` → 调一次 `refreshRunModifiers` → **回到 3**。触发点很多：每场 PreBattle 第一件事（`battleRoot.js:32`）、以及任何一次拾取/装备/卸下遗物（`prep.js:80/95/103/118`）。
+- 活证据：`r1c-s301`（进阶 1/6、灵脉火1）面板 `魏启 2/3`，上限本该是 4。这也解释了试玩里反复出现的「3 费卡差 1 点魏启打不出」——不是数值偏紧，是进阶成长根本没生效。
+- 对照：`gainMaxHp`（`prep.js:34` 注释写明「**必须同时抬 baseStats**，否则下一次 refreshRunModifiers 会把成长抹掉」）因此不丢。**根因是这条纪律没有被强制。**
+- 修法：新增 `gainMaxMana(run, n)`（镜像 `gainMaxHp`：`baseStats.maxMana += n`、`maxMana += n`、`mana += n`），`ascension.js` 改调它；并把「**一切永久成长必须走 gainXxx / 不得直写 `player` 字段**」写成 `player.js` 与 `prep.js` 的显式纪律注释。
+- 全量核查（`grep '\.maxHp|maxMana|attack|defense|maxHandSize|maxActionPoints *+=' src/`）：除 ascension 外无第二处「永久成长直写字段」。`fireEmberSkills.js:87`/`fireBurstSkills.js:556` 是有意为之的**本场**修正（本次迁移到 `battleState.modifiers`）；`floorEnemyGenerator.js:61` 写的是敌方单位的模板加成，不涉及 run 级对象。
