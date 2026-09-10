@@ -39,18 +39,20 @@ export function floorDifficulty(floor) {
 }
 
 // ---- 实例难度 → 属性加成（全局唯一缩放口）----
-// 难度单位 ≈ 「一步」：每 +1 难度 ≈ HP +40%、攻击约每 2 难 +1。d ≤ base 白板强度
-// （difficultyScaling(2) = 白板）。攻击加成慢于 HP：玩家 HP 也在长，避免早期秒杀线。
-export function difficultyScaling(d) {
+// 难度单位 ≈ 「一步」：每 +1 难度 ≈ HP +40%、攻击约每 2 难 +1；d = anchor 即白板。
+// 锚点两套（ENEMY_GENERATION.md）：普通敌人的基准数值按 d=2 授权（anchor 2）；
+// 精英的基准数值按自身 base 难度授权（anchor = base，如雪狼 70 血 = 难5 白板），
+// 否则全局公式会把高基准精英吹成团本 Boss。攻击加成慢于 HP：玩家 HP 也在长。
+export function difficultyScaling(d, anchor = 2) {
   return {
-    hpMult: Math.max(1, 1 + 0.4 * (d - 2)),
-    attackBonus: Math.max(0, Math.floor((d - 2) / 2)),
+    hpMult: Math.max(1, 1 + 0.4 * (d - anchor)),
+    attackBonus: Math.max(0, Math.floor((d - anchor) / 2)),
   };
 }
 
-/** 就地按实例难度缩放一只已创建的敌人（HP 倍率 + 攻击面板加成）。 */
-function scaleUnit(unit, d) {
-  const { hpMult, attackBonus } = difficultyScaling(d);
+/** 就地按实例难度缩放一只已创建的敌人（锚点按敌种取：精英用 base，普通用 2）。 */
+function scaleUnit(unit, d, anchor = 2) {
+  const { hpMult, attackBonus } = difficultyScaling(d, anchor);
   unit.maxHp = Math.max(1, Math.round(unit.maxHp * hpMult));
   unit.hp = unit.maxHp;
   if (attackBonus > 0) unit.attack += attackBonus;
@@ -70,13 +72,25 @@ const TEMPLATES = [
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
   { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, {}] },
   { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, {}] },
+  // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）：1-2 敌，
+  // 恒含一只高难精英（elite 槽从当层精英池按份额取材），余量可带一名杂鱼随从
+  { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
+  { id: 'elitePair', name: '精英押队', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
 ];
 const BOSS_ID = 'pyro'; // Boss 只经 boss 分支出场，永不进通配池
 
-// 当层可用敌人（通配池）：楼层区间命中 + 非 Boss；difficulty 缺失视为不可生成（防御）。
-function eligiblePool(floor) {
+// 精英层排期（确定性，好记好测）：每章第 5、8 层（5/8、16/19、27/30、38/41）。
+// 该章尚无精英内容时（精英池为空）自动回落普通编成——后续章节加精英零生成器改动。
+export const isEliteFloor = (floor) =>
+  floor % FLOORS_PER_CHAPTER === 5 || floor % FLOORS_PER_CHAPTER === 8;
+
+// 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配；
+// difficulty 缺失视为不可生成（防御）。
+function eligiblePool(floor, elite = false) {
   return allEnemies().filter(def =>
-    def.id !== BOSS_ID && eligibleAtFloor(def, floor));
+    def.id !== BOSS_ID
+    && Boolean(def.difficulty?.elite) === elite
+    && eligibleAtFloor(def, floor));
 }
 
 function eligibleAtFloor(def, floor) {
@@ -84,22 +98,21 @@ function eligibleAtFloor(def, floor) {
   return Boolean(d) && floor >= d.floorMin && floor <= d.floorMax;
 }
 
-// 模板在指定层的难度可达区间 [minSum, maxSum]：钉死位取自身 min/max，
-// 通配位取当层可用池的 min 最小值 / max 最大值（池为空 → 不可用，返回 null）。
+// 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池
+function slotPool(slot, floor) {
+  if (slot.fixed) return [getEnemyDefinition(slot.fixed)];
+  return eligiblePool(floor, slot.elite === true);
+}
+
+// 模板在指定层的难度可达区间 [minSum, maxSum]：各槽取材池的 min 最小值 /
+// max 最大值（钉死位不满足楼层区间、任一池为空 → 模板不可用，返回 null）。
 function templateRange(tpl, floor) {
-  const pool = eligiblePool(floor);
-  if (pool.length === 0) return null;
   let min = 0, max = 0;
   for (const slot of tpl.slots) {
-    if (slot.fixed) {
-      const def = getEnemyDefinition(slot.fixed);
-      if (!eligibleAtFloor(def, floor)) return null;
-      min += def.difficulty.min;
-      max += def.difficulty.max;
-    } else {
-      min += Math.min(...pool.map(x => x.difficulty.min));
-      max += Math.max(...pool.map(x => x.difficulty.max));
-    }
+    const pool = slotPool(slot, floor);
+    if (pool.length === 0 || (slot.fixed && !eligibleAtFloor(pool[0], floor))) return null;
+    min += Math.min(...pool.map(x => x.difficulty.min));
+    max += Math.max(...pool.map(x => x.difficulty.max));
   }
   return { min, max };
 }
@@ -120,11 +133,13 @@ export function generateEncounter(run) {
   }
 
   const D = floorDifficulty(floor);
-  const pool = eligiblePool(floor);
-  // 模板筛选：楼层命中 + 买得起（minSum ≤ D）；够得着（maxSum ≥ D）者优先
+  // 精英层排期：该层是精英层且本章有精英内容时，只从精英房模板取材
+  const eliteDay = isEliteFloor(floor) && eligiblePool(floor, true).length > 0;
   const candidates = TEMPLATES
     .map(tpl => ({ tpl, range: templateRange(tpl, floor) }))
-    .filter(x => x.range && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor && x.range.min <= D);
+    .filter(x => x.range
+      && Boolean(x.tpl.elite) === eliteDay
+      && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor && x.range.min <= D);
   if (candidates.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
   const bracket = candidates.filter(x => x.range.max >= D);
   const picked = rng.pick(bracket.length > 0 ? bracket : candidates).tpl;
@@ -134,11 +149,14 @@ export function generateEncounter(run) {
   // Σ 恒等于 D——先选后分的话，随机抽到弱敌（如双史莱姆）会把可达上限压到 D 以下。
   const bounds = picked.slots.map(slot => (slot.fixed
     ? { ...getEnemyDefinition(slot.fixed).difficulty, fixed: slot.fixed }
-    : {
-      min: Math.min(...pool.map(x => x.difficulty.min)),
-      max: Math.max(...pool.map(x => x.difficulty.max)),
-      fixed: null,
-    }));
+    : (() => {
+      const poolOfSlot = slotPool(slot, floor);
+      return {
+        min: Math.min(...poolOfSlot.map(x => x.difficulty.min)),
+        max: Math.max(...poolOfSlot.map(x => x.difficulty.max)),
+        fixed: null,
+      };
+    })()));
   const shares = bounds.map(b => b.min);
   let leftover = D - shares.reduce((n, s) => n + s, 0);
   while (leftover > 0) {
@@ -154,8 +172,9 @@ export function generateEncounter(run) {
   // 空隙时兜底取钳位距离最近者，份额钳回其区间）。
   const slots = bounds.map((b, i) => {
     if (b.fixed) return { defId: b.fixed, d: shares[i] };
+    const poolOfSlot = slotPool(picked.slots[i], floor);
     const t = shares[i];
-    let cands = pool.filter(x => x.difficulty.min <= t && t <= x.difficulty.max);
+    let cands = poolOfSlot.filter(x => x.difficulty.min <= t && t <= x.difficulty.max);
     if (cands.length === 0) {
       cands = [pool.reduce((best, x) => {
         const dist = Math.abs(Math.min(Math.max(t, x.difficulty.min), x.difficulty.max) - t);
@@ -170,10 +189,11 @@ export function generateEncounter(run) {
   return slots.map(s => descriptorOf(s.defId, s.d));
 }
 
-/** 描述符 = defId + 实例难度 + 缩放终值（createUnit 产出基准值，就地缩放后取数）。 */
+/** 描述符 = defId + 实例难度 + 缩放终值（锚点：精英按 base，普通按 2）。 */
 function descriptorOf(defId, difficulty) {
-  const unit = getEnemyDefinition(defId).createUnit();
-  scaleUnit(unit, difficulty);
+  const def = getEnemyDefinition(defId);
+  const unit = def.createUnit();
+  scaleUnit(unit, difficulty, def.difficulty.elite ? def.difficulty.base : 2);
   return { defId, maxHp: unit.maxHp, attack: unit.attack, difficulty };
 }
 

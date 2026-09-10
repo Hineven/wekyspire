@@ -560,7 +560,8 @@ function render(S) {
   } else if (stage === 'prep') {
     L.push(`本层遭遇: ${run.encounter.map(e => {
       const def = getEnemyDefinition(e.defId);
-      return `${def?.name ?? e.defId}(${e.maxHp}血${e.difficulty != null ? `·难${e.difficulty}` : ''})`;
+      const elite = def?.difficulty?.elite ? '精英·' : '';
+      return `${elite}${def?.name ?? e.defId}(${e.maxHp}血${e.difficulty != null ? `·难${e.difficulty}` : ''})`;
     }).join(' + ')}`);
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {

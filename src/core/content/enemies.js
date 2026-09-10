@@ -1,4 +1,6 @@
 import { registerEnemy, getEnemyDefinition } from '../enemies/registry.js';
+import { registerSkill } from '../skills/registry.js';
+import { AddCardInstruction } from '../instructions/cards.js';
 import Enemy from '../state/enemy.js';
 import {
   DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction,
@@ -240,4 +242,72 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
+});
+
+// ==== 精英怪（2026-09 难度制）：机制更强 / 基准数值更高 / 难度≈两个普通敌人 ====
+// 精英只经「精英怪房」模板出场（difficulty.elite: true 同时把它挡在普通通配池外）。
+// 缩放锚点：精英的基准数值按自身 base 难度授权（雪狼 70 血 = 难5 白板），
+// 属性按 (d − base) 缩放——普通敌人按 (d − 2) 缩放，两套锚点见 ENEMY_GENERATION.md。
+
+// 震慑（雪狼衍生塞牌）：消耗，无效果，1AP——纯手牌淤积（占手牌位 + 打出收 AP 税），
+// 可换牌/弃牌处理。只经 AddCard 入场，不入奖励池（同碎铁口径）。
+registerSkill({
+  id: 'shockCard', name: '震慑', type: 'normal', tier: 'D', series: 'enemyJunk',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  canSpawnAsReward: false,
+  use() { return true; },
+  describe: () => '无效果',
+});
+
+// ⑨ 雪狼（第 1 章精英，样例）：开局压制（虚弱2 + 攻8），随后三拍循环——
+// 攻8防8 → 攻8×2 → 向玩家手牌随机位置塞 2 张「震慑」（塞牌是节奏型骚扰：
+// 挤占手牌上限与位置敏感卡；满手时震慑改落牌库，AddCard 的 §7.3 兜底语义）。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
+  id: 'snowwolf', name: '雪狼',
+  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 70 }),
+  act(actx) {
+    const atk = actx.unit.getStat('attack');
+    if (actx.unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'weaken', stacks: 2,
+      }));
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 8 + atk,
+      }));
+      return;
+    }
+    const phase = (actx.unit.actionIndex - 1) % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 8 + atk,
+      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
+    } else if (phase === 1) {
+      for (let i = 0; i < 2; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: actx.unit, target: actx.player, amount: 8 + atk,
+        }));
+      }
+    } else {
+      for (let i = 0; i < 2; i++) {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'shockCard', toZone: 'hand', index: 'random',
+        }));
+      }
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) {
+      return { kinds: ['debuff', 'attack'], hits: 1, damage: 8 + atk, note: '赋予玩家虚弱2（攻击-2）' };
+    }
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 8 + atk, note: '并获护盾8' };
+    if (phase === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk };
+    return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
+  },
 });

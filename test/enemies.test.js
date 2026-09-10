@@ -5,7 +5,10 @@ import { getEnemyDefinition } from '../src/core/enemies/registry.js';
 import { getEffectDefinition } from '../src/core/effects/registry.js';
 import { DealDamageInstruction, ApplyHealInstruction } from '../src/core/instructions/combat.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
-import { generateEncounter, floorDifficulty, difficultyScaling, spawnEnemy } from '../src/core/run/floorEnemyGenerator.js';
+import {
+  generateEncounter, floorDifficulty, difficultyScaling, spawnEnemy, isEliteFloor,
+} from '../src/core/run/floorEnemyGenerator.js';
+import { spawnableCardPool } from '../src/core/run/rewards.js';
 import { isBossFloor } from '../src/core/run/runFlow.js';
 import { createRunState } from '../src/core/state/runState.js';
 import Player from '../src/core/state/player.js';
@@ -258,7 +261,9 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
     }
     for (let floor = 2; floor <= 10; floor++) {
       for (let i = 0; i < 8; i++) {
-        expect(generateEncounter(runAt(floor, 400 + i)).length).toBeGreaterThanOrEqual(2);
+        const enc = generateEncounter(runAt(floor, 400 + i));
+        // 精英层允许「精英独战」单敌；普通层维持恒 ≥2
+        expect(enc.length).toBeGreaterThanOrEqual(isEliteFloor(floor) ? 1 : 2);
       }
     }
     let three = false;
@@ -320,6 +325,125 @@ describe('效果定义元数据完整（前端效果行渲染依赖）', () => {
       expect(def.icon, id).toBeTruthy();
       expect(['buff', 'debuff']).toContain(def.type);
       expect(def.description, id).toBeTruthy();
+    }
+  });
+});
+
+describe('精英怪：雪狼（第 1 章样例）', () => {
+  // 高血玩家直驱雪狼：开局压制 → 三拍循环（攻8防8 / 攻8×2 / 塞2震慑）
+  function wolfBattle() {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch', 'punch'],
+      enemies: [spawnEnemy('snowwolf')],
+      seed: 5, player: { maxHp: 100 }, config: { drawPerTurn: 0 },
+    });
+    d.start();
+    return d;
+  }
+
+  it('开局：虚弱2 + 攻8；意图与行为一致', () => {
+    const d = wolfBattle();
+    const wolf = d.state.enemies[0];
+    expect(wolf.maxHp).toBe(70);                       // 白板（spawnEnemy 裸 id）
+    const intent = getEnemyDefinition('snowwolf').getIntention(wolf, d.state);
+    expect(intent.kinds).toEqual(['debuff', 'attack']);
+    expect(intent.damage).toBe(8);
+    d.endTurn();
+    expect(d.player.getEffectStacks('weaken')).toBe(2);
+    expect(100 - d.player.hp).toBe(8);
+  });
+
+  it('循环拍一：攻8 + 护盾8；意图含 defend', () => {
+    const d = wolfBattle();
+    d.endTurn();                                        // 开局拍
+    const intent = getEnemyDefinition('snowwolf').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['attack', 'defend']);
+    const hp0 = d.player.hp;
+    d.endTurn();
+    expect(hp0 - d.player.hp).toBe(8);
+    expect(d.state.enemies[0].shield).toBe(8);
+  });
+
+  it('循环拍二：攻8×2（一段意图预告 hits=2）', () => {
+    const d = wolfBattle();
+    d.endTurn(); d.endTurn();                           // 开局拍 + 循环拍一
+    const intent = getEnemyDefinition('snowwolf').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['attack']);
+    expect(intent.hits).toBe(2);
+    const hp0 = d.player.hp;
+    d.endTurn();
+    expect(hp0 - d.player.hp).toBe(16);
+  });
+
+  it('循环拍三：向手牌随机位置塞 2 张震慑（消耗/无效果/1AP）', () => {
+    const d = wolfBattle();
+    d.endTurn(); d.endTurn(); d.endTurn();              // 开局 + 拍一 + 拍二
+    const intent = getEnemyDefinition('snowwolf').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['debuff']);
+    expect(intent.note).toContain('震慑');
+    const hand0 = d.state.zones.hand.length;
+    const hp0 = d.player.hp;
+    d.endTurn();
+    expect(d.state.zones.hand.length).toBe(hand0 + 2);  // 塞入 2 张（未满手）
+    const shocks = d.state.zones.hand.filter(c => c.defId === 'shockCard');
+    expect(shocks).toHaveLength(2);
+    expect(d.player.hp).toBe(hp0);                        // 塞牌拍不攻击
+    // 震慑是 1AP 无效果消耗牌：打出只烧 AP 与充能，不产生任何结算
+    const ap0 = d.player.actionPoints;
+    const hp1 = d.player.hp;
+    d.play(shocks[0].uniqueID);
+    expect(d.player.actionPoints).toBe(ap0 - 1);
+    expect(d.player.hp).toBe(hp1);
+    expect(d.state.zones.burnt.some(c => c.uniqueID === shocks[0].uniqueID)).toBe(true);
+    expect(spawnableCardPool().map(x => x.id)).not.toContain('shockCard');  // 不入奖励池
+  });
+});
+
+describe('精英怪房（生成侧）', () => {
+  const runAt = (floor, seed = 9) => {
+    const run = createRunState({ seed, player: new Player({ maxHp: 30 }) });
+    run.floor = floor;
+    return run;
+  };
+
+  it('排期：每章第 5、8 层为精英层；Boss/普通层不是', () => {
+    for (const f of [5, 8, 16, 19, 27, 30, 38, 41]) expect(isEliteFloor(f)).toBe(true);
+    for (const f of [1, 4, 6, 10, 11, 15, 17, 22, 44]) expect(isEliteFloor(f)).toBe(false);
+  });
+
+  it('章 1 精英层：1-2 敌、恒含一只雪狼、Σ=层难度、雪狼按 base 锚点缩放', () => {
+    for (const floor of [5, 8]) {
+      for (let i = 0; i < 12; i++) {
+        const enc = generateEncounter(runAt(floor, 600 + i));
+        expect(enc.length, `${floor}`).toBeGreaterThanOrEqual(1);
+        expect(enc.length, `${floor}`).toBeLessThanOrEqual(2);
+        const wolves = enc.filter(e => e.defId === 'snowwolf');
+        expect(wolves, `${floor}`).toHaveLength(1);     // 恒一只精英
+        expect(enc.reduce((n, e) => n + e.difficulty, 0), `${floor}`)
+          .toBe(floorDifficulty(floor));                // Σ = D（精英模板恒贴线）
+        const w = wolves[0];
+        expect(w.difficulty).toBeGreaterThanOrEqual(4);
+        expect(w.difficulty).toBeLessThanOrEqual(7);
+        const sc = difficultyScaling(w.difficulty, 5);  // 锚点 = base 5
+        expect(w.maxHp).toBe(Math.round(70 * sc.hpMult));
+      }
+    }
+  });
+
+  it('精英不进普通层：章 1 非精英层任何种子都不出雪狼', () => {
+    for (let i = 0; i < 20; i++) {
+      const enc = generateEncounter(runAt(6, 800 + i));
+      expect(enc.some(e => e.defId === 'snowwolf')).toBe(false);
+    }
+  });
+
+  it('章 2+ 尚无精英内容：精英层自动回落普通编成（不出错、无精英）', () => {
+    for (const floor of [16, 27, 41]) {
+      for (let i = 0; i < 6; i++) {
+        const enc = generateEncounter(runAt(floor, 900 + i));
+        expect(enc.length).toBeGreaterThanOrEqual(2);
+        expect(enc.some(e => getEnemyDefinition(e.defId).difficulty.elite)).toBe(false);
+      }
     }
   });
 });
