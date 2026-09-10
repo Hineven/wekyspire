@@ -25,5 +25,20 @@ export default class Player extends Unit {
     // 手牌上限（加权口径：激活的咏唱卡按咏唱值 chantWeight 计多张——咏唱与手牌
     // 压力统一为同一资源）。旧档无此字段时读取侧 ?? 10 兜底。
     this.maxHandSize = opts.maxHandSize ?? 7;
+
+    // 基础值（run 级修正的基准）：遗物的 run 级加成（行动力上限/魏启上限/防御…）
+    // **不写进这些字段**，而是每次由 refreshRunModifiers 从 baseStats + Σ已激活遗物修正重算。
+    // 原因：PreBattle 每战重置护盾/效果/AP/魏启，却**不重置** maxHp/attack/defense——
+    // 「战斗开始时防御+2」若直接累加会逐战叠加（每十层 +20）。拾取型的永久成长
+    // （超硬法棍 +5 最大生命）走 gainMaxHp()，同时抬 baseStats，故不会被重算抹掉。
+    this.baseStats = {
+      maxHp: this.maxHp,
+      maxMana: this.maxMana,
+      maxActionPoints: this.maxActionPoints,
+      attack: this.attack,
+      defense: this.defense,
+      maxHandSize: this.maxHandSize,
+      ...opts.baseStats,
+    };
   }
 }

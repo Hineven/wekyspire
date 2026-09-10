@@ -86,7 +86,14 @@ describe('老虎机（§4.2，权重占位）', () => {
       if (res.type === 'fruit') expect(run.remi.fruits).toBe(1);
       if (res.type === 'training') expect(run.player.trainingCount).toBe(1);
       if (res.type === 'card') expect(run.player.deck.at(-1).defId).toBe(res.defId);
-      expect(run.player.hp).toBe(hp); // 老虎机不动生命
+      if (res.type === 'relic') {
+        // 遗物奖走抽选 SDK（稀有度权重/灵脉门禁/已拥有排除），且必须是真进了背包
+        expect(res.relicId).toBeTruthy();
+        expect(run.player.relics).toContain(res.relicId);
+      } else {
+        // 非遗物奖项不动生命；遗物奖可能给到「拾起时加最大生命」型（如拟钢碎片），故豁免
+        expect(run.player.hp).toBe(hp);
+      }
     }
     expect(types.size).toBeGreaterThan(1); // 权重表多项均有机会
   });

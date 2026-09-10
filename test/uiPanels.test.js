@@ -12,6 +12,14 @@ import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel }
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
+import { registerRelic } from '../src/core/relics/registry.js';
+
+// 面板测试用 fixture：内容侧第一批没有「主动使用」型遗物，故在此登记一件（契约保留）
+registerRelic({
+  id: 'panelTestFlask', name: '测试壶', rarity: 'C', cost: 1, uses: 1,
+  description: '测试用：战前主动回复 5 生命。',
+  prepUse(run) { run.player.hp = Math.min(run.player.maxHp, run.player.hp + 5); },
+});
 import { EventNames } from '../src/bridge/events.js';
 import { createRunController, awaitFloorArrive } from '../src/shell/runController.js';
 import { AnimationSequencer } from '../src/core/anim/sequencer.js';
@@ -52,7 +60,7 @@ function fakeManager() {
 describe('panelSnapshot（core 纯函数：数据下行唯一通道）', () => {
   it('prep：层数/距 Boss/敌人预告名字/遗物可用性全部在 core 内解析', () => {
     const run = createRun({ seed: 11 });
-    grantRelic(run, 'warHorn');
+    grantRelic(run, 'blackMountainRock');
     const snap = prepSnapshot(run);
 
     expect(snap.kind).toBe('prep');
@@ -65,7 +73,7 @@ describe('panelSnapshot（core 纯函数：数据下行唯一通道）', () => {
     expect(snap.encounter.length).toBe(run.encounter.length);
     for (const e of snap.encounter) expect(typeof e.name).toBe('string');
 
-    const horn = snap.relics.find(r => r.id === 'warHorn');
+    const horn = snap.relics.find(r => r.id === 'blackMountainRock');
     expect(horn).toBeTruthy();
     expect(horn.equipped).toBe(false);
     expect(horn.canUse).toBe(false); // 未装备 → 不可用（可用性由 core 判定）
@@ -73,14 +81,14 @@ describe('panelSnapshot（core 纯函数：数据下行唯一通道）', () => {
 
   it('prep：装备后装备位数与主动遗物可用性同步；次数耗尽不可用', () => {
     const run = createRun({ seed: 12 });
-    grantRelic(run, 'springFlask'); // uses:1 的主动遗物
-    equipRelic(run, 'springFlask');
+    grantRelic(run, 'panelTestFlask'); // uses:1 的主动遗物（fixture）
+    equipRelic(run, 'panelTestFlask');
     let snap = prepSnapshot(run);
     expect(snap.relicSlots.used).toBe(1);
     expect(snap.relics[0].equipped).toBe(true);
     expect(snap.relics[0].canUse).toBe(true);
 
-    run.relicUses.springFlask = 0; // 次数耗尽
+    run.relicUses.panelTestFlask = 0; // 次数耗尽
     snap = prepSnapshot(run);
     expect(snap.relics[0].canUse).toBe(false);
   });
@@ -134,7 +142,7 @@ describe('TextBlockObject / ButtonObject（headless 可构造 = 契约测试前�
 describe('PanelObject（widget 行流 + 点击路由）', () => {
   const snapOf = () => {
     const run = createRun({ seed: 21 });
-    grantRelic(run, 'warHorn');
+    grantRelic(run, 'blackMountainRock');
     return prepSnapshot(run);
   };
 
@@ -158,7 +166,7 @@ describe('PanelObject（widget 行流 + 点击路由）', () => {
     const equipBtn = panel.buttons.find(b => b.pickId.startsWith('relic:equip:'));
     expect(equipBtn).toBeTruthy();
     expect(panel.onClick({ kind: 'button', id: equipBtn.pickId })).toBe(true);
-    expect(intents).toEqual([{ action: 'equip', relicId: 'warHorn' }]);
+    expect(intents).toEqual([{ action: 'equip', relicId: 'blackMountainRock' }]);
 
     // 点非按钮（背景）不产生意图
     expect(panel.onClick({ kind: 'background' })).toBe(false);
@@ -200,8 +208,8 @@ describe('PanelObject（widget 行流 + 点击路由）', () => {
 
   it('行流布局：行不重叠、且全部落在 UI 取景带内（面板不越界的硬契约）', () => {
     const run = createRun({ seed: 41 });
-    for (const id of ['warHorn', 'springFlask']) grantRelic(run, id);
-    equipRelic(run, 'springFlask'); // 触发「卸下 + 使用」两个按钮
+    for (const id of ['blackMountainRock', 'panelTestFlask']) grantRelic(run, id);
+    equipRelic(run, 'panelTestFlask'); // 触发「卸下 + 使用」两个按钮
     const panel = new PanelObject({});
     panel.setWidgets('prep', buildPrepPanel(prepSnapshot(run)));
 
@@ -235,7 +243,7 @@ describe('MapStage 输入通道与面板装配', () => {
     expect(stage.picker).toBeTruthy();
 
     const run = createRun({ seed: 31 });
-    grantRelic(run, 'warHorn');
+    grantRelic(run, 'blackMountainRock');
     stage.setPanel(prepSnapshot(run));
     expect(stage.panel).toBeTruthy();
     expect(stage.panel.kind).toBe('prep');
@@ -244,7 +252,7 @@ describe('MapStage 输入通道与面板装配', () => {
     // 点「装备」→ 经 MapStage 的意图出口上报（指针路由的最后一环）
     const btn = stage.panel.buttons.find(b => b.pickId.startsWith('relic:equip:'));
     stage.panel.onClick({ kind: 'button', id: btn.pickId });
-    expect(intents).toEqual([{ action: 'equip', relicId: 'warHorn' }]);
+    expect(intents).toEqual([{ action: 'equip', relicId: 'blackMountainRock' }]);
     stage.dispose();
   });
 
@@ -286,7 +294,7 @@ describe('MapStage 输入通道与面板装配', () => {
     stage.setPanelIntentHandler((a) => intents.push(a));
     stage.attachInput({ stageManager: sm, bus: mitt() });
     const run = createRun({ seed: 33 });
-    grantRelic(run, 'warHorn');
+    grantRelic(run, 'blackMountainRock');
     stage.setPanel(prepSnapshot(run));
     const btn = stage.panel.buttons.find(b => b.pickId.startsWith('relic:equip:'));
     const hit = { kind: 'button', id: btn.pickId };
@@ -315,17 +323,17 @@ describe('端到端：runController 的快照下行 / 意图上行（真实编�
     expect(first.relicSlots).toEqual({ used: 0, total: ctrl.run.player.relicSlots });
 
     // 上行：面板点击 → runController 分发 → core 落地 → notify 回推新快照
-    grantRelic(ctrl.run, 'warHorn');
+    grantRelic(ctrl.run, 'blackMountainRock');
     expect(typeof map.intentHandler).toBe('function');
-    map.intentHandler({ action: 'equip', relicId: 'warHorn' });
+    map.intentHandler({ action: 'equip', relicId: 'blackMountainRock' });
 
-    expect(ctrl.run.player.equippedRelics).toEqual(['warHorn']); // core 真的变了
+    expect(ctrl.run.player.equippedRelics).toEqual(['blackMountainRock']); // core 真的变了
     const after = map.pushes.at(-1);
     expect(after.relicSlots.used).toBe(1);
-    expect(after.relics.find(r => r.id === 'warHorn').equipped).toBe(true);
+    expect(after.relics.find(r => r.id === 'blackMountainRock').equipped).toBe(true);
 
     // 再点卸下 → 回退
-    map.intentHandler({ action: 'unequip', relicId: 'warHorn' });
+    map.intentHandler({ action: 'unequip', relicId: 'blackMountainRock' });
     expect(ctrl.run.player.equippedRelics).toEqual([]);
     expect(map.pushes.at(-1).relicSlots.used).toBe(0);
   });
@@ -631,7 +639,7 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
 
   it('训练场：升级行带晋升目标名；候选态给卡面；强制尾款不给跳过', () => {
     const run = roomRun('training', 82);
-    grantRelic(run, 'warHorn'); // 无关，仅确保 run 完整
+    grantRelic(run, 'blackMountainRock'); // 无关，仅确保 run 完整
     let snap = panelSnapshot(run);
     expect(snap.kind).toBe('room');
     expect(snap.room).toBe('training');

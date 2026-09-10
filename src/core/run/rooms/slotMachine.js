@@ -1,6 +1,6 @@
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 import { spawnableCardPool } from '../rewards.js';
-import { allRelics } from '../../relics/registry.js';
+import { draftRelic } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
 
 // 老虎机（RUN_DESIGN §4.2）：花费金币抽奖，权重全部占位（§9 经济数值留坑）。
@@ -54,10 +54,9 @@ export function spinSlot(run) {
       break;
     }
     case 'relic': {
-      const pool = allRelics();
-      const def = pool[Math.floor(run.rng.next() * pool.length)];
-      grantRelic(run, def.id);
-      result.relicId = def.id;
+      // 走抽选 SDK（稀有度权重 + 灵脉门禁 + 已拥有排除 + 池空兜底），不再自己全池随机
+      const id = draftRelic(run, { sources: ['draft'] });
+      if (id) { grantRelic(run, id); result.relicId = id; }
       break;
     }
     default:

@@ -25,7 +25,7 @@ import {
   chooseAscension, LEINO_DIMENSIONS,
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
 } from '../core/run/ascension.js';
-import { equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
+import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
 import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
@@ -100,6 +100,11 @@ function restoreFromSave(run, save) {
   p.ascensionCount = sp.ascensionCount;
   p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
   p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
+  // 旧档无 baseStats：以当前值为基准兜底；随后 refreshRunModifiers 会把遗物修正重算回去
+  p.baseStats = sp.baseStats ? { ...sp.baseStats } : {
+    maxHp: p.maxHp, maxMana: p.maxMana, maxActionPoints: p.maxActionPoints,
+    attack: p.attack, defense: p.defense, maxHandSize: p.maxHandSize,
+  };
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
   run.relicUses = { ...save.relicUses };
@@ -123,6 +128,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
   }
+  // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
+  refreshRunModifiers(run);
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式

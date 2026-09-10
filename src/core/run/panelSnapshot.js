@@ -24,10 +24,10 @@ import {
 } from './ascension.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
-import { canPromoteRuntime } from './promotion.js';
 import { campOptions } from './rooms/camp.js';
 import { SLOT_PLACEHOLDER } from './rooms/slotMachine.js';
-import { gatedPromotionTargets } from './promotion.js';
+import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
+import { usedSlots } from './prep.js';
 
 /**
  * 当前阶段的面板快照；无可呈现面板时返回 null。
@@ -63,18 +63,27 @@ export function prepSnapshot(run) {
       const id = e?.defId ?? e;
       return { defId: id, name: getEnemyDefinition(id)?.name ?? id };
     }),
-    relicSlots: { used: p.equippedRelics.length, total: p.relicSlots },
+    // 槽位是**权重和**口径（Σcost ≤ relicSlots）：0 槽可白装；非槽位式不进装卸界面
+    relicSlots: { used: usedSlots(run), total: p.relicSlots },
     relics: p.relics.map((id) => {
       const def = getRelicDefinition(id);
       const isEquipped = equipped.has(id);
       const usesLeft = def?.uses != null ? (run.relicUses?.[id] ?? 0) : null;
+      const cost = def?.nonSlot ? 0 : (def?.cost ?? 1);
+      const nonSlot = !!def?.nonSlot;
       return {
         id,
         name: def?.name ?? id,
+        rarity: def?.rarity ?? null,
+        cost,
+        nonSlot,
         equipped: isEquipped,
         // 主动遗物的可用性在此判定（Stage 不判断"能不能用"）
         canUse: !!def?.prepUse && isEquipped && (usesLeft == null || usesLeft > 0),
         usesLeft,
+        // 非槽位式恒生效、不可装备；其余按"Σcost 是否放得下"判定
+        canEquip: !nonSlot && !isEquipped
+          && usedSlots(run) + cost <= p.relicSlots,
       };
     }),
     canStartBattle: true,

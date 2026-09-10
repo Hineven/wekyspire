@@ -12,7 +12,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
   p.bodyLevel ??= 0;              // 隐藏体修等级（跳过进阶时 +1，决定体修卡包门禁）
   p.relics ??= [];                // 遗物背包 [relicId]
   p.equippedRelics ??= [];        // 装备中的遗物（受 relicSlots 上限约束，§4.5）
-  p.relicSlots ??= 2;
+  p.relicSlots ??= 3;   // 激活槽总数（RELICS.md：初始 3；槽位是**权重和**口径，见 prep.js）
 
   return {
     seed,

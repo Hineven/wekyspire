@@ -5,8 +5,8 @@
 // knobs：
 //   ?panel=prep        面板种类（当前只有 prep；后续随迁移增加）
 //   ?seed=123          样本 run 的种子
-//   ?relics=warHorn,springFlask   预置遗物（逗号分隔）
-//   ?equip=warHorn     预置装备
+//   ?relics=dragonScale,blackMountainRock,springFlask   预置遗物（逗号分隔）
+//   ?equip=dragonScale     预置装备
 //   ?floor=7           楼层（影响距 Boss 提示）
 //
 // 交互真的通：点击面板按钮 → 走 MapStage 的意图出口 → 落到 core 的 prep 函数 →
@@ -71,7 +71,7 @@ function buildRun() {
     finishBattle(r, 'victory');
   } else {
     r.floor = Number(opt('floor', '1'));
-    for (const id of opt('relics', 'warHorn,springFlask').split(',').filter(Boolean)) {
+    for (const id of opt('relics', 'dragonScale,blackMountainRock,springFlask').split(',').filter(Boolean)) {
       grantRelic(r, id);
       if (opt('equip', '').split(',').includes(id)) equipRelic(r, id);
     }

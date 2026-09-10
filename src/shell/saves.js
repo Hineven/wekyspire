@@ -56,6 +56,7 @@ export function snapshotRun(run) {
       ascensionCount: p.ascensionCount,
       bodyLevel: p.bodyLevel ?? 0,
       maxHandSize: p.maxHandSize,
+      baseStats: { ...p.baseStats }, // run 级修正的基准（遗物成长/防御重算依赖它）
     },
     remi: { ...run.remi, unlockedSupports: [...run.remi.unlockedSupports] },
   };

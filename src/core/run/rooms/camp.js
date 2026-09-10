@@ -1,4 +1,6 @@
 import { promoteCard, canPromoteRuntime } from '../promotion.js';
+import { getRelicDefinition } from '../../relics/registry.js';
+import { activeRelics } from '../prep.js';
 
 // 营地（RUN_DESIGN §4.3）：三选一；Boss 前保底由 runFlow.roomOfFloor 调度。
 // 选项随 run 状态动态可见：找回瑞米（仅被打跑时）、休整、升级卡（仅有可升级卡时）。
@@ -21,6 +23,8 @@ export function campRest(run) {
   p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * CAMP_PLACEHOLDER.restHealRatio));
   p.mana = p.maxMana;
   run.remi.drivenOff = false;
+  // 非槽位式遗物的营地钩子（如山泉壶「休息时额外回 5 血」）——已激活的才算
+  for (const id of activeRelics(run)) getRelicDefinition(id)?.onCampRest?.(run);
   return run;
 }
 

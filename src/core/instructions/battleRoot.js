@@ -5,6 +5,7 @@ import { enterBattle } from '../skills/helpers.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
+import { activeRelics, refreshRunModifiers } from '../run/prep.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
@@ -21,6 +22,13 @@ export class PreBattleInstruction extends BattleInstruction {
   execute(ctx) {
     if (this._stage === 0) {
       const { player, battleState, runState } = ctx;
+
+      // run 级数值修正：**进战第一件事**就把它从 baseStats 重算（base + Σ已激活遗物修正）。
+      // 顺序很关键——必须早于下方"AP 置满"与能力/遗物的 onBattleStart：
+      //   · 不重算就会踩"逐战叠加"的坑（PreBattle 重置护盾/效果/AP/魏启，但不重置 maxHp/防御）；
+      //   · 放在能力之后则会**覆盖**能力/卡牌的战斗内增量（如「心宽」onBattleStart 里
+      //     直接 maxHandSize += 2）——那是叠加在基准之上的增量，不是基准本身。
+      refreshRunModifiers(runState);
 
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
       // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1
@@ -49,8 +57,8 @@ export class PreBattleInstruction extends BattleInstruction {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `ability:${abilityId}` });
         }
       }
-      // 遗物：仅挂载装备中的（§6.3），钩子机制同能力
-      for (const relicId of player.equippedRelics ?? []) {
+      // 遗物：挂载「已激活」的 = 装备中的 + 全部非槽位式（非槽位式恒生效、不需装备）
+      for (const relicId of activeRelics(runState)) {
         const def = getRelicDefinition(relicId);
         def.onBattleStart?.(ctx);
         for (const sub of def.subscriptions?.(ctx) ?? []) {

@@ -40,13 +40,17 @@ export function buildPrepPanel(snap) {
   w.push({ kind: 'gap' });
   w.push({
     kind: 'sub',
-    text: `遗物（装备位 ${snap.relicSlots.used}/${snap.relicSlots.total}）`,
+    // 槽位是权重和口径（Σcost ≤ 上限）：显示占用量而非件数
+    text: `遗物（槽位 ${snap.relicSlots.used}/${snap.relicSlots.total}）`,
     tint: '#8a93b2',
   });
   if (!snap.relics?.length) w.push({ kind: 'text', text: '（无）', tint: '#77809a' });
-  for (const r of snap.relics ?? []) {
+  const slotRelics = (snap.relics ?? []).filter(r => !r.nonSlot);
+  const nonSlotRelics = (snap.relics ?? []).filter(r => r.nonSlot);
+  for (const r of slotRelics) {
+    const tag = r.rarity ? `${r.rarity}·${r.cost}槽` : `${r.cost}槽`;
     const suffix = r.equipped ? '（已装备）' : '';
-    w.push({ kind: 'text', text: `${r.name}${suffix}`, tint: r.equipped ? '#ffd75e' : undefined });
+    w.push({ kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#ffd75e' : undefined });
     if (r.equipped) {
       w.push({ kind: 'button', id: `relic:unequip:${r.id}`, label: '卸下', action: { action: 'unequip', relicId: r.id } });
       if (r.canUse) {
@@ -54,7 +58,19 @@ export function buildPrepPanel(snap) {
         w.push({ kind: 'button', id: `relic:use:${r.id}`, label: `使用${uses}`, action: { action: 'useRelic', relicId: r.id } });
       }
     } else {
-      w.push({ kind: 'button', id: `relic:equip:${r.id}`, label: '装备', action: { action: 'equip', relicId: r.id } });
+      w.push({
+        kind: 'button', id: `relic:equip:${r.id}`,
+        label: r.canEquip ? '装备' : '装备（槽位不足）',
+        enabled: r.canEquip, // 可用性由 core 判定，Stage 只画
+        action: { action: 'equip', relicId: r.id },
+      });
+    }
+  }
+  if (nonSlotRelics.length) {
+    w.push({ kind: 'gap' });
+    w.push({ kind: 'sub', text: '非槽位式（恒生效，不占槽）', tint: '#8a93b2' });
+    for (const r of nonSlotRelics) {
+      w.push({ kind: 'text', text: `[${r.rarity ?? 'C'}] ${r.name}`, tint: '#a8c6a0' });
     }
   }
 
