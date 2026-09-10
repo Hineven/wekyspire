@@ -765,6 +765,44 @@ describe('老虎机揭示闸门：演出完成才出结果（回归：旧实现�
   });
 });
 
+describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）', () => {
+  // 回归背景：结果揭示后只清了 Shell 侧的 slot 瞬态、没有重推面板快照，面板是**快照驱动**的，
+  // 于是永远停在最后那份「转动中」快照上（旧版 Vue 面板响应式读 ctrl.slot，掩盖了这一点）。
+  it('spin → 转轮播完 → 回执 → 面板快照随之揭示且拉杆恢复可用', () => {
+    clearSave(false); clearSave(true);
+    const sm = new StageManager({ createRenderer: () => ({ render() {}, setSize() {}, dispose() {} }) });
+    sm._viewWidth = 1920; sm._viewHeight = 1080;
+    const map = new MapStage({});
+    const ctrl = createRunController({ seed: 95, mapStage: map, stageManager: sm });
+    map.attachInput({ stageManager: sm, bus: ctrl.animBus });
+    sm.setStage(map); // 触发 onEnter → 注册帧驱动（转轮靠它推进）
+
+    ctrl.run.gameStage = 'room';
+    ctrl.run.currentRoom = 'slot';
+    ctrl.run.player.money = 20;
+    const moneyBefore = ctrl.run.player.money;
+
+    ctrl.spin();
+    expect(ctrl.run.player.money).toBeLessThan(moneyBefore); // 逻辑先行：扣费立即结算
+    expect(ctrl.slot.anim).toBeTruthy();
+    expect(map._snap.slot.spinning).toBeTruthy();             // 面板进入转动态
+    expect(map._buttonActionsOf('slot:spin').enabled).toBe(false); // 转动中禁连点
+    expect(map._slotRoll.running).toBe(true);
+
+    // 帧驱动到转轮播完（1.1s）
+    const frames = [...sm._tickHandlers];
+    expect(frames.length).toBeGreaterThan(0); // 没有帧驱动 = 转轮永远不会完成
+    for (let i = 0; i < 120; i++) for (const f of frames) f(0.016);
+
+    // 揭示：Shell 瞬态与**面板快照**都必须更新（后者才是界面读的）
+    expect(ctrl.slot.anim).toBeNull();
+    expect(ctrl.slot.lastSpin).toBeTruthy();
+    expect(map._snap.slot.spinning).toBeNull();
+    expect(map._snap.slot.lastSpin).toBeTruthy();
+    expect(map._buttonActionsOf('slot:spin').enabled).toBe(true); // 可再抽
+    map.dispose();
+  });
+});
 describe('塔楼抵达节拍：等待必须能结束（回归：曾漏 resolve 卡死战后链条）', () => {
   // 回归背景：endBattle 等待抵达动画的 Promise 漏了 resolve，网页端每次战后
   // notify 都不执行——奖励面板不出现、金币停在旧值；Vue 版面板靠 reactive 掩盖了它。

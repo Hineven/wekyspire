@@ -337,6 +337,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           slot.anim = null;
           slot.lastSpin = outcome; // 结果文字在动画落定后揭示（渐进揭示语义）
           slotFinish = null;
+          // 揭示后必须重推面板快照：面板是**快照驱动**的，光改 slot 这个 Shell 侧瞬态
+          // 不会让界面变化（旧版 Vue 面板直接响应式读 ctrl.slot，才不需要这一步）。
+          // 漏掉它的症状：老虎机永远停在「转动中…」，结果出不来。
+          notify();
           emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
           return true;
         };

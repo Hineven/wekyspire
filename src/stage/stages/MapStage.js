@@ -204,6 +204,11 @@ export class MapStage {
 
   get picker() { return this._picker; }
 
+  /** 当前面板上某个按钮的动作记录（{ action, enabled }）；面板未装配时返回空记录。供契约测试断言。 */
+  _buttonActionsOf(pickId) {
+    return this._panel?._buttonActions?.get(pickId) ?? { action: null, enabled: false };
+  }
+
   /** 指针移动：hover 拾取（Picker 内部发 tooltip:*）+ 面板悬浮态。 */
   handlePointerMove(x, y) {
     if (!this._picker) return;
