@@ -84,10 +84,14 @@ describe('新敌人：行为循环与意图一致', () => {
       id: 'hedgehog',
       name: '针鼠',
       turns: [
-        { intent: { kinds: ['buff'] }, expect: (d) => expect(d.state.enemies[0].getEffectStacks('thorns')).toBe(2) },
+        // 2026-09 改稿：首拍竖荆棘3（一次性），此后「攻3+护盾8 ↔ 攻6」两拍往复
+        { intent: { kinds: ['buff'] }, expect: (d) => expect(d.state.enemies[0].getEffectStacks('thorns')).toBe(3) },
+        {
+          intent: { kinds: ['attack', 'defend'], damage: 3 },
+          expect: (d, s) => { expect(s.playerHpDelta).toBe(3); expect(d.state.enemies[0].shield).toBe(8); },
+        },
         { intent: { kinds: ['attack'], damage: 6 }, expect: (d, s) => expect(s.playerHpDelta).toBe(6) },
-        { intent: { kinds: ['buff'] }, expect: (d) => expect(d.state.enemies[0].getEffectStacks('thorns')).toBe(4) }, // 封顶 4
-        { intent: { kinds: ['attack'], damage: 6 }, expect: (d, s2) => expect(s2.playerHpDelta).toBe(6) }, // 攻击手（棘满不再叠）
+        { intent: { kinds: ['attack', 'defend'], damage: 3 }, expect: (d, s) => expect(s.playerHpDelta).toBe(3) },
       ],
     },
     {

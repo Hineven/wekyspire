@@ -101,25 +101,36 @@ registerEnemy({
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
-// ③ 针鼠：先竖刺（荆棘+2）后进攻——惩罚无脑打脸，逼玩家读意图择时出手
+// ③ 针鼠：**首拍竖刺（荆棘3，一次性）**，此后「攻3+护盾8 ↔ 攻6」两拍往复。
+// 2026-09 用户改稿：旧版每两拍叠一次荆棘（越拖越痛），实质是在奖励速杀；改后荆棘只在开场
+// 上一次，长线战斗不再变本加厉——速攻的唯一优势只剩「第一拍就秒掉它」从而完全避开荆棘。
 registerEnemy({
   difficulty: { base: 2, min: 1, max: 3, floorMin: 1, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
   createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18 }),
   act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
+    if (actx.unit.actionIndex === 0) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'thorns', stacks: 2,
+        target: actx.unit, effectId: 'thorns', stacks: 3,
       }));
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 6 + actx.unit.getStat('attack'),
-      }));
+      return;
+    }
+    const phase = (actx.unit.actionIndex - 1) % 2;
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player,
+      amount: (phase === 0 ? 3 : 6) + actx.unit.getStat('attack'),
+    }));
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
     }
   },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['buff'], note: '自身荆棘+2' }
-    : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }),
+  getIntention: (unit) => {
+    if (unit.actionIndex === 0) return { kinds: ['buff'], note: '自身荆棘3' };
+    const phase = (unit.actionIndex - 1) % 2;
+    return phase === 0
+      ? { kinds: ['attack', 'defend'], hits: 1, damage: 3 + unit.getStat('attack'), note: '并获护盾8' }
+      : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') };
+  },
 });
 
 // ④ 暗影刺客：蓄势滚雪球——攻 → 蓄势+2（每层攻击+1）→ 突袭（高基数），
