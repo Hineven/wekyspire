@@ -33,6 +33,8 @@ npm run preview    # 本地预览构建产物
 - `tools/headlessPlay.mjs` — LLM/脚本可玩的**文本界面**（replay 式会话：会话文件 `tmp/playtests/<名>.json` = `{seed, actions}`，每次调用全量重放 + 执行新动作，成功才入档）。引擎在 `tools/playSession.mjs`（与守护进程共用 exec/render，输出不漂移）。
 - `tools/broadcast.mjs` — **直播中继**（只读观察会话文件 + HTTP/SSE 推流，零新依赖）。它把 core + bridge presenter 产出的**动画指令描述符**推给浏览器，由浏览器用本地 sequencer 重建播放——因此观战页能复用 `BattleStage`/`BattleHud`/`TooltipOverlay` 全套真实战斗渲染。观战页 `http://localhost:5177/watch.html?port=5199&session=<名>`（默认端口 5199，避开 Vite 的 5177/5178），会话索引 `http://127.0.0.1:5199/`。
 - 契约层：`src/bridge/wire.js`（指令描述符 ↔ 指令重建、payload 过线压平）、`src/bridge/remoteBridge.js`（浏览器端镜像 bridge）、`src/core/anim/sequencer.js` 指令的可选 `wire` 描述符字段、`src/bridge/stateSync.js`（生产 bridge 与中继共用的标脏/补同步调度器）。
+- **公网观战**：`https://wekyspire.hineven.site/watch.html`。链路 = 服务器上的观战页 → Apache 反代 `/relay/`（`/etc/httpd/conf.d/wekyspire.conf`，`flushpackets=on` 是 SSE 必备）→ SSH 反向隧道 `ssh -N -R 127.0.0.1:5199:127.0.0.1:5199 hineven.site` → 本机 `node tools/broadcast.mjs --origin https://wekyspire.hineven.site`。观战页在非 localhost 主机下自动走同源 `/relay`（免 CORS 与混合内容）；本机开发仍用 `?port=5199`。
+- 服务器自动部署：`/usr/local/bin/wekyspire-deploy.sh`（cron 每 5 分钟拉 `origin rewrite` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。国内网络常拉不动 GitHub/ghproxy（脚本会重试并回退镜像），必要时可直接把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
 
 ## 部署
 

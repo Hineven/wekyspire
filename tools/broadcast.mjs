@@ -46,6 +46,9 @@ const argOf = (name, dflt) => {
 const PORT = Number.parseInt(argOf('port', '5199'), 10);
 const INTERVAL = Number.parseInt(argOf('interval', '250'), 10);
 const DEV_ORIGIN = argOf('origin', 'http://localhost:5177');
+// 观战页起在本机还是公网站点时，索引页的链接形态不同：
+// 本机 → ?port=<中继端口>；公网 → 不带参数（观战页按 hostname 自动走同源 /relay，免 CORS/混合内容）
+const ORIGIN_IS_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(DEV_ORIGIN);
 
 // 当前战斗指令缓冲上限（迟到观众的回放窗口）：条数 + 体积双限，防长战斗吃内存
 const BUF_MAX_RECORDS = 800;
@@ -532,7 +535,8 @@ const server = http.createServer((req, res) => {
       const label = s
         ? `第${s.floor}/${s.totalFloors}层 ${stageCn(s.gameStage)}${s.result ? `（${s.result}）` : ''} · ${w.streamed} 动作`
         : '未载入（首次订阅时重放）';
-      const watch = `${DEV_ORIGIN}/watch.html?port=${PORT}&session=${encodeURIComponent(name)}`;
+      const watch = `${DEV_ORIGIN}/watch.html`
+        + (ORIGIN_IS_LOCAL ? `?port=${PORT}&session=${encodeURIComponent(name)}` : `?session=${encodeURIComponent(name)}`);
       return `<li><b>${name}</b> · ${label}`
         + ` — <a href="${watch}">观战</a> ｜ <a href="${watch}&mode=replay">整局重放</a>`
         + ` ｜ <a href="/state?session=${encodeURIComponent(name)}">文本状态</a></li>`;
