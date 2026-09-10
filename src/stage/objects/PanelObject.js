@@ -24,6 +24,14 @@ const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
 
 const Z = { PANEL: 60, BACKDROP: 80, CONTENT: 81 };
 
+/**
+ * 面板**内容之上**的 z（世界坐标）。
+ * 面板组本身在 z=PANEL，背板/内容都是组内偏移，故它们在世界的实际 z 是 PANEL+BACKDROP /
+ * PANEL+CONTENT。任何直接挂到 uiScene 的覆盖物（全屏选卡界面、老虎机转轮…）都必须高于
+ * 这个值，否则会被面板背板挡住——这是踩过两次的坑，故显式导出而不是各写各的魔数。
+ */
+export const PANEL_ABOVE_Z = Z.PANEL + Z.CONTENT + 10;
+
 // 两种形态的几何（逻辑像素；沿用原 Vue 面板的观感尺寸）
 const FORMS = {
   anchored: {

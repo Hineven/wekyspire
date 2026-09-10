@@ -958,6 +958,45 @@ describe('全屏选卡界面（营地/训练场升级）：滚动 + hover 预览
   });
 });
 
+describe('覆盖物层序：选卡界面/老虎机转轮必须高于休息面板', () => {
+  // 回归背景：面板的 z 是**组内偏移**（组在 PANEL=60，内容实际在世界 z=141），
+  // 而覆盖物若按绝对值写（如 90/82）就会落在面板背板（140）之后被挡住。
+  // 症状：训练场点「升级一张卡」后选卡界面看不见；老虎机转轮同样被挡。
+  it('选卡界面与转轮的世界 z 均高于面板内容', () => {
+    const run = createRun({ seed: 111 });
+    run.gameStage = 'room';
+    run.currentRoom = 'training';
+    run.player.deck.push(...['punch', 'guard'].map(id => createSkillRuntime(id)));
+
+    const stage = new MapStage({});
+    stage.attachInput({ stageManager: fakeManager(), bus: mitt() });
+    stage.setPanel(panelSnapshot(run, {}));
+
+    // 面板内容的世界 z（组 z + 组内偏移）
+    const panelContentZ = stage._panel.position.z + Math.max(
+      ...stage._panel.children.filter(c => c.visible).map(c => c.position.z),
+    );
+
+    stage._onPanelAction({ action: 'openUpgradePicker', source: 'training', local: true });
+    expect(stage.cardPicker.opened).toBe(true);
+    const pickerZ = Math.max(...stage.cardPicker.children.map(c => stage.cardPicker.position.z + c.position.z));
+    expect(pickerZ).toBeGreaterThan(panelContentZ);
+
+    // 老虎机转轮：同样是挂在 uiScene 上的覆盖物，必须高于面板
+    const slotRun = createRun({ seed: 112 });
+    slotRun.gameStage = 'room';
+    slotRun.currentRoom = 'slot';
+    slotRun.player.money = 20;
+    const s2 = new MapStage({});
+    s2.attachInput({ stageManager: fakeManager(), bus: mitt() });
+    s2.setPanel(panelSnapshot(slotRun, { slot: { anim: { id: 'a1', prize: { type: 'money' } }, lastSpin: null } }));
+    const panelZ2 = s2._panel.position.z + Math.max(...s2._panel.children.filter(c => c.visible).map(c => c.position.z));
+    expect(s2._slotRoll.position.z).toBeGreaterThan(panelZ2);
+
+    stage.dispose(); s2.dispose();
+  });
+});
+
 describe('塔楼抵达节拍：等待必须能结束（回归：曾漏 resolve 卡死战后链条）', () => {
   // 回归背景：endBattle 等待抵达动画的 Promise 漏了 resolve，网页端每次战后
   // notify 都不执行——奖励面板不出现、金币停在旧值；Vue 版面板靠 reactive 掩盖了它。

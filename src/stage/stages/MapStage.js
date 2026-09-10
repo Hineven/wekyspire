@@ -4,7 +4,7 @@ import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
-import { PanelObject } from '../objects/PanelObject.js';
+import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
 import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../panels/index.js';
@@ -206,7 +206,8 @@ export class MapStage {
     this._slotRollId = spinning.id;
     if (!this._slotRoll) {
       this._slotRoll = new SlotRollObject({ bakeText: this._bakeLabel });
-      this._slotRoll.position.set(0, UI_CAMERA_LOOK_AT_Y - 18, 82); // 面板内容右侧中段（背板之上）
+      // 必须挂在 PANEL_ABOVE_Z 之上：老虎机是模态面板，转轮低于面板背板就会被挡住
+      this._slotRoll.position.set(0, UI_CAMERA_LOOK_AT_Y - 18, PANEL_ABOVE_Z);
       this.uiScene.add(this._slotRoll);
     }
     this._slotRoll.play(() => {

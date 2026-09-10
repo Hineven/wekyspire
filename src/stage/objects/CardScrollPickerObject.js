@@ -17,13 +17,16 @@ import { CardObject } from './CardObject.js';
 import { ButtonObject } from './ButtonObject.js';
 import { TextBlockObject } from './TextBlockObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from './cardMetrics.js';
+import { PANEL_ABOVE_Z } from './PanelObject.js';
 import { EventNames } from '../../bridge/events.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
 
-const Z = { BACKDROP: 90, CONTENT: 92 }; // 高于休息面板（60/80）与模态背板
+// 必须高于休息面板（其内容在世界 z = PANEL+CONTENT；见 PanelObject.PANEL_ABOVE_Z）——
+// 训练场/营地的升级入口是从模态面板里打开的，低于它就会被面板背板盖住。
+const Z = { BACKDROP: PANEL_ABOVE_Z, CONTENT: PANEL_ABOVE_Z + 2 };
 
 // 布局（世界单位）：标题带 / 滚动区带 / 底部按钮带
 const LAYOUT = {
