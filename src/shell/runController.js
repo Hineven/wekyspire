@@ -19,7 +19,10 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
-import { SLOT_PLACEHOLDER, spinSlot } from '../core/run/rooms/slotMachine.js';
+import {
+  SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
+  devourSlot, devourableRelics, devourableCards, slotView,
+} from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
@@ -112,6 +115,12 @@ function restoreFromSave(run, save) {
   run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;
   run.shopPending = save.shopPending ? { ...save.shopPending, choices: [...save.shopPending.choices] } : null;
   run.shopAppleBought = !!save.shopAppleBought;
+  run.slot = save.slot ? { ...save.slot } : null;
+  run.slotPending = save.slotPending ? { ...save.slotPending } : null;
+  run.slotUpgradePending = !!save.slotUpgradePending;
+  run.slotDevour = save.slotDevour ?? 0;
+  run.slotFreeRolls = save.slotFreeRolls ?? 0;
+  run.slotApples = save.slotApples ?? 0;
 }
 
 export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false } = {}) {
@@ -335,28 +344,52 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
-  function spin() { // 可重复消费（每次扣费）；roll 动画经 run sequencer 串行编排
+  function spin() { // 可重复消费（每次扣费/消耗免费 roll）；roll 动画经 run sequencer 串行编排
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
-    const outcome = spinSlot(run); // 逻辑先行：扣费/入账立即结算，演出随后揭示
+    if (run.slotPending) return; // 上一次产出还没处理
+    const prize = spinSlot(run); // 逻辑先行：扣费与定奖立即结算，演出随后揭示产出
     runSequencer.enqueueInstruction({
-      meta: { event: 'room:slot-spin', prize: outcome.type },
+      meta: { event: 'room:slot-spin', prize: prize.kind },
       durationMs: 4000, // 前端卡死保险丝（UI 未回执时兜底推进）
       start: ({ id, emit }) => {
-        slot.anim = { id, prize: outcome };
+        slot.anim = { id, prize };
         slotFinish = (reportId) => {
           if (reportId !== id) return false;
           slot.anim = null;
-          slot.lastSpin = outcome; // 结果文字在动画落定后揭示（渐进揭示语义）
+          slot.lastSpin = prize; // 结果在动画落定后揭示（渐进揭示语义）
           slotFinish = null;
-          // 揭示后必须重推面板快照：面板是**快照驱动**的，光改 slot 这个 Shell 侧瞬态
-          // 不会让界面变化（旧版 Vue 面板直接响应式读 ctrl.slot，才不需要这一步）。
-          // 漏掉它的症状：老虎机永远停在「转动中…」，结果出不来。
+          // 揭示后必须重推面板快照：面板是**快照驱动**的（漏掉它的症状＝永远停在「转动中」）
           notify();
           emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
           return true;
         };
       },
     });
+    notify();
+  }
+  // 产出结算（可放弃——文档：这些产出总是可以放弃不要的）
+  function slotTake(choice = null) {
+    if (run.gameStage !== 'room' || !run.slotPending) return;
+    takeSlotPrize(run, choice);
+    slot.lastSpin = null; // 结算完收起揭示横幅
+    notify();
+  }
+  function slotDecline() {
+    if (run.gameStage !== 'room' || !run.slotPending) return;
+    declineSlotPrize(run);
+    slot.lastSpin = null;
+    notify();
+  }
+  // 大奖「免费指定升级」：选卡界面确认后落地
+  function slotPickUpgrade(uniqueID) {
+    if (run.gameStage !== 'room' || !run.slotUpgradePending) return;
+    slotUpgrade(run, uniqueID);
+    notify();
+  }
+  // 吞噬（粉碎换金币）
+  function slotDevour(target) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
+    devourSlot(run, target);
     notify();
   }
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
@@ -443,6 +476,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'spin') spin();
     else if (action === 'slotAnimDone') reportSlotAnimDone(intent.id); // 舞台演出回执（非玩家意图）
     else if (action === 'leaveSlot') leaveSlot();
+    else if (action === 'slotTake') slotTake(intent.choice ?? null);
+    else if (action === 'slotDecline') slotDecline();
+    else if (action === 'slotPickUpgrade') slotPickUpgrade(intent.uniqueID);
+    else if (action === 'slotDevourRelic') slotDevour({ kind: 'relic', relicId: intent.relicId });
+    else if (action === 'slotDevourCard') slotDevour({ kind: 'card', uniqueID: intent.uniqueID });
     else if (action === 'triggerEvent') triggerEvent();
     else if (action === 'leaveEvent') leaveEvent();
     // 商店（售货机）：与房间并存，购买不消耗房间行动
@@ -462,7 +500,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   return {
     run, runBus, log, slot, eventRoom, cutscene,
     sequencer: runSequencer, animBus, dispose,
-    LEINO_DIMENSIONS, SLOT_PLACEHOLDER,
+    LEINO_DIMENSIONS, SLOT,
+    slotView: () => slotView(run),
+    devourableRelics: () => devourableRelics(run),
+    devourableCards: () => devourableCards(run),
     skillName: (id) => getSkillDefinition(id)?.name ?? id,
     // 升级预览：该卡晋升后的目标定义（过等阶门禁，与 trainUpgrade 缺省取的第一个可用目标一致）
     promoteTargetOf: (rt) => gatedPromotionTargets(run, getSkillDefinition(rt.defId))[0] ?? null,

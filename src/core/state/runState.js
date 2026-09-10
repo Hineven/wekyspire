@@ -27,6 +27,13 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     pendingCardRemoval: 0,       // 待使用的删卡机会（Boss 奖励，§2.1）
     relicUses: {},               // 主动遗物剩余次数 { relicId: uses }（§4.5）
     shop: null,                  // 售货机当层货架 { floor, discount, items[] }（SHOP.md §一；非商店层为 null）
+    // 老虎机（SLOT_MACHINE.md）：当层瞬态 + 跨遇到累积。产出挂 pending 等领取/放弃。
+    slot: null,                  // { floor, rolls, sinceMinor, sinceMajor, minorHits, majorHits }
+    slotPending: null,           // 待处理的产出（roll 出来的奖项）
+    slotUpgradePending: false,   // 大奖「免费指定升级」挂起选卡
+    slotDevour: 0,               // 吞噬累积（跨遇到；满 SLOT.devourEvery 可吞噬，用掉清零）
+    slotFreeRolls: 0,            // 免费 roll（诅咒卡吞噬奖励）
+    slotApples: 0,               // 故事模式：老虎机给出的苹果数（第 5/11 次小奖）
     shopPending: null,           // 买到即开的卡包待选 { packId, choices }（选完才回房）
     shopAppleBought: false,      // 售货机的苹果全流程仅一件（故事模式）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）

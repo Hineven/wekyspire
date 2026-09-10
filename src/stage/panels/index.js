@@ -4,6 +4,8 @@
 // 其余转给 runController.dispatchPanelIntent（见 THREE_UI_MIGRATION §2.1）。
 
 import { KEYWORD_LABELS } from '../../bridge/projection.js';
+import { getSkillDefinition } from '../../core/skills/registry.js';
+import { getRelicDefinition } from '../../core/relics/registry.js';
 
 // 卡面视图的关键词 id → 页脚中文标签（标签表在 bridge，core 不得反向依赖，故在此映射）
 const withLabels = (view) => (view
@@ -297,20 +299,112 @@ export function buildRoomPanel(snap) {
 
   if (snap.room === 'slot') {
     const s = snap.slot ?? {};
+    const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
     w.push({
       kind: 'sub', align: 'center', tint: '#9aa3b8',
-      text: `单抽 ${s.spinCost} 金币 ｜ 持有 ${s.money}`,
+      text: `单抽 ${s.cost} 金 ｜ 持有 ${s.money}`
+        + (s.freeRolls ? ` ｜ 免费 ${s.freeRolls} 次` : '')
+        + ` ｜ 已抽 ${s.rolls ?? 0}`,
     });
-    // 转动中禁止连点（与旧面板 rolling 态一致）；演出本体是 uiScene 里的 SlotRollObject
     w.push({
-      kind: 'button', id: 'slot:spin', width: 260, size: 'main',
-      label: s.spinning ? '转动中…' : '拉杆！', enabled: !s.spinning,
-      action: { action: 'spin' },
+      kind: 'sub', align: 'center', tint: '#77809a',
+      text: `小奖 ${pct(s.minorChance)}（未中累加）｜ 大奖 ${pct(s.majorChance)}（未中累加）`,
     });
+
+    // 产出：不能连抽，先处理这一件（文档：产出总是可以放弃不要的）
+    const pd = s.pending;
+    if (pd) {
+      w.push({ kind: 'gap' });
+      w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#ffd75e' : '#cdd6f4',
+        text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
+      if (pd.relicChoices?.length) {
+        for (const r of pd.relicChoices) {
+          w.push({
+            kind: 'button', id: `slot:relic:${r.id}`, width: 320, size: 'sub',
+            label: `${r.name}（${getRelicRarity(r.id)}）`,
+            action: { action: 'slotTake', choice: r.id },
+          });
+        }
+      } else if (pd.choices?.length) {
+        // 卡多选一（3 或 6 张）：一整行卡面，点哪张领哪张
+        w.push({
+          kind: 'cards', idPrefix: 'slotPrize', cols: Math.min(6, pd.choices.length),
+          scale: pd.choices.length > 3 ? 0.52 : 0.72,
+          items: pd.choices.map(c => ({
+            defId: c.defId, view: withLabels(c.view),
+            action: { action: 'slotTake', choice: c.defId },
+          })),
+        });
+      } else if (pd.upgrade?.kind === 'free') {
+        w.push({
+          kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
+          label: '选择要免费升级的卡',
+          action: { action: 'openUpgradePicker', source: 'slot', local: true },
+        });
+      }
+      // 需要"选一个"的产出不给领取键（点候选即领取）；其余给 领取/放弃
+      const needsPick = (pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0;
+      if (!needsPick) {
+        w.push({
+          kind: 'button', id: 'slot:take', width: 220, size: 'sub', label: '领取',
+          action: { action: 'slotTake' },
+        });
+      }
+      w.push({
+        kind: 'button', id: 'slot:decline', width: 220, size: 'sub',
+        label: needsPick ? '全部放弃' : '放弃',
+        action: { action: 'slotDecline' },
+      });
+      return w;
+    }
+
+    if (s.needsCardPick) {
+      w.push({ kind: 'gap' });
+      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: '免费指定升级：请选择一张卡' });
+      w.push({
+        kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
+        label: '选择要免费升级的卡',
+        action: { action: 'openUpgradePicker', source: 'slot', local: true },
+      });
+      return w;
+    }
+
     if (s.spinning) {
       w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '🎰 …' });
     } else if (s.lastSpin) {
-      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: prizeText(s.lastSpin) });
+      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: slotPrizeText(s.lastSpin) });
+    }
+    w.push({
+      kind: 'button', id: 'slot:spin', width: 260, size: 'main',
+      label: s.spinning ? '转动中…' : `拉杆！（${s.cost} 金）`,
+      enabled: !!s.canSpin && !s.spinning,
+      action: { action: 'spin' },
+    });
+
+    // 吞噬：累积满 7 次 roll 才可粉碎一件遗物/卡换金币
+    const dv = s.devour ?? {};
+    w.push({ kind: 'gap' });
+    w.push({
+      kind: 'sub', align: 'center', tint: dv.ready ? '#a8c6a0' : '#77809a',
+      text: dv.ready
+        ? '老虎机张开了嘴——可粉碎一件遗物或一张卡换取金币：'
+        : `吞噬进度 ${dv.progress ?? 0}/${dv.every ?? 7}`,
+    });
+    if (s.devourables) {
+      for (const r of s.devourables.relics) {
+        w.push({
+          kind: 'button', id: `slot:devour:relic:${r.id}`, width: 320, size: 'sub',
+          label: `粉碎遗物：${r.name}（${r.rarity}）`,
+          action: { action: 'slotDevourRelic', relicId: r.id },
+        });
+      }
+      for (const c of s.devourables.cards) {
+        w.push({
+          kind: 'button', id: `slot:devour:card:${c.uniqueID}`, width: 320, size: 'sub',
+          label: `粉碎卡牌：${c.name}（${c.tier}）`,
+          action: { action: 'slotDevourCard', uniqueID: c.uniqueID },
+        });
+      }
     }
     w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
     return w;
@@ -388,3 +482,30 @@ export function buildShopPanel(snap) {
   });
   return w;
 }
+
+/** 老虎机产出的可读文本（表现层翻译；引擎只给载荷）。 */
+export function slotPrizeText(p) {
+  if (!p) return '';
+  if (p.kind === 'nothing') return '什么也没发生……';
+  if (p.money != null) return `金币 +${p.money}`;
+  if (p.healPct != null) return `恢复 ${Math.round(p.healPct * 100)}% 生命`;
+  if (p.fullRestore) return '全状态恢复（生命与魏启回满，负面效果清除）';
+  if (p.special === 'apple') return '瑞米最爱的苹果（喂给瑞米）';
+  if (p.special === 'goldApple') return '金苹果（喂给瑞米）';
+  if (p.special === 'fruit') return '特殊物品：瑞米升级果';
+  if (p.special === 'training') return '特殊物品：训练次数 +1';
+  if (p.upgradeCopyId) return `获得「升级后的复制品」：${defName(p.upgradeCopyId)}`;
+  if (p.upgrade?.kind === 'random') return `随机升级 ${p.upgrade.count} 张可升级卡`;
+  if (p.upgrade?.kind === 'free') return '免费指定升级一张卡';
+  if (p.relicChoices?.length) return '三选一 A 级遗物——择一件：';
+  if (p.relicId) return `获得遗物：${relicName(p.relicId)}`;
+  if (p.choices?.length) return `择一张卡加入牌组（共 ${p.choices.length} 张）：`;
+  return p.kind ?? '';
+}
+
+const defName = (id) => getSkillDefinition(id)?.name ?? id;
+const relicName = (id) => getRelicDefinition(id)?.name ?? id;
+const getRelicRarity = (id) => getRelicDefinition(id)?.rarity ?? 'C';
+
+/** 升级目标名（选卡界面/升级行用）。 */
+function getSkillDefinitionSafe(id) { return getSkillDefinition(id); }

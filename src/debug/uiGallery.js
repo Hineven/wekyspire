@@ -22,7 +22,9 @@ import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
 import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
 import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
-import { spinSlot } from '../core/run/rooms/slotMachine.js';
+import {
+  spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
+} from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
 import { ensureShopStock, buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import { completeRoom } from '../core/run/runFlow.js';
@@ -135,11 +137,16 @@ mapStage.setPanelIntentHandler((intent) => {
         completeRoom(run);
       }
       else if (a === 'spin') {
-        const outcome = spinSlot(run);
-        roomUi.slot = { anim: { id: `a${Date.now()}`, prize: outcome }, lastSpin: null };
+        const prize = spinSlot(run);
+        roomUi.slot = { anim: { id: `a${Date.now()}`, prize }, lastSpin: null };
       } else if (a === 'slotAnimDone') {
         roomUi.slot = { anim: null, lastSpin: roomUi.slot.anim?.prize ?? null };
-      } else if (a === 'leaveSlot') completeRoom(run);
+      } else if (a === 'slotTake') takeSlotPrize(run, intent.choice ?? null);
+      else if (a === 'slotDecline') declineSlotPrize(run);
+      else if (a === 'slotPickUpgrade') slotUpgrade(run, intent.uniqueID);
+      else if (a === 'slotDevourRelic') devourSlot(run, { kind: 'relic', relicId: intent.relicId });
+      else if (a === 'slotDevourCard') devourSlot(run, { kind: 'card', uniqueID: intent.uniqueID });
+      else if (a === 'leaveSlot') completeRoom(run);
       else if (a === 'triggerEvent') roomUi.eventResult = playEvent(run);
       else if (a === 'buyShopItem') buyShopItem(run, intent.index);
       else if (a === 'takeShopCard') takeShopCard(run, intent.defId);

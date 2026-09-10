@@ -25,7 +25,7 @@ import {
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
-import { SLOT_PLACEHOLDER } from './rooms/slotMachine.js';
+import { slotView, devourableRelics, devourableCards } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor } from './rooms/shop.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
@@ -200,23 +200,7 @@ export function roomSnapshot(run, extra = {}) {
   } else {
     snap.shop = null;
   }
-  // 选卡界面用：**牌组全部卡** + 各自的升级目标（不可升级的 enabled=false，界面置灰不可选）。
-  // tipDefId = 升级后的卡 id——界面 hover 时预览的就是它（用户定的交互）。
-  const upgradeCards = p.deck.map((rt) => {
-    const def = getSkillDefinition(rt.defId);
-    // 注意：gatedPromotionTargets 返回的是**目标 defId 字符串**（不是定义对象）
-    const targetId = canPromoteRuntime(rt, run) ? (gatedPromotionTargets(run, def)[0] ?? null) : null;
-    const targetDef = targetId ? getSkillDefinition(targetId) : null;
-    return {
-      uniqueID: rt.uniqueID,
-      defId: rt.defId,
-      view: cardViewFromDef(def, { player: p }),
-      enabled: !!targetId,
-      tipDefId: targetId ?? rt.defId,          // hover 预览的目标（无升级目标时回退自身）
-      toName: targetDef?.name ?? null,
-      toView: targetDef ? cardViewFromDef(targetDef, { player: p }) : null,
-    };
-  });
+  const upgradeCards = deckUpgradeCards(run);
 
   if (room === 'training') {
     const choices = run.roomData?.drawChoices ?? null;
@@ -241,12 +225,43 @@ export function roomSnapshot(run, extra = {}) {
   if (room === 'slot') {
     const anim = extra.slot?.anim ?? null;
     const lastSpin = extra.slot?.lastSpin ?? null;
+    const view = slotView(run);
+    const pending = run.slotPending;
     snap.slot = {
-      spinCost: SLOT_PLACEHOLDER.spinCost,
+      cost: view.cost,
       money: p.money,
+      rolls: view.rolls,
+      freeRolls: view.freeRolls,
+      canSpin: view.canSpin && !pending,
+      majorChance: view.majorChance,
+      minorChance: view.minorChance,
+      devour: { progress: view.devourProgress, every: view.devourEvery, ready: view.devourReady },
       // 演出进行中：{ id, prize }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）
-      spinning: anim ? { id: anim.id, prize: anim.prize?.type ?? null } : null,
-      lastSpin, // 结果载荷原样带上：文本由 Stage 侧翻译（表现文案）
+      spinning: anim ? { id: anim.id, prize: anim.prize?.kind ?? null } : null,
+      lastSpin,
+      // 待处理产出：原始载荷原样带上，表现文案由 Stage 侧翻译（与战后奖励同一分工）
+      pending: pending ? {
+        tier: pending.tier, kind: pending.kind,
+        money: pending.money ?? null,
+        special: pending.special ?? null,
+        relicId: pending.relicId ?? null,
+        upgradeCopyId: pending.upgradeCopyId ?? null,
+        fullRestore: !!pending.fullRestore,
+        upgrade: pending.upgrade ?? null,
+        choices: (pending.choices ?? []).map(c => ({
+          defId: c.id,
+          view: cardViewFromDef(getSkillDefinition(c.id), { player: p }),
+        })),
+        relicChoices: pending.relicChoices ?? null,
+      } : null,
+      // 大奖「免费指定升级」挂起时：复用全屏选卡界面（与营地/训练场同一套）
+      needsCardPick: !!run.slotUpgradePending,
+      upgradeCards: run.slotUpgradePending ? upgradeCards : [],
+      // 吞噬（进度满了才给清单）
+      devourables: view.devourReady ? {
+        relics: devourableRelics(run),
+        cards: devourableCards(run),
+      } : null,
     };
     return snap;
   }
@@ -257,4 +272,27 @@ export function roomSnapshot(run, extra = {}) {
   }
 
   return snap;
+}
+
+/**
+ * 「牌组全部卡 + 各自升级目标」：全屏选卡界面用（营地/训练场升级、老虎机大奖的免费指定升级）。
+ * 不可升级的 enabled=false（界面置灰不可选）；tipDefId = 升级后的卡 id（hover 预览用它）。
+ * 注意：gatedPromotionTargets 返回的是**目标 defId 字符串**，不是定义对象。
+ */
+export function deckUpgradeCards(run) {
+  const p = run.player;
+  return p.deck.map((rt) => {
+    const def = getSkillDefinition(rt.defId);
+    const targetId = canPromoteRuntime(rt, run) ? (gatedPromotionTargets(run, def)[0] ?? null) : null;
+    const targetDef = targetId ? getSkillDefinition(targetId) : null;
+    return {
+      uniqueID: rt.uniqueID,
+      defId: rt.defId,
+      view: cardViewFromDef(def, { player: p }),
+      enabled: !!targetId,
+      tipDefId: targetId ?? rt.defId,
+      toName: targetDef?.name ?? null,
+      toView: targetDef ? cardViewFromDef(targetDef, { player: p }) : null,
+    };
+  });
 }

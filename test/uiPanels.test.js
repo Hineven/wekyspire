@@ -692,12 +692,15 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     panel.dispose();
   });
 
-  it('老虎机：spinning 中禁止连点；揭示态给结果文案；意图表齐备', () => {
+  it('老虎机：单价/保底概率/吞噬进度都进快照；转动中禁止连点', () => {
     const run = roomRun('slot', 84);
-    run.player.money = 20;
+    run.player.money = 200;
     let snap = panelSnapshot(run, { slot: { anim: null, lastSpin: null } });
-    expect(snap.slot.spinCost).toBeGreaterThan(0);
-    expect(snap.slot.money).toBe(20);
+    expect(snap.slot.cost).toBeGreaterThan(0);       // 首抽单价
+    expect(snap.slot.money).toBe(200);
+    expect(snap.slot.minorChance).toBeGreaterThan(0); // 保底概率
+    expect(snap.slot.majorChance).toBeGreaterThan(0);
+    expect(snap.slot.devour).toMatchObject({ progress: 0, every: 7, ready: false });
 
     const panel = new PanelObject({ form: 'modal' });
     panel.setWidgets('room', buildRoomPanel(snap));
@@ -705,17 +708,24 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     expect(panel.buttons.some(b => b.pickId === 'slot:leave')).toBe(true);
 
     // 转动中：拉杆禁用（防连点）
-    snap = panelSnapshot(run, { slot: { anim: { id: 'a1', prize: { type: 'money', money: 15 } }, lastSpin: null } });
+    snap = panelSnapshot(run, { slot: { anim: { id: 'a1', prize: { kind: 'moneySmall' } }, lastSpin: null } });
     panel.setWidgets('room', buildRoomPanel(snap));
     expect(snap.slot.spinning.id).toBe('a1');
     expect(panel._buttonActions.get('slot:spin').enabled).toBe(false);
 
-    // 揭示：结果文案出现
-    snap = panelSnapshot(run, { slot: { anim: null, lastSpin: { type: 'money', money: 15 } } });
+    // 产出挂起：显示奖项文案 + 领取/放弃，且不能继续抽
+    run.slotPending = { tier: 'minor', kind: 'moneySmall', money: 22 };
+    snap = panelSnapshot(run, { slot: { anim: null, lastSpin: null } });
+    expect(snap.slot.pending.money).toBe(22);
     panel.setWidgets('room', buildRoomPanel(snap));
-    const texts = panel._rows.filter(r => r.widget.kind === 'text').map(r => r.widget.text);
-    expect(texts.some(t => t.includes('15'))).toBe(true);
+    const texts = panel._rows.filter(r => r.widget.text).map(r => r.widget.text);
+    expect(texts.some(t => t.includes('22'))).toBe(true);
+    expect(panel._buttonActions.get('slot:take').enabled).toBe(true);
+    expect(panel._buttonActions.get('slot:decline').enabled).toBe(true);
+    // 处理完才能再抽：产出挂起时干脆不渲染拉杆
+    expect(panel._buttonActions.get('slot:spin')).toBeUndefined();
     panel.dispose();
+    run.slotPending = null;
   });
 
   it('事件房：探索前只给探索键，探索后给结果与离开', () => {
@@ -783,7 +793,7 @@ describe('老虎机揭示闸门：演出完成才出结果（回归：旧实现�
 describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）', () => {
   // 回归背景：结果揭示后只清了 Shell 侧的 slot 瞬态、没有重推面板快照，面板是**快照驱动**的，
   // 于是永远停在最后那份「转动中」快照上（旧版 Vue 面板响应式读 ctrl.slot，掩盖了这一点）。
-  it('spin → 转轮播完 → 回执 → 面板快照随之揭示且拉杆恢复可用', () => {
+  it('spin → 转轮播完 → 揭示产出 → 领取后才可再抽', () => {
     clearSave(false); clearSave(true);
     const sm = new StageManager({ createRenderer: () => ({ render() {}, setSize() {}, dispose() {} }) });
     sm._viewWidth = 1920; sm._viewHeight = 1080;
@@ -794,14 +804,15 @@ describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）'
 
     ctrl.run.gameStage = 'room';
     ctrl.run.currentRoom = 'slot';
-    ctrl.run.player.money = 20;
+    ctrl.run.player.money = 200;
     const moneyBefore = ctrl.run.player.money;
 
     ctrl.spin();
     expect(ctrl.run.player.money).toBeLessThan(moneyBefore); // 逻辑先行：扣费立即结算
+    expect(ctrl.run.slotPending).toBeTruthy();                // 产出已定，等处理
     expect(ctrl.slot.anim).toBeTruthy();
     expect(map._snap.slot.spinning).toBeTruthy();             // 面板进入转动态
-    expect(map._buttonActionsOf('slot:spin').enabled).toBe(false); // 转动中禁连点
+    expect(map._buttonActionsOf('slot:spin').enabled).toBe(false);
     expect(map._slotRoll.running).toBe(true);
 
     // 帧驱动到转轮播完（1.1s）
@@ -813,8 +824,18 @@ describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）'
     expect(ctrl.slot.anim).toBeNull();
     expect(ctrl.slot.lastSpin).toBeTruthy();
     expect(map._snap.slot.spinning).toBeNull();
-    expect(map._snap.slot.lastSpin).toBeTruthy();
-    expect(map._buttonActionsOf('slot:spin').enabled).toBe(true); // 可再抽
+    expect(map._snap.slot.pending).toBeTruthy();               // 待处理产出
+    expect(map._buttonActionsOf('slot:spin').enabled).toBe(false); // 处理完才可再抽
+
+    // 领取（多选一的产出用 slotTake(choice)）——之后拉杆恢复。
+    // 真实 runController 的意图入口由 mapStage.setPanelIntentHandler 挂到舞台的 _onIntent 上。
+    const pd = ctrl.run.slotPending;
+    const choice = pd.choices?.[0]?.id ?? pd.relicChoices?.[0]?.id ?? null;
+    expect(map._buttonActionsOf('slot:take').enabled).toBe(true);
+    map._onIntent({ action: 'slotTake', choice });
+    expect(ctrl.run.slotPending).toBeNull();
+    expect(map._snap.slot.pending).toBeNull();
+    expect(map._buttonActionsOf('slot:spin').enabled).toBe(true);
     map.dispose();
   });
 });

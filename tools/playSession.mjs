@@ -51,7 +51,10 @@ import {
 } from '../src/core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER } from '../src/core/run/rooms/camp.js';
 import { playEvent } from '../src/core/run/rooms/event.js';
-import { spinSlot, SLOT_PLACEHOLDER } from '../src/core/run/rooms/slotMachine.js';
+import {
+  spinSlot, SLOT, slotView, takeSlotPrize, declineSlotPrize, slotUpgrade,
+  devourSlot, devourableRelics, devourableCards,
+} from '../src/core/run/rooms/slotMachine.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
@@ -261,15 +264,21 @@ function upgradeGateError(run, card) {
 }
 
 // 老虎机/事件结果的中文呈现（内部 id → 名称）
-function slotResultText(r) {
-  switch (r.type) {
-    case 'money': return `金币 +${r.money}`;
-    case 'fruit': return `瑞米的水果 +1`;
-    case 'training': return `训练次数 +1（等效一次训练）`;
-    case 'card': return `获得卡牌：${getSkillDefinition(r.defId)?.name ?? r.defId}（已入构筑）`;
-    case 'relic': return `获得遗物：${getRelicDefinition(r.relicId)?.name ?? r.relicId}`;
-    default: return `空奖（nothing）`;
-  }
+function slotResultText(p) {
+  if (!p) return '（无）';
+  const head = p.tier === 'major' ? '★大奖 ' : (p.tier === 'none' ? '' : '小奖 ');
+  const body = p.money != null ? `金币+${p.money}`
+    : p.healPct != null ? `恢复${Math.round(p.healPct * 100)}%生命`
+      : p.fullRestore ? '全状态恢复'
+        : p.special ? `特殊物品：${p.special}`
+          : p.relicChoices?.length ? `三选一A级遗物：${p.relicChoices.map(r => `${r.name}(${r.id})`).join(' / ')}`
+            : p.relicId ? `遗物：${p.relicId}`
+              : p.upgradeCopyId ? `升级后复制品：${p.upgradeCopyId}`
+                : p.upgrade?.kind === 'random' ? `随机升级${p.upgrade.count}张`
+                  : p.upgrade?.kind === 'free' ? '免费指定升级一张卡'
+                    : p.choices?.length ? `卡${p.choices.length}选1：${p.choices.map(c => `${c.name}(${c.id})`).join(' / ')}`
+                      : p.kind;
+  return head + body;
 }
 function eventResultText(r) {
   if (r.eventId === 'moneyBag') return `「钱袋」金币 +${r.money}`;
@@ -454,12 +463,39 @@ export function exec(S, raw) {
         throw new Error('训练动作：act up <构筑#> <卡名> | act draw | act take <#> <卡名> | act skipdraw | act skip');
       }
       if (room === 'slot') {
+        // 拉一次杆：产出会挂起（文档：产出总是可以放弃）→ 需 claim/drop 处理
         if (a === 'spin') {
-          const r = spinSlot(run);
-          S.lastOutcome = `老虎机(-${SLOT_PLACEHOLDER.spinCost}金币)：${slotResultText(r)}`;
+          const view = slotView(run);
+          const p = spinSlot(run);
+          S.lastOutcome = `老虎机(-${p.cost}金币)：${slotResultText(p)}`
+            + (p.tier === 'none' ? '' : '（用 act claim [id] 领取 / act drop 放弃）');
+          void view;
           return;
         }
-        throw new Error('老虎机动作：act spin（离开用 next）');
+        if (a === 'claim') {
+          const out = takeSlotPrize(run, b ?? null);
+          S.lastOutcome = `领取产出：${JSON.stringify(out)}`
+            + (out.needsCardPick ? '（用 act upgrade <构筑#> <卡名> 指定要升级的卡）' : '');
+          return;
+        }
+        if (a === 'drop') { declineSlotPrize(run); S.lastOutcome = '放弃产出'; return; }
+        if (a === 'upgrade') {
+          // 大奖「免费指定升级」的落地（与营地/训练场同一套 <构筑#> <卡名> 记法）
+          const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
+          const before = defOf(card).name;
+          const out = slotUpgrade(run, card.uniqueID);
+          S.lastOutcome = `免费指定升级：${before} → ${out.defId}`;
+          return;
+        }
+        if (a === 'devour') {
+          const arg = t[3] ?? null;
+          const res = devourSlot(run, b === 'relic'
+            ? { kind: 'relic', relicId: arg }
+            : { kind: 'card', uniqueID: num(arg) });
+          S.lastOutcome = `吞噬${b}：+${res.gold}金币${res.freeRoll ? '（下次 roll 免费）' : ''}`;
+          return;
+        }
+        throw new Error('老虎机动作：act spin / act claim [id] / act drop / act devour relic <遗物id> / act devour card <构筑#>（离开用 next）');
       }
       if (room === 'event') {
         if (a === 'play') {
@@ -679,7 +715,21 @@ export function render(S) {
         L.push(`→ act draw（看候选）/ act skip`);
       }
     } else if (room === 'slot') {
-      L.push(`老虎机：${SLOT_PLACEHOLDER.spinCost}金币/次，现有 ${p.money} 金币 → act spin（可多次）/ next 离开`);
+      const v = slotView(run);
+      L.push(`老虎机：本次单价 ${v.cost} 金币（每抽 +${SLOT.costStep}）｜持有 ${p.money}`
+        + (v.freeRolls ? `｜免费 ${v.freeRolls} 次` : '')
+        + `｜小奖 ${Math.round(v.minorChance * 100)}% 大奖 ${Math.round(v.majorChance * 100)}%（未中累加）`);
+      L.push(`吞噬进度 ${v.devourProgress}/${v.devourEvery}${v.devourReady ? '（可吞噬）：act devour relic <遗物id> / act devour card <构筑#>' : ''}`);
+      if (run.slotPending) {
+        L.push(`待处理产出：${slotResultText(run.slotPending)}`);
+        const pd = run.slotPending;
+        if (pd.choices?.length) L.push(`  → act claim <defId>（候选：${pd.choices.map(c => c.id).join(' / ')}）`);
+        else if (pd.relicChoices?.length) L.push(`  → act claim <relicId>（候选：${pd.relicChoices.map(r => r.id).join(' / ')}）`);
+        else if (pd.upgrade?.kind === 'free' || run.slotUpgradePending) L.push('  → act upgrade <构筑#> <卡名>（指定要升级的卡）');
+        else L.push('  → act claim 领取 / act drop 放弃');
+      } else {
+        L.push('→ act spin 拉杆（产出可放弃）/ next 离开');
+      }
     } else if (room === 'event') {
       L.push(`事件房 → act play 触发事件`);
     }
