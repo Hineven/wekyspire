@@ -74,8 +74,8 @@ export const HELP = `动作表（按当前阶段）：
         跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
         | seed <#> <卡名>,<#> <卡名>,<#> <卡名>（选3张入组）
   通用: state | deck | lib | relics（遗物效果一览） | terms（词条/效果释义） | note <文本> | help
-※ 打牌/选牌推荐「编号+卡名」双重确认（编号定位、卡名校验，不匹配会报错并提示实际卡名）；
-  **也可以只给卡名**：卡名在手牌/候选里唯一时自动定位（打出带抽牌的卡会让编号瞬移，此时用卡名最稳）。
+※ 打牌/选牌：**批处理里请只用卡名**（如 play 拳）——同名同态会直接取第一张，可用「拳#2」指定第几张。
+  带编号的「编号+卡名」只在单次调用时可靠：**出牌（尤其带抽牌）后手牌编号会整体前移**，一次批处理里连用编号几乎必然错位。
 ※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。
 ※ dev（**仅覆盖局用**，正常局不要用；用了必须在报告里标注）：dev relic <id> | dev relics <id,id,..>
    | dev listed（全部遗物 id + 效果） | dev money <n> | dev heal`;
@@ -1001,9 +1001,13 @@ export function render(S) {
         id => !(p.equippedRelics ?? []).includes(id) && !getRelicDefinition(id)?.nonSlot);
       const free = p.relicSlots - (p.equippedRelics ?? []).reduce((n, id) => n + costOf(id), 0);
       if (unequipped.length) {
-        L.push(`⚠ 有 ${unequipped.length} 件遗物未装备（空槽 ${free} 点）→ 不装本场不生效：`
-          + unequipped.map(id => `${getRelicDefinition(id)?.name ?? id}(${costOf(id)}槽)`).join(' / ')
-          + `｜relic equip <遗物id>`);
+        const fits = unequipped.filter(id => costOf(id) <= free);
+        const shown = unequipped.slice(0, 6).map(id => `${getRelicDefinition(id)?.name ?? id}(${costOf(id)}槽)`);
+        const tail = unequipped.length > shown.length ? ` 等 ${unequipped.length} 件` : '';
+        L.push(`⚠ 有 ${unequipped.length} 件遗物未装备（空槽 ${free} 点）：${shown.join(' / ')}${tail}`);
+        L.push(fits.length
+          ? `  → 可装：${fits.slice(0, 4).map(id => `relic equip ${id}`).join(' / ')}（不装本场不生效）`
+          : `  → 空槽不足（未装备的都要 ${Math.min(...unequipped.map(costOf))} 点以上）：先 relic unequip <遗物id> 腾槽`);
       }
     }
     L.push(`→ fight 开战 / deck 看牌组`);
