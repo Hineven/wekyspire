@@ -21,6 +21,7 @@ import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDra
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import { SLOT_PLACEHOLDER, spinSlot } from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
+import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
   chooseAscension, LEINO_DIMENSIONS,
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
@@ -108,6 +109,9 @@ function restoreFromSave(run, save) {
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
   run.relicUses = { ...save.relicUses };
+  run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;
+  run.shopPending = save.shopPending ? { ...save.shopPending, choices: [...save.shopPending.choices] } : null;
+  run.shopAppleBought = !!save.shopAppleBought;
 }
 
 export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false } = {}) {
@@ -356,6 +360,18 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
+  // ---- 商店（售货机，SHOP.md §一）----
+  // 与奖励房并存、不占房间名额：购买不消耗房间行动，故不调 completeRoom。
+  function shopBuy(index) {
+    if (run.gameStage !== 'room' || !run.shop) return;
+    buyShopItem(run, index);
+    notify();
+  }
+  function shopTakeCard(defId) {
+    if (run.gameStage !== 'room' || !run.shopPending) return;
+    takeShopCard(run, defId);
+    notify();
+  }
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
     completeRoom(run);
@@ -429,6 +445,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'leaveSlot') leaveSlot();
     else if (action === 'triggerEvent') triggerEvent();
     else if (action === 'leaveEvent') leaveEvent();
+    // 商店（售货机）：与房间并存，购买不消耗房间行动
+    else if (action === 'buyShopItem') shopBuy(intent.index);
+    else if (action === 'takeShopCard') shopTakeCard(intent.defId);
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
 

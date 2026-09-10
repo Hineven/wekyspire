@@ -25,8 +25,9 @@ export const FILLER_RELIC_ID = 'towerGift';
 /** 遗物定义的稀有度（无字段按 C 计，保证老定义不炸）。 */
 export const rarityOf = (def) => (RARITIES.includes(def?.rarity) ? def.rarity : 'C');
 
-/** 该遗物的来源标签（缺省：抽取 + 购买都可）。 */
-export const sourcesOf = (def) => def?.acquisition ?? ['draft', 'shop'];
+/** 该遗物的来源标签（缺省：任意抽取 + 售货机可售）。
+ *  'draft' 任意抽取（老虎机/事件/掉落）｜'vending' 瑞米售货机｜'gurpas' 古尔帕斯之店（仅此店）｜'event' 仅事件 */
+export const sourcesOf = (def) => def?.acquisition ?? ['draft', 'vending'];
 
 /**
  * 灵脉门禁是否达标。requires 可为单个或数组；每个条目支持两种形态：

@@ -24,6 +24,7 @@ import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core
 import { campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import { spinSlot } from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
+import { ensureShopStock, buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import { completeRoom } from '../core/run/runFlow.js';
 import { attachTooltipForwarding } from '../shell/tooltipForward.js';
 import { tooltipState } from '../shell/tooltipHub.js';
@@ -59,6 +60,11 @@ function buildRun() {
     // 房间层：?room=training|camp|slot|event（默认 slot，含演出与揭示）
     r.gameStage = 'room';
     r.currentRoom = opt('room', 'slot');
+    // ?floor=4 等商店层可看到售货机入口；?shop=1 直接打开售货机
+    r.floor = Number(opt('floor', '1'));
+    r.storyMode = opt('story', '0') === '1';
+    r.player.money = Number(opt('money', '20'));
+    ensureShopStock(r);
     roomUi = { slot: { anim: null, lastSpin: null }, eventResult: null };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
@@ -135,6 +141,8 @@ mapStage.setPanelIntentHandler((intent) => {
         roomUi.slot = { anim: null, lastSpin: roomUi.slot.anim?.prize ?? null };
       } else if (a === 'leaveSlot') completeRoom(run);
       else if (a === 'triggerEvent') roomUi.eventResult = playEvent(run);
+      else if (a === 'buyShopItem') buyShopItem(run, intent.index);
+      else if (a === 'takeShopCard') takeShopCard(run, intent.defId);
       else if (a === 'leaveEvent') completeRoom(run);
       if (run.gameStage !== 'room') run = buildRun(); // 离房 → 重建样本
     }
@@ -159,6 +167,10 @@ push();
 // ?picker=1 直接打开全屏选卡界面（营地/训练场的「升级一张卡」），省得玩到那一层
 if (opt('picker', '0') === '1' && (run.currentRoom === 'camp' || run.currentRoom === 'training')) {
   mapStage._onPanelAction({ action: 'openUpgradePicker', source: run.currentRoom, local: true });
+}
+// ?shop=1 直接打开售货机（需 ?floor= 命中商店层，如 floor=4）
+if (opt('shop', '0') === '1' && run.shop) {
+  mapStage._onPanelAction({ action: 'openShop', local: true });
 }
 
 // ---- 指针接线（与 App.vue 同一套调用） ----

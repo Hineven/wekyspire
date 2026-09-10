@@ -7,7 +7,7 @@ import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
-import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../panels/index.js';
+import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel, buildShopPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
@@ -21,6 +21,7 @@ const PANEL_BUILDERS = {
   reward: { build: buildRewardPanel, form: 'modal' },
   ascension: { build: buildAscensionPanel, form: 'modal' },
   room: { build: buildRoomPanel, form: 'modal' },
+  shop: { build: buildShopPanel, form: 'modal' },
 };
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
@@ -101,7 +102,8 @@ export class MapStage {
   setPanel(snap) {
     const entry = snap && PANEL_BUILDERS[snap.kind];
     if (!entry) { this._removePanel(); this._syncCardArtSub(); return; }
-    if (!this._panel || this._panel.kind !== snap.kind) {
+    // 面板对象只在"面板种类"变化时重建；shop 是同一份快照下的本地视图，不重建（保本地态）
+    if (!this._panel || this._panel.kind !== (this._panelUi?.shopOpen && snap.shop ? 'shop' : snap.kind)) {
       this._removePanel();
       this._panelUi = { selected: new Set() }; // 换面板 = 清空面板本地交互态
       this._panel = new PanelObject({
@@ -125,6 +127,8 @@ export class MapStage {
     if (!action) return;
     if (action.local) {
       if (action.action === 'openUpgradePicker') { this._openUpgradePicker(action.source); return; }
+      if (action.action === 'openShop') { this._panelUi.shopOpen = true; this._renderPanel(); return; }
+      if (action.action === 'closeShop') { this._panelUi.shopOpen = false; this._renderPanel(); return; }
       if (action.action === 'toggleSeed') {
         const sel = this._panelUi.selected;
         const id = action.defId;
@@ -143,10 +147,13 @@ export class MapStage {
   _renderPanel() {
     const snap = this._snap;
     if (!snap || !this._panel) return;
-    const entry = PANEL_BUILDERS[snap.kind];
+    // 面板本地态可以把"当前视图"切到另一个 builder 上（如房间 → 自动售货机）；
+    // 快照仍是同一份（售货机数据在 snap.shop 里），故不需要为它单开一条下行通道。
+    const kind = this._panelUi?.shopOpen && snap.shop ? 'shop' : snap.kind;
+    const entry = PANEL_BUILDERS[kind];
     if (!entry) return;
     this._panel.attachPicker(this._picker);
-    this._panel.setWidgets(snap.kind, entry.build(snap, { selected: this._panelUi?.selected }));
+    this._panel.setWidgets(kind, entry.build(snap, { selected: this._panelUi?.selected }));
     this._syncSlotRoll();
   }
 

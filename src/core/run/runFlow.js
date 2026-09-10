@@ -4,6 +4,7 @@ import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
+import { ensureShopStock } from './rooms/shop.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -113,6 +114,8 @@ export function completeRewards(run) {
   run.currentRoom = roomOfFloor(run.floor, run.rng);
   if (run.currentRoom) {
     run.gameStage = 'room';
+    // 售货机与房间**并存**（不占房间名额）：商店层进房时把当层货架掷好（按楼层缓存）
+    ensureShopStock(run);
     return run;
   }
   return advanceFloor(run); // Boss 层无奖励房，直接推进

@@ -21,8 +21,8 @@ registerRelic({
   prepUse(run) { run.player.hp = Math.min(run.player.maxHp, run.player.hp + 5); },
 });
 registerRelic({
-  id: 'testShopOnly', name: '测试商店货', rarity: 'A', cost: 1, acquisition: ['shop'],
-  description: '测试用：仅商店售卖（不进抽选池）。',
+  id: 'testShopOnly', name: '测试商店货', rarity: 'A', cost: 1, acquisition: ['gurpas'],
+  description: '测试用：仅古尔帕斯之店售卖（不进抽选池/售货机）。',
 });
 registerRelic({ id: 'testBall', name: '测试球', rarity: 'C', cost: 1, description: '占位。' });
 
@@ -216,7 +216,7 @@ describe('遗物抽选 SDK', () => {
     expect(pool.length).toBeGreaterThan(0);
     for (const def of pool) {
       expect(def.id).not.toBe('ceciliaBlessing'); // 事件专属
-      expect(def.id).not.toBe('testShopOnly');    // 仅商店
+      expect(def.id).not.toBe('testShopOnly');    // 仅古尔帕斯之店
       expect(def.id).not.toBe(FILLER_RELIC_ID);
     }
     grantRelic(run, 'blackMountainRock');

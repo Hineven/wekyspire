@@ -26,6 +26,7 @@ import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
 import { SLOT_PLACEHOLDER } from './rooms/slotMachine.js';
+import { canBuy, isShopFloor } from './rooms/shop.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
@@ -176,6 +177,28 @@ export function roomSnapshot(run, extra = {}) {
   const room = run.currentRoom;
   const p = run.player;
   const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
+
+  // 售货机（与房间并存，不占房间名额）：商店层才给货架；卡包开出的三选一挂起时优先呈现
+  if (isShopFloor(run.floor) && run.shop) {
+    snap.shop = {
+      floor: run.shop.floor,
+      discount: run.shop.discount,
+      broken: !!run.shop.broken, // 故事模式：瑞米被打跑 → 货架不完整（附道歉文案）
+      items: run.shop.items.map((it, index) => ({
+        index, kind: it.kind, label: it.label, sub: it.sub ?? '',
+        price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
+      })),
+      pending: run.shopPending ? {
+        packId: run.shopPending.packId,
+        cards: (run.shopPending.choices ?? []).map(id => ({
+          defId: id,
+          view: cardViewFromDef(getSkillDefinition(id), { player: p }),
+        })),
+      } : null,
+    };
+  } else {
+    snap.shop = null;
+  }
   // 选卡界面用：**牌组全部卡** + 各自的升级目标（不可升级的 enabled=false，界面置灰不可选）。
   // tipDefId = 升级后的卡 id——界面 hover 时预览的就是它（用户定的交互）。
   const upgradeCards = p.deck.map((rt) => {

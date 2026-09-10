@@ -41,6 +41,9 @@ export function snapshotRun(run) {
     result: run.result,
     pendingCardRemoval: run.pendingCardRemoval,
     relicUses: { ...run.relicUses },
+    shop: run.shop ? { ...run.shop, items: run.shop.items.map(it => ({ ...it })) } : null,
+    shopPending: run.shopPending ? { ...run.shopPending, choices: [...run.shopPending.choices] } : null,
+    shopAppleBought: !!run.shopAppleBought,
     player: {
       hp: p.hp, maxHp: p.maxHp,
       mana: p.mana, maxMana: p.maxMana,

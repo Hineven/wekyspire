@@ -231,6 +231,14 @@ export function buildRoomPanel(snap) {
   const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
   const w = [];
   w.push({ kind: 'title', text: `${meta.glyph} ${meta.name}`, align: 'center' });
+  // 售货机与房间并存（不占房间名额）：本层有货架就给一个入口（打开是**本地**动作，不消耗房间行动）
+  if (snap.shop) {
+    w.push({
+      kind: 'button', id: 'room:shop', width: 300, size: 'sub',
+      label: `自动售货机（持有 ${snap.money} 金币）`,
+      action: { action: 'openShop', local: true },
+    });
+  }
 
   if (snap.room === 'training') {
     const t = snap.training ?? {};
@@ -315,5 +323,60 @@ export function buildRoomPanel(snap) {
   }
 
   w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（此房间暂无面板）' });
+  return w;
+}
+
+/** 售货机（模态）：货架列表 + 购买；卡包开出三选一时切换为选卡视图。 */
+export function buildShopPanel(snap) {
+  const shop = snap.shop ?? { items: [], pending: null };
+  const w = [];
+
+  // 卡包三选一（买到即开，金币已扣）：必须选一张才收尾
+  if (shop.pending) {
+    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packId}`, align: 'center' });
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组：' });
+    w.push({
+      kind: 'cards', idPrefix: 'shopPack', cols: 3, scale: 0.8,
+      items: shop.pending.cards.map(c => ({
+        defId: c.defId, view: withLabels(c.view),
+        action: { action: 'takeShopCard', defId: c.defId },
+      })),
+    });
+    return w;
+  }
+
+  w.push({ kind: 'title', text: '自动售货机', align: 'center' });
+  w.push({
+    kind: 'sub', align: 'center', tint: '#9aa3b8',
+    text: `持有 ${snap.money} 金币`
+      + (shop.discount < 1 ? ` ｜ 瑞米给了折扣（${Math.round(shop.discount * 10)} 折）` : ''),
+  });
+  if (shop.broken) {
+    w.push({
+      kind: 'sub', align: 'center', tint: '#c9a86a',
+      text: '瑞米：“上次逃得太狼狈了，嘿嘿……忘记补货了……”',
+    });
+  }
+  for (const it of shop.items) {
+    const tag = it.kind === 'relic' ? '[遗物]' : it.kind === 'pack' ? '[卡包]' : it.kind === 'apple' ? '[苹果]' : '[补给]';
+    w.push({
+      kind: 'text', align: 'center',
+      tint: it.sold ? '#5d6584' : (it.affordable ? undefined : '#8a6a6a'),
+      text: `${tag} ${it.label} ｜ ${it.price} 金` + (it.sold ? '（已售出）' : ''),
+    });
+    if (!it.sold) {
+      w.push({
+        kind: 'button', id: `shop:buy:${it.index}`, width: 240, size: 'sub',
+        label: it.affordable ? `购买（${it.price} 金）` : '金币不足',
+        enabled: it.affordable,
+        action: { action: 'buyShopItem', index: it.index },
+      });
+    }
+  }
+  w.push({ kind: 'gap' });
+  w.push({
+    kind: 'button', id: 'shop:leave', width: 220, size: 'sub', label: '离开售货机',
+    action: { action: 'closeShop', local: true },
+  });
   return w;
 }
