@@ -23,7 +23,7 @@ import Player, { PLAYER_BASE_HP } from '../src/core/state/player.js';
 import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../src/core/content/bodySkills.js';
 import { createNullPresenter, createRecordingPresenter } from '../src/core/presenter.js';
-import { canUseSkill, makeSkillCtx, effectiveHandCount } from '../src/core/skills/helpers.js';
+import { canUseSkill, makeSkillCtx, effectiveHandCount, chantActivationLegal } from '../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { listNamedTerms } from '../src/core/skills/namedTerms.js';
 import { getEffectDefinition, allEffects } from '../src/core/effects/registry.js';
@@ -77,6 +77,7 @@ export const HELP = `动作表（按当前阶段）：
 ※ 打牌/选牌：**批处理里请只用卡名**（如 play 拳）——同名同态会直接取第一张，可用「拳#2」指定第几张。
   带编号的「编号+卡名」只在单次调用时可靠：**出牌（尤其带抽牌）后手牌编号会整体前移**，一次批处理里连用编号几乎必然错位。
 ※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。
+※ why <手牌#>|<卡名>（只读）：逐项定位「这张牌为什么打不出」——费用/充能冷却/咏唱压力/自定义条件/目标。
 ※ dev（**仅覆盖局用**，正常局不要用；用了必须在报告里标注）：dev relic <id> | dev relics <id,id,..>
    | dev listed（全部遗物 id + 效果） | dev money <n> | dev heal`;
 
@@ -372,6 +373,43 @@ export function exec(S, raw) {
   const stage = run.gameStage;
   switch (cmd) {
     case 'note': S.lastOutcome = `记事: ${t.slice(1).join(' ')}`; return;
+    case 'why': { // 只读：逐项定位「这张牌为什么打不出」（第 3 轮试玩：只能逐张试，失败一次浪费一个动作）
+      if (stage !== 'battle' || !S.battle) throw new Error('why 仅在战斗内可用（看手牌为什么打不出）');
+      const bs = S.battle.battleState;
+      const hand = bs.zones.hand;
+      if (!hand.length) throw new Error('手牌为空');
+      const rt = hand[resolveHandArg(hand, a, isIdxArg(a) ? b : undefined)];
+      const def = defOf(rt);
+      const pl = run.player;
+      const freeToggle = def.cardMode === 'chant' && rt.isActivated;
+      const manaCost = def.cost?.mana ?? 0;
+      const apCost = def.cost?.actionPoint ?? 0;
+      const ok = canUseSkill(S.battle.ctx, rt);
+      const L = [`【为什么】${def.name}（${def.tier ?? '?'}阶，${ok ? '可用 ✓' : '不可用 ✗'}）`];
+      L.push(`  费用: 魏启 ${manaCost === 'X' ? 'X(全部)' : manaCost}（有 ${pl.mana}）`
+        + `｜AP ${apCost === 'X' ? 'X(全部)' : apCost}（有 ${pl.actionPoints}）`
+        + (freeToggle ? '｜已激活咏唱：本次免费' : ''));
+      // 冷却只在「充能耗尽」时才是阻塞原因（满充能卡预置的计时是无意义残留，不展示，免误导）
+      L.push(`  充能: 剩余 ${rt.remainingUses}`
+        + (rt.remainingUses <= 0 && rt.currentCooldown > 0 ? `，冷却剩 ${rt.currentCooldown} 拍` : ''));
+      if (def.cardMode === 'chant') {
+        L.push(`  咏唱: ${rt.isActivated ? '已激活' : '未激活'}｜加权手牌 ${effectiveHandCount(bs)} / 上限 ${pl.maxHandSize}`);
+      }
+      const reasons = [];
+      if (rt.remainingUses <= 0) reasons.push('充能耗尽（冷却中）');
+      if (def.cardMode === 'chant' && rt.isActivated && def.keywords?.includes('anchored')) reasons.push('锁定：不可主动解除');
+      if (def.cardMode === 'chant' && !rt.isActivated && !chantActivationLegal(S.battle.ctx, rt, def)) {
+        reasons.push(`激活后手牌压力超限（加权会变成 >${pl.maxHandSize}）`);
+      }
+      if (def.canUse && !def.canUse(makeSkillCtx(S.battle.ctx, rt))) reasons.push('卡面自定义条件不满足（卡面「不可用」条件）');
+      if (!freeToggle && manaCost !== 'X' && pl.mana < manaCost) reasons.push(`魏启不足（需 ${manaCost}，有 ${pl.mana}）`);
+      if (!freeToggle && apCost !== 'X' && pl.actionPoints < apCost) reasons.push(`AP 不足（需 ${apCost}，有 ${pl.actionPoints}）`);
+      if (def.targetMode === 'enemy' && !bs.enemies.some(e => !e.isDead())) reasons.push('需要敌方目标，但场上无存活敌人');
+      L.push(reasons.length ? `  → 原因: ${reasons.join('；')}`
+        : (ok ? '  → 逐项检查都通过，可以直接打出' : '  → 常见原因都不成立：可能是能力/已激活咏唱卡的放行钩子未覆盖'));
+      S.lastOutcome = L.join('\n');
+      return;
+    }
     case 'state': case 'deck': case 'terms': case 'help': S.lastOutcome = ''; return;
 
     // ---- 战斗 ----
