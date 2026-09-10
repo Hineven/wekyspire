@@ -3,10 +3,13 @@
 //   ① 常规：选择一条主维度升级（可升级维度见 LEINO_DIMENSIONS，木/空内容待实装暂屏蔽）。
 //   ② 种子包（维度首次 0→1）：九选三 + 一次刷新——让新体系一次拿到可用的卡组骨架。
 // 瓦片配色是面板本地的表现配置；素材到位后 .dim-icon 换美术图即可。
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   ASCENSION_PLACEHOLDER, totalLeino, LEINO_DIMENSIONS, SEED_OFFERING,
+  FIRST_ASCENSION_GRANT,
 } from '../../core/run/ascension.js';
+import { getSkillDefinition } from '../../core/skills/registry.js';
+import { getAbilityDefinition } from '../../core/abilities/registry.js';
 import CardFacePreview from './CardFacePreview.vue';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
@@ -24,6 +27,18 @@ const DIMS = LEINO_DIMENSIONS.map(k => DIM_META[k]);
 // 种子包选择态（本地）；刷新/结算后清空
 const selected = ref([]);
 watch(() => run.cardOffering, (off) => { if (!off) selected.value = []; });
+
+// 首次点亮获赠（FIRE_VEIN_CARDS §0）：基石卡直入牌组 + 体系能力，然后才开种子包。
+const entryGrant = computed(() => {
+  const off = run.cardOffering;
+  if (!off) return null;
+  const g = FIRST_ASCENSION_GRANT[off.dimension];
+  return g && run.player.leino[off.dimension] === 1 ? g : null;
+});
+const grantCardNames = computed(() => entryGrant.value
+  ? entryGrant.value.cards.map(id => getSkillDefinition(id)?.name ?? id).join('、') : '');
+const grantAbility = computed(() => entryGrant.value?.ability
+  ? getAbilityDefinition(entryGrant.value.ability) : null);
 
 function toggleSeed(id) {
   const i = selected.value.indexOf(id);
@@ -47,7 +62,11 @@ function rerollSeed() {
     <template v-if="run.cardOffering">
       <h2 class="run-panel-title">种子包 · {{ DIM_META[run.cardOffering.dimension]?.label }}</h2>
       <p class="run-panel-hint">
-        初次点亮该体系——从九张基石卡中任选 {{ SEED_OFFERING.picks }} 张加入牌组
+        <template v-if="entryGrant">
+          初次点亮该体系——已获赠 <b>{{ grantCardNames }}</b> 直入牌组，
+          并获得体系能力<b>「{{ grantAbility?.name }}」</b>（{{ grantAbility?.description }}）<br>
+        </template>
+        再从九张基石卡中任选 {{ SEED_OFFERING.picks }} 张加入牌组
         （已选 {{ selected.length }}/{{ SEED_OFFERING.picks }}）
       </p>
       <div class="seed-grid">
@@ -95,7 +114,7 @@ function rerollSeed() {
       <p class="note">
         总进阶 {{ run.player.ascensionCount }}/{{ ASCENSION_PLACEHOLDER.maxAscensions }}
         ｜ 突破后恢复{{ ASCENSION_PLACEHOLDER.healAmount }}点生命且魏启上限 +{{ ASCENSION_PLACEHOLDER.manaGain }}
-        ｜ 首次点亮灵脉将开启种子包（九选三）
+        ｜ 首次点亮火灵脉：获赠点火、火弹术与体系能力「火灵脉」，并开启种子包（九选三）
       </p>
     </template>
   </div>

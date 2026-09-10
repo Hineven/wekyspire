@@ -5,9 +5,10 @@ import { packOf } from './rewards.js';
 
 // 进阶事件（RUN_DESIGN §5.3）：离开训练房时训练次数达标 → 直接进入（无延后、无随机性）。
 // 内容：选一条主维度升级 + 恢复全部状态 + 魏启上限提升 +（达标时）能力授予。
-// 2026-09 追加：维度**首次 0→1** 时给「种子包」——九选三（可刷新一次），
-// 让新体系一次拿到可用的卡组骨架，而不是靠后续单张奖励慢慢凑。
-// 门槛数值全部占位（§9 留坑），授予池当前最小化为空。
+// 2026-09 追加：维度**首次 0→1** 时获赠体系基石卡与体系能力（FIRST_ASCENSION_GRANT），
+// 再给「种子包」——九选三（可刷新一次），让新体系一次拿到可用的卡组骨架，
+// 而不是靠后续单张奖励慢慢凑。
+// 门槛数值全部占位（§9 留坑），能力授予池当前最小化为空。
 
 // 可升级维度：木/空灵脉内容待实装，先屏蔽（用户 2026-09 定）；内容落地后加回。
 // 体修不再是灵脉维度——它走隐藏的 player.bodyLevel（进阶事件「跳过」时 +1）。
@@ -25,12 +26,19 @@ export const ASCENSION_PLACEHOLDER = {
 // 种子包规格：抽 N 张互不重复的基石卡，任选 M 张入牌组，可刷新 R 次。
 export const SEED_OFFERING = Object.freeze({ cards: 9, picks: 3, rerolls: 1 });
 
+// 首次进入体系的获赠表（FIRE_VEIN_CARDS §0，2026-09 定）：基石卡直入牌组 +
+// 体系能力自动授予，然后才开种子包九选三。点火原占种子包必出位（seedGuaranteed），
+// 改为获赠直发后该标记移除——九选三回到纯自选，不再强制复发已有基石。
+export const FIRST_ASCENSION_GRANT = Object.freeze({
+  fire: Object.freeze({ cards: ['inflame', 'fireBolt'], ability: 'fireVein' }),
+});
+
 // 种子池排除表：需要前置储备才生效的「组合件」出在九选三里等于废牌。
 // 内容侧也可用 def.seedEligible === false 单卡标注；本表是当前统一调参位。
 const SEED_EXCLUDED = new Set([
   // 火灵脉：添柴系（需手牌燃料）、需已有燃烧的控火术（灭/散/收/扰/爆/聚/炼/无上）、
   // 燃烧转化/反哺（激热/化焰/镜燃）、焰愈系（按自身燃烧缩放）、忍耐（需燃烧受伤）；
-  // 控火术：燃/灼 与 火墙 可独立生效，保留在种子池中
+  // 控火术：燃 与 火墙 可独立生效，保留在种子池中（灼 2026-09 改 B 阶，自然出 D/C 池）
   'fuelTheFire', 'roaringFire', 'blazeUp', 'wildfire',
   'fireControlExtinguish', 'fireControlSpread', 'fireControlHarvest', 'fireControlDisturb',
   'fireControlDetonate', 'fireControlGather', 'fireControlRefine', 'fireControlSupreme',
@@ -171,17 +179,27 @@ export function chooseAscension(run, dimension = null) {
   }
 
   run.player.leino[dimension] += 1;
-  // 首次 0→1：开种子包（九选三），选定后再走能力授予/收尾
-  if (run.player.leino[dimension] === 1 && seedPool(run, dimension).length > 0) {
-    const cards = rollSeedCards(run, dimension);
-    run.cardOffering = {
-      dimension,
-      cards,
-      picks: [],
-      seen: [...cards],
-      rerollsLeft: SEED_OFFERING.rerolls,
-    };
-    return run;
+  // 首次 0→1：获赠体系基石卡与体系能力（FIRE_VEIN_CARDS §0）→ 开种子包（九选三），
+  // 选定后再走能力授予/收尾
+  if (run.player.leino[dimension] === 1) {
+    const grant = FIRST_ASCENSION_GRANT[dimension];
+    if (grant) {
+      for (const defId of grant.cards) run.player.deck.push(createSkillRuntime(defId));
+      if (grant.ability && !run.player.abilities.includes(grant.ability)) {
+        run.player.abilities.push(grant.ability);
+      }
+    }
+    if (seedPool(run, dimension).length > 0) {
+      const cards = rollSeedCards(run, dimension);
+      run.cardOffering = {
+        dimension,
+        cards,
+        picks: [],
+        seen: [...cards],
+        rerollsLeft: SEED_OFFERING.rerolls,
+      };
+      return run;
+    }
   }
   return proceedAfterLevelUp(run);
 }

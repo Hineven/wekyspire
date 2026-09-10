@@ -1,6 +1,6 @@
 // 火灵脉·爆炎组合 + 通用散卡（FIRE_VEIN_CARDS §1、§3）。
 // 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·放手一搏
-// + 通用（火源归一/火墙/含焰术/膨胀/火焰精通/火焰亲和）。
+// + 通用（火源归一/火墙/含焰术/膨胀/火焰精通/火焰眷顾）。
 //
 // 数值口径备注（全文件通用）：
 // - 攻击类卡伤害走 F1 面板轨（基数 + 攻击 + power），battleDescribe 一律经
@@ -41,7 +41,7 @@ function aoeDamage(sctx, amount, chosen = null) {
 // 沿结算树上溯找「正在打出的卡」：魏启消耗指令的祖先链上必然挂着持卡指令
 // （UseSkillInstruction / ConsumeSkillResourcesInstruction / ActivateSkillInstruction
 // 均带 .skill 字段）。换牌走 AP 不产生魏启消耗，不会进入本判定。
-// 火焰亲和用它判定「这次消耗是否由火灵脉牌引起」。
+// 火焰眷顾用它判定「这次消耗是否由火灵脉牌引起」。
 function cardConsumingMana(instr) {
   let node = instr;
   while (node) {
@@ -74,12 +74,12 @@ function fireBallCard({ id, name, tier, damage, hits = 1, draw, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}${hits > 1 ? `${hits}次` : ''}${draw ? `，抽${draw}` : ''}`,
   });
 }
-fireBallCard({ id: 'fireBolt', name: '火弹术', tier: 'D', damage: 18, draw: 1, promotesTo: 'fireArrow' });
-fireBallCard({ id: 'fireArrow', name: '火箭术', tier: 'C', damage: 18, draw: 2, promotesTo: 'fireBall' });
-fireBallCard({ id: 'fireBall', name: '火球术', tier: 'B', damage: 28, draw: 2 });
+fireBallCard({ id: 'fireBolt', name: '火弹术', tier: 'D', damage: 15, draw: 1, promotesTo: 'fireArrow' });
+fireBallCard({ id: 'fireArrow', name: '火箭术', tier: 'C', damage: 15, draw: 2, promotesTo: 'fireBall' });
+fireBallCard({ id: 'fireBall', name: '火球术', tier: 'B', damage: 25, draw: 2 });
 // 火球连发（A，多段分叉）与大火球术（A，单发大数字）是 B 位之后的两条并列分叉，
 // 不设 promotesTo（升阶链止于 B 的双选）。
-fireBallCard({ id: 'fireBarrage', name: '火球连发', tier: 'A', damage: 14, hits: 2, draw: 3 });
+fireBallCard({ id: 'fireBarrage', name: '火球连发', tier: 'A', damage: 15, hits: 2, draw: 3 });
 fireBallCard({ id: 'greaterFireBall', name: '大火球术', tier: 'A', damage: 38, draw: 2 });
 
 // 蓄热火球（C）：8 直伤；每次打出后**自身**伤害永久 +12（本场战斗内，其他卡
@@ -232,9 +232,9 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
     battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
   });
 }
-kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 8, ap: 1, promotesTo: 'kindlingBloodPlus' });
-kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 12, ap: 1, promotesTo: 'kindlingBloodMaster' });
-kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 12, ap: 0 });
+kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 9, ap: 1, promotesTo: 'kindlingBloodPlus' });
+kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 13, ap: 1, promotesTo: 'kindlingBloodMaster' });
+kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 13, ap: 0 });
 
 // ====================================================================
 // §1.1 火雨系列（低耗群伤）
@@ -391,7 +391,7 @@ firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 
 
 // 忍耐（C，咏唱1）：激活期间每**累计**受到 5 点燃烧伤害回 1 魏启，余数保留
 // （计数挂 skillRuntime，跨回合累积；重复熄灭/再激活不清零——计数属于卡牌身份）。
-// 读 result.dealt（燃烧为穿透伤害，即实际生命损失；被防火 veto 的结算无 POST）。
+// 读 result.dealt（燃烧为固定伤害，dealt 即护盾吸收后的实际生命损失；被防火 veto 的结算无 POST）。
 registerSkill({
   id: 'patience', name: '忍耐', type: 'fire', tier: 'C', series: 'patience',
   cost: { mana: 0, actionPoint: 0 },
@@ -593,13 +593,13 @@ registerSkill({
   describe: () => '每消耗1魏启，获得3护盾',
 });
 
-// 火焰亲和（B，消耗，咏唱3）：激活期间火灵脉牌的魏启消耗 -1。
+// 火焰眷顾（B，消耗，咏唱3）：激活期间火灵脉牌的魏启消耗 -1。
 // 判定方式：沿 ConsumeManaInstruction 的父链上溯取「正在打出的卡」
 // （cardConsumingMana），type==='fire' 才减免——X 费火卡（凝焰系列，ConsumeMana
 // 由 use 内直接提交，父链同样可达持卡指令）一并享受减免。
 // PRE 只做 payload 修饰（费用管线与数值管线同构，R2）；最低减到 0。
 registerSkill({
-  id: 'fireAffinity', name: '火焰亲和', type: 'fire', tier: 'B', series: 'common',
+  id: 'fireAffinity', name: '火焰眷顾', type: 'fire', tier: 'B', series: 'common',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 3,

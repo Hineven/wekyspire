@@ -22,10 +22,10 @@ import { getEffectDefinition } from '../effects/registry.js';
 import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, resolvedDamageText } from './cardKit.js';
 
 // ==== 点火系列（基石：点火 C → 烈焰 B → 炙焰 A）===============================
-// 点火 C（2伤害 + 燃烧4）已在 skills.js 定义；此处补 B/A 两阶。
+// 点火 C（3伤害 + 燃烧5）已在 skills.js 定义；此处补 B/A 两阶。
 // 伤害走 F1 攻击面板轨，与「点火」同口径；升阶只放大燃烧层数。
 
-// 烈焰 B：1AP，2 伤害，施加燃烧 6。
+// 烈焰 B：1AP，3 伤害，施加燃烧 7。
 registerSkill({
   id: 'blaze', name: '烈焰', type: 'fire', tier: 'B', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
@@ -35,15 +35,15 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true; // 无存活敌人：落空（G2 收尾防御）
-    attackDamage(sctx, 2, { target });
-    addEffect(sctx, 'burn', 6, target);
+    attackDamage(sctx, 3, { target });
+    addEffect(sctx, 'burn', 7, target);
     return true;
   },
-  describe: () => '2伤害，赋予/effect{燃烧}6',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 2)}，赋予/effect{燃烧}6`,
+  describe: () => '3伤害，赋予/effect{燃烧}7',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}7`,
 });
 
-// 炙焰 A：1AP，2 伤害，施加燃烧 9（点火链顶点，无晋升）。
+// 炙焰 A：1AP，3 伤害，施加燃烧 10（点火链顶点，无晋升）。
 registerSkill({
   id: 'inferno', name: '炙焰', type: 'fire', tier: 'A', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
@@ -52,12 +52,12 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
-    attackDamage(sctx, 2, { target });
-    addEffect(sctx, 'burn', 9, target);
+    attackDamage(sctx, 3, { target });
+    addEffect(sctx, 'burn', 10, target);
     return true;
   },
-  describe: () => '2伤害，赋予/effect{燃烧}9',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 2)}，赋予/effect{燃烧}9`,
+  describe: () => '3伤害，赋予/effect{燃烧}10',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}10`,
 });
 
 // ==== 燃元系列（散卡：燃烧 → 魏启资源）=======================================
@@ -123,8 +123,8 @@ registerSkill({
 });
 
 // 激热 C：0 费。触发目标一次燃烧结算——完全复刻 burn 效果的回合开始行为：
-// 无来源穿透伤害（tags:['burn']，防火经该标记 veto）+ 层数 -1。
-// 语义：把下一次自然跳伤提前到现在（提前一拍爆发/配合穿透收尾）。
+// 无来源固定伤害（tags:['burn']，防火经该标记 veto；烈焰亲和就地减免）+ 层数 -1。
+// 语义：把下一次自然跳伤提前到现在（提前一拍爆发/收尾）。
 registerSkill({
   id: 'heatSurge', name: '激热', type: 'fire', tier: 'C', series: 'ember',
   cost: { mana: 0, actionPoint: 0 },
@@ -135,14 +135,15 @@ registerSkill({
     if (!target) return true;
     const stacks = target.getEffectStacks('burn');
     if (stacks <= 0) return true; // 无燃烧：落空
-    dealDamage(sctx, stacks, { target, source: null, pierce: true, tags: ['burn'] });
+    dealDamage(sctx, Math.max(0, stacks - target.getEffectStacks('flameAffinity')),
+      { target, source: null, fixed: true, tags: ['burn'] });
     addEffect(sctx, 'burn', -1, target);
     return true;
   },
-  describe: () => '触发一次目标/effect{燃烧}结算：受到等于层数的穿透伤害，层数-1',
+  describe: () => '触发一次目标/effect{燃烧}结算',
   battleDescribe: (sctx) => {
     const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-    return `触发一次/effect{燃烧}结算（当前${stacks}层：${stacks}穿透伤害后层数-1）`;
+    return `触发一次/effect{燃烧}结算（当前${stacks}层）`;
   },
 });
 
@@ -193,18 +194,18 @@ function registerFireControlPair(id, name, tier, mana, targetMode, def) {
   FIRE_CONTROL_ZERO_IDS.push(`${id}Zero`);
 }
 
-// 控火术：燃 C —— 伤害 4，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
+// 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
 registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
-    attackDamage(sctx, 4 + target.getEffectStacks('burn'), { target });
+    attackDamage(sctx, 12 + target.getEffectStacks('burn'), { target });
     return true;
   },
-  describe: () => '4伤害；目标每层/effect{燃烧}，伤害+1',
+  describe: () => '12伤害；目标每层/effect{燃烧}，伤害+1',
   battleDescribe: (sctx) => {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-    return `${4 + bonus}伤害（4+目标/effect{燃烧}${bonus}）`;
+    return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
   },
 });
 
@@ -219,18 +220,18 @@ registerFireControlPair('fireControlExtinguish', '控火术：灭', 'C', 3, 'ene
   describe: () => '驱散目标9层/effect{燃烧}',
 });
 
-// 控火术：灼 C —— 下次你发动的攻击：每造成 4 伤害，赋予目标燃烧 1。
+// 控火术：灼 B（2026-09 由 C 改 B）—— 下次你发动的攻击：每造成 3 伤害，赋予目标燃烧 1。
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
-// floor(dealt/4) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、
+// floor(dealt/3) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、
 // 目标为敌方的下一次伤害结算（燃烧跳伤无来源，天然不触发）。
-registerFireControlPair('fireControlScorch', '控火术：灼', 'C', 3, 'enemy', {
+registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy', {
   use(sctx) {
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', window: 'once',
       filter: (instr) => instr.source === sctx.player
         && instr.target.side === 'enemy' && !instr.target.isDead(),
       react: (instr, ctx) => {
-        const stacks = Math.floor((instr.result?.dealt ?? 0) / 4);
+        const stacks = Math.floor((instr.result?.dealt ?? 0) / 3);
         if (stacks > 0) {
           ctx.kernel.submitInstruction(new AddEffectInstruction({
             target: instr.target, effectId: 'burn', stacks,
@@ -240,7 +241,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'C', 3, 'enemy',
     });
     return true;
   },
-  describe: () => '你下次造成伤害时，每4点伤害赋予目标/effect{燃烧}1',
+  describe: () => '你下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
 });
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
@@ -286,8 +287,8 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 3, 'enemy'
   },
 });
 
-// 控火术：扰 B —— 消耗自身所有燃烧，每层获得 3 护盾。
-registerFireControlPair('fireControlDisturb', '控火术：扰', 'B', 3, 'none', {
+// 控火术：扰 C（2026-09 由 B 改 C）—— 消耗自身所有燃烧，每层获得 3 护盾。
+registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 3, 'none', {
   use(sctx) {
     const stacks = sctx.player.getEffectStacks('burn');
     if (stacks <= 0) return true;

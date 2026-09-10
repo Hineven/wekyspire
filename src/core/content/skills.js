@@ -60,7 +60,8 @@ registerSkill({
 });
 
 // ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
-// 点火是火体系的燃烧入口，种子包必出（seedGuaranteed）——九选三缺它发不出体系骨架（用户 2026-09 定）
+// 点火是火体系的燃烧入口——2026-09 改为首次点亮火灵脉时由进阶获赠直发
+// （ascension.FIRST_ASCENSION_GRANT），不再占用种子包必出位。
 registerSkill({
   id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
@@ -68,20 +69,19 @@ registerSkill({
   cardMode: 'normal',
   targetMode: 'enemy',
   promotesTo: 'blaze',
-  seedGuaranteed: true,
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player, target,
-      amount: 2 + sctx.player.getStat('attack') + sctx.self.power,
+      amount: 3 + sctx.player.getStat('attack') + sctx.self.power,
     }));
     sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target, effectId: 'burn', stacks: 4,
+      target, effectId: 'burn', stacks: 5,
     }));
     return true;
   },
-  describe: () => '2伤害，赋予/effect{燃烧}4',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 2)}，赋予/effect{燃烧}4`,
+  describe: () => '3伤害，赋予/effect{燃烧}5',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}5`,
 });
 
 // ④ 咏唱牌：每个玩家回合开始回复 1 点魏启（验证 activated 生命周期 + WAIT 回合）。

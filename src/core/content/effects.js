@@ -6,14 +6,16 @@ import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/ca
 import { GainManaInstruction } from '../instructions/resources.js';
 import AIActInstruction from '../instructions/aiAct.js';
 
-// 燃烧：自己阵营回合开始时受到等于层数的伤害（穿透），然后层数 -1。
+// 燃烧：自己阵营回合开始时受到等于层数的**固定伤害**（EFFECTS.md 2026-09 定调：
+// 固定＝跳过修正与防御、护盾可挡，不穿透），然后层数 -1。
+// 烈焰亲和的减免在此就地折算——固定伤害 payload 白名单为空、PRE 不可修饰。
 // 行为完全由订阅表达，结算指令里无任何"燃烧"特判。
 registerEffect({
   id: 'burn',
   type: 'debuff',
   stacking: 'count',
   name: '燃烧',
-  description: '回合开始时受到等于层数的伤害，然后层数减少 1。',
+  description: '回合开始时受到等于层数的固定伤害，然后层数减少 1。',
   icon: '🔥',
   color: 'red',
   subscriptions: (unit) => [{
@@ -24,7 +26,9 @@ registerEffect({
       const stacks = unit.getEffectStacks('burn');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: unit, amount: stacks, pierce: true, tags: ['burn'],
+        source: null, target: unit,
+        amount: Math.max(0, stacks - unit.getEffectStacks('flameAffinity')),
+        fixed: true, tags: ['burn'],
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'burn', stacks: -1,
@@ -177,14 +181,52 @@ registerEffect({
   }],
 });
 
-// 中毒（EFFECTS.md）：回合结束时受到层数点固定伤害（F2：跳过修正与防御、仍吃护盾），
-// 然后层数 -1。与燃烧的区别：回合末结算 + 固定伤害（不吃格挡减半/易伤等修正）。
+// 烈焰亲和（火灵脉体系效果，EFFECTS.md）：燃烧结算时，减免层数点伤害。
+// 燃烧为固定伤害（payload 白名单为空、PRE 不可修饰），减免由燃烧 tick 就地折算
+// （burn react 读本层数，min 0）——此处仅作状态轨/图鉴展示，无订阅。
+// 与防火（整跳 veto）两级同轴。
+registerEffect({
+  id: 'flameAffinity',
+  type: 'buff',
+  stacking: 'count',
+  name: '烈焰亲和',
+  description: '燃烧结算时，减免层数点伤害。',
+  icon: '🧤',
+  color: 'red',
+});
+
+// 炎魔（火灵脉体系效果，EFFECTS.md）：造成伤害时，赋予伤害对象燃烧1（按当前层数）。
+// 循环防护双保险：燃烧跳伤 source 为空天然不触发；'burn' 标记伤害一律不触发（防
+// 自馈级联）。目标已死亡不赋予。荆棘反伤等非 burn 标记的己方伤害照常附带（设计语义）。
+registerEffect({
+  id: 'flameDemon',
+  type: 'buff',
+  stacking: 'count',
+  name: '炎魔',
+  description: '造成伤害时，赋予伤害对象燃烧1。',
+  icon: '👹',
+  color: 'red',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    filter: (instr) => instr.source === unit && !unit.isDead()
+      && !instr.tags?.includes('burn') && !instr.target.isDead(),
+    react: (instr, ctx) => {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: instr.target, effectId: 'burn', stacks: unit.getEffectStacks('flameDemon'),
+      }), instr);
+    },
+  }],
+});
+
+// 中毒（EFFECTS.md，2026-09 定调）：回合结束时受到层数点**穿透伤害**（防御与护盾
+// 都不减免），然后层数 -1。与燃烧的区别：回合末结算 + 穿透（燃烧为固定伤害、护盾可挡）。
 registerEffect({
   id: 'poison',
   type: 'debuff',
   stacking: 'count',
   name: '中毒',
-  description: '回合结束时受到等于层数的固定伤害，然后层数减少 1。',
+  description: '回合结束时受到等于层数的穿透伤害，然后层数减少 1。',
   icon: '☠️',
   color: 'green',
   subscriptions: (unit) => [{
@@ -195,7 +237,7 @@ registerEffect({
       const stacks = unit.getEffectStacks('poison');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: unit, amount: stacks, fixed: true, tags: ['poison'],
+        source: null, target: unit, amount: stacks, pierce: true, tags: ['poison'],
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'poison', stacks: -1,

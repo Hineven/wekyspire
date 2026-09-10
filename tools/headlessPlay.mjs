@@ -44,7 +44,7 @@ import {
 } from '../src/core/run/rewards.js';
 import {
   chooseAscension, chooseAscensionAbility, chooseSeedCards, rerollSeedOffering,
-  ASCENSION_PLACEHOLDER,
+  ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from '../src/core/run/ascension.js';
 import {
   trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining,
@@ -62,7 +62,8 @@ const HELP = `动作表（按当前阶段）：
   房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw
         | act take <候选#> <卡名> | act skipdraw | act skip | act spin | act play | next
   预览: preview up <构筑#>（升阶前后对比，只读）
-  进阶: dim 火|跳过（跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
+  进阶: dim 火|跳过（首次点亮火系：获赠点火+火弹术+体系能力「火灵脉」，再开种子九选三；
+        跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
         | seed <#> <卡名>,<#> <卡名>,<#> <卡名>（选3张入组）
   通用: state | deck | lib | terms（词条/效果释义） | note <文本> | help
 ※ 打牌/选牌一律「编号+卡名」双重确认：编号定位、卡名校验，两者不匹配会报错并提示实际卡名。`;
@@ -462,7 +463,16 @@ function exec(S, raw) {
     case 'dim': {
       if (stage !== 'ascension') throw new Error('当前不在进阶事件');
       if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修隐藏等级+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）`; }
-      else if (a === '火' || a === 'fire') { chooseAscension(run, 'fire'); S.lastOutcome = `火灵脉 +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）`; }
+      else if (a === '火' || a === 'fire') {
+        const first = run.player.leino.fire === 0;
+        chooseAscension(run, 'fire');
+        const grant = first ? FIRST_ASCENSION_GRANT.fire : null;
+        const grantText = grant
+          ? `；获赠 ${grant.cards.map(id => getSkillDefinition(id)?.name ?? id).join('+')}`
+            + (grant.ability ? `+体系能力「${getAbilityDefinition(grant.ability)?.name}」` : '')
+          : '';
+        S.lastOutcome = `火灵脉 +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）${grantText}`;
+      }
       else throw new Error('dim 火 | dim 跳过');
       return;
     }
@@ -640,6 +650,12 @@ function render(S) {
     L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌），另回${ASCENSION_PLACEHOLDER.healAmount}血、魏启上限+1`);
     if (run.cardOffering) {
       const off = run.cardOffering;
+      const grant = FIRST_ASCENSION_GRANT[off.dimension];
+      if (grant && run.player.leino[off.dimension] === 1) {
+        const ab = grant.ability ? getAbilityDefinition(grant.ability) : null;
+        L.push(`本次获赠（已入牌组）：${grant.cards.map(id => getSkillDefinition(id)?.name ?? id).join('、')}`
+          + (ab ? ` ｜ 体系能力「${ab.name}」：${plain(ab.description)}` : ''));
+      }
       L.push(`种子九选三（选3张入组，刷新剩 ${off.rerollsLeft}）:`);
       off.cards.forEach((id, i) => {
         const def = getSkillDefinition(id);
