@@ -384,5 +384,12 @@ RoomPanel 最重（滚动 + 老虎机演出），放最后。
 + `uiGallery.html`（`?panel=prep|reward&seed=&relics=&equip=&floor=`，面板内按钮与卡面可点、
 真实走 core 意图）。浏览器视觉验收按项目惯例**由所有者验收**（prep 观感与遮挡关系已验收通过）。
 
+**执行中发现并修掉的既有 bug（迁移动机的意外收获）**：`runController.endBattle` 等待塔楼抵达
+动画的 Promise **漏了 resolve**，导致网页端每次战后 `playPendingCutscenes()` 与 `notify()` 都不执行
+（奖励面板不出现、金币停在旧值）。此前奖励面板是 Vue 组件、靠 `run.rewards` 的 reactive 自行刷新，
+把这个洞掩盖了；面板迁入 Three（依赖 `notify` 推快照）后才暴露。已抽成可测函数 `awaitFloorArrive`
+并补齐「回执放行 + 等待侧保险丝」两处。同时修掉模态层序：文本/按钮落在背板之后被遮挡。
+→ 教训已写进 §4.2-1 的同源要求：**迁移到推流驱动的 UI 时，必须确认推流时机本身没有既有的断点**。
+
 **下一步**：AscensionPanel（多选态 → 快照承载勾选、tiles 复用）→ RoomPanel（最重：老虎机演出改由
 sequencer 回执驱动，见 §2.4 的分期陷阱）。
