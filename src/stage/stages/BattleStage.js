@@ -265,7 +265,7 @@ export class BattleStage {
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
     // 顶端居中资源行（金币数值 + 遗物槽；与地图层同物同位，runController 喂值）
-    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
+    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel, picker: this.picker });
     this.uiScene.add(this._topBar);
     this._resources = { ap: this._statusBar.apCoin, mana: this._statusBar.manaCrystal };
     this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）

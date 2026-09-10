@@ -50,7 +50,10 @@ export function buildPrepPanel(snap) {
   for (const r of slotRelics) {
     const tag = r.rarity ? `${r.rarity}·${r.cost}槽` : `${r.cost}槽`;
     const suffix = r.equipped ? '（已装备）' : '';
-    w.push({ kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#ffd75e' : undefined });
+    w.push({
+      kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#ffd75e' : undefined,
+      token: { type: 'relic', payload: { relicId: r.id } }, // hover 出效果预览
+    });
     if (r.equipped) {
       w.push({ kind: 'button', id: `relic:unequip:${r.id}`, label: '卸下', action: { action: 'unequip', relicId: r.id } });
       if (r.canUse) {
@@ -70,7 +73,10 @@ export function buildPrepPanel(snap) {
     w.push({ kind: 'gap' });
     w.push({ kind: 'sub', text: '非槽位式（恒生效，不占槽）', tint: '#8a93b2' });
     for (const r of nonSlotRelics) {
-      w.push({ kind: 'text', text: `[${r.rarity ?? 'C'}] ${r.name}`, tint: '#a8c6a0' });
+      w.push({
+        kind: 'text', text: `[${r.rarity ?? 'C'}] ${r.name}`, tint: '#a8c6a0',
+        token: { type: 'relic', payload: { relicId: r.id } },
+      });
     }
   }
 
@@ -363,6 +369,8 @@ export function buildShopPanel(snap) {
       kind: 'text', align: 'center',
       tint: it.sold ? '#5d6584' : (it.affordable ? undefined : '#8a6a6a'),
       text: `${tag} ${it.label} ｜ ${it.price} 金` + (it.sold ? '（已售出）' : ''),
+      // 遗物货 hover 出效果预览（买之前能看清是什么）
+      ...(it.relicId ? { token: { type: 'relic', payload: { relicId: it.relicId } } } : {}),
     });
     if (!it.sold) {
       w.push({

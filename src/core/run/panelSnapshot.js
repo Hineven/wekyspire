@@ -186,6 +186,7 @@ export function roomSnapshot(run, extra = {}) {
       broken: !!run.shop.broken, // 故事模式：瑞米被打跑 → 货架不完整（附道歉文案）
       items: run.shop.items.map((it, index) => ({
         index, kind: it.kind, label: it.label, sub: it.sub ?? '',
+        relicId: it.relicId ?? null, // 遗物货：供 hover 效果预览
         price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
       })),
       pending: run.shopPending ? {

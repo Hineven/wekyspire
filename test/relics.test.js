@@ -11,8 +11,9 @@ import {
 } from '../src/core/relics/draft.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { PlayerTurnEndInstruction } from '../src/core/instructions/turn.js';
-import { prepSnapshot } from '../src/core/run/panelSnapshot.js';
-import { buildPrepPanel } from '../src/stage/panels/index.js';
+import { prepSnapshot, panelSnapshot } from '../src/core/run/panelSnapshot.js';
+import { buildPrepPanel, buildShopPanel } from '../src/stage/panels/index.js';
+import { PanelObject } from '../src/stage/objects/PanelObject.js';
 
 // 测试用 fixture 遗物（内容侧第一批里没有「主动使用」与「仅商店」样本，故在此登记）
 registerRelic({
@@ -329,5 +330,74 @@ describe('战前准备面板：稀有度 / 槽位 / 非槽位式', () => {
     const equipBtn = widgets.find(w => w.id === 'relic:equip:blackMountainRock');
     expect(equipBtn.enabled).toBe(false);
     expect(equipBtn.label).toContain('槽位不足');
+  });
+});
+
+describe('遗物 tooltip：效果预览', () => {
+  it('tooltipModel("relic") 给出名称（稀有度 · 槽位）+ 效果描述', async () => {
+    const { tooltipModel } = await import('../src/shell/tooltip.js');
+    const m = tooltipModel('relic', { relicId: 'dragonScale' });
+    expect(m.title).toContain('龙鳞');
+    expect(m.title).toContain('A');        // 稀有度
+    expect(m.title).toContain('3 槽');     // 槽位占用
+    expect(m.body).toBe('战斗开始时，防御 2。');
+
+    const non = tooltipModel('relic', { relicId: 'springFlask' });
+    expect(non.title).toContain('非槽位式');
+    expect(non.body).toContain('休息');
+
+    // 未知 id 不炸，给出可诊断的兜底
+    expect(tooltipModel('relic', { relicId: 'nope' }).title).toContain('nope');
+  });
+
+  it('准备面板的遗物行带 token 热区（hover → 该遗物的效果）', () => {
+    const run = createRun({ seed: 21 });
+    grantRelic(run, 'dragonScale');
+    grantRelic(run, 'springFlask');   // 非槽位式行也要能 hover
+    const widgets = buildPrepPanel(prepSnapshot(run));
+    const rows = widgets.filter(w => w.token);
+    const ids = rows.map(w => w.token.payload.relicId);
+    expect(ids).toContain('dragonScale');
+    expect(ids).toContain('springFlask');
+    for (const r of rows) expect(r.token.type).toBe('relic');
+  });
+
+  it('面板把 token 行登记为可拾取热区，且释放时摘干净（不漏 pickable）', () => {
+    const run = createRun({ seed: 22 });
+    grantRelic(run, 'dragonScale');
+    const pickables = [];
+    const picker = {
+      addPickable: (id, obj, opts) => pickables.push({ id, opts }),
+      removePickable: (id) => { const i = pickables.findIndex(p => p.id === id); if (i >= 0) pickables.splice(i, 1); },
+    };
+    const panel = new PanelObject({ onIntent: () => {} });
+    panel.attachPicker(picker);
+    panel.setWidgets('prep', buildPrepPanel(prepSnapshot(run)));
+    const rows = pickables.filter(p => p.opts.kind === 'row');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every(p => p.opts.space === 'ui')).toBe(true);
+
+    panel.dispose();
+    expect(pickables).toHaveLength(0); // 含 token 行一并摘除
+  });
+
+  it('售货机的遗物货也带 token（买之前能看清效果）', async () => {
+    // 造一个必上遗物货的货架
+    let snap = null;
+    for (let seed = 1; seed <= 30 && !snap; seed++) {
+      const run = createRun({ seed });
+      run.floor = 4; run.gameStage = 'room'; run.currentRoom = 'camp';
+      run.player.money = 200;
+      const { ensureShopStock } = await import('../src/core/run/rooms/shop.js');
+      ensureShopStock(run);
+      const s = panelSnapshot(run, {});
+      if (s?.shop?.items?.some(it => it.relicId)) snap = s;
+    }
+    expect(snap).toBeTruthy();
+    // 面板构建后遗物货行应带 token
+    const widgets = buildShopPanel(snap);
+    const relicRow = widgets.find(w => w.token);
+    expect(relicRow).toBeTruthy();
+    expect(relicRow.token.payload.relicId).toBeTruthy();
   });
 });

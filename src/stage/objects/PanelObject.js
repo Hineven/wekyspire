@@ -72,6 +72,8 @@ export class PanelObject extends THREE.Group {
     this._cards = [];         // CardObject（重烘用）
     this._hoveredId = null;
     this._backdrop = null;
+    this._rowPickIds = new Set(); // 可 hover 文本行的 pickable id（attachPicker/清理都要摘）
+    this._rowSeq = 0;   // 可 hover 文本行的 pickable id 序号
     this.kind = null;
     if (form === 'modal') this.position.set(0, UI_CAMERA_LOOK_AT_Y, Z.PANEL);
     else this.position.set(-HALF_UI_W + this._g.marginX / PX_PER_WU,
@@ -145,6 +147,14 @@ export class PanelObject extends THREE.Group {
         else text.placeLeftTop(left, y);
         text.position.z = Z.CONTENT; // 同按钮：内容一律在背板之上
         this.add(text);
+        // 可 hover 的文本行（如遗物效果预览）：挂 token 热区 → Picker 命中即发 tooltip:*
+        if (w.token) {
+          const pid = `${kind}:row:${this._rowSeq++}`;
+          text.userData.token = w.token;
+          text.userData.pickId = pid;
+          this._rowPickIds.add(pid);
+          this._picker?.addPickable(pid, text, { kind: 'row', space: 'ui' });
+        }
         this._rows.push({ widget: w, object: text, top: y, h: hWu, contentH: text.scale.y });
       }
       y -= hWu;
@@ -162,6 +172,9 @@ export class PanelObject extends THREE.Group {
     if (!picker) return;
     for (const btn of this._buttons.values()) picker.addPickable(btn.pickId, btn, { kind: 'button', space: 'ui' });
     for (const { object, id } of this._cards) picker.addPickable(id, object, { kind: 'card', cardObject: object, space: 'ui' });
+    for (const { object } of this._rows) {
+      if (object?.userData?.pickId) picker.addPickable(object.userData.pickId, object, { kind: 'row', space: 'ui' });
+    }
   }
 
   /** hover：按钮抬亮 / 卡面高亮（命中变化时先清旧的）。 */
@@ -226,7 +239,7 @@ export class PanelObject extends THREE.Group {
   }
 
   _pickIds() {
-    return [...this._buttons.keys(), ...this._cardActions.keys()];
+    return [...this._buttons.keys(), ...this._cardActions.keys(), ...this._rowPickIds];
   }
 
   _addBackdrop() {
@@ -310,6 +323,7 @@ export class PanelObject extends THREE.Group {
     // 文本行：object 即面片，逐行释放
     for (const { object } of this._rows) {
       if (!object) continue;
+      if (object.userData?.pickId) this._picker?.removePickable(object.userData.pickId);
       this.remove(object);
       object.dispose();
     }
@@ -327,6 +341,7 @@ export class PanelObject extends THREE.Group {
       object.dispose();
     }
     this._rows = [];
+    this._rowPickIds.clear();
     this._buttons.clear();
     this._buttonActions.clear();
     this._cards = [];

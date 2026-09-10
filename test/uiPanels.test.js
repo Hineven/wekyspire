@@ -159,8 +159,11 @@ describe('PanelObject（widget 行流 + 点击路由）', () => {
     panel.setWidgets('prep', buildPrepPanel(snapOf()));
 
     expect(panel.rowCount).toBeGreaterThan(0);
-    expect(pickables.length).toBe(panel.buttons.length); // 每个按钮一条 pickable
-    expect(pickables.every(p => p.opts.kind === 'button' && p.opts.space === 'ui')).toBe(true);
+    // 每个按钮一条 pickable；此外遗物行还注册了 token 热区（kind 'row'，供 hover 出效果预览）
+    const btnPickables = pickables.filter(p => p.opts.kind === 'button');
+    expect(btnPickables.length).toBe(panel.buttons.length);
+    expect(pickables.filter(p => p.opts.kind === 'row').length).toBeGreaterThan(0);
+    expect(pickables.every(p => p.opts.space === 'ui')).toBe(true);
 
     // 点「装备」按钮 → 上报 equip intent（Stage 不解释语义）
     const equipBtn = panel.buttons.find(b => b.pickId.startsWith('relic:equip:'));
