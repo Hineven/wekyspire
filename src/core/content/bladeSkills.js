@@ -712,15 +712,13 @@ registerSkill({
 
 // 练刀（D，1AP，2026-09 稿：去消耗、先抽1）：抽1，选1张手中刀法牌令其伤害+4，
 // 并将其弃入牌库（deckCraft 锻刀原型同构；power 漂移口径同培植系列）。
-// canUse 闸门：手中无刀法牌不可打出（试玩反馈——静默白烧 1AP 零反馈，比落空更糟；
-// 抽1可能抽来新刀，但闸门按打出时点已有刀判，稳定可预期）。
+// 无可用性门槛：卡面没写/named{顽固}就不得暗设条件，否则纯负面卡手——
+// 抽1后手中无刀法牌时只当白板抽1收场（不产生选牌请求）。
 registerSkill({
   id: 'practiceBlade', name: '练刀', type: 'normal', tier: 'D', series: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  canUse: (sctx) => sctx.battleState.zones.hand.some(
-    c => c.uniqueID !== sctx.self.uniqueID && isBladeCard(c)),
   use(sctx, stage) {
     if (stage === 0) {
       drawCards(sctx, 1);                                  // 先抽1（无消耗，回牌库循环用）

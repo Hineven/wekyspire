@@ -813,6 +813,20 @@ describe('开刃系列：斩进阶', () => {
     expect(d.state.zones.burnt.some(c => c.defId === 'practiceBlade')).toBe(false);  // 去消耗
     expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');     // 回牌库
   });
+
+  it('练刀无顽固：手中无刀法牌也可打出（不卡手），退化成纯抽1', () => {
+    const d = new BattleDriver({
+      deck: ['practiceBlade', 'punch', 'punch', 'punch', 'guard'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 4 },   // guard 留牌库供抽1
+    });
+    d.start();
+    toHand(d, 'practiceBlade');
+    expect(canUseSkill(d.ctx, findCard(d, 'practiceBlade'))).toBe(true);   // 无刀也恒可打
+    d.play('practiceBlade');
+    expect(d.calls('requestInput')).toHaveLength(0);              // 无选牌请求
+    expect(d.state.zones.hand.some(c => c.defId === 'guard')).toBe(true);  // 抽1照常
+    expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');
+  });
 });
 
 describe('刀法咏唱：抽弃循环', () => {
