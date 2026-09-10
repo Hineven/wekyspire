@@ -172,6 +172,9 @@ registerRelic({
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
+    // priority -100：回合开始的「出现类」效果必须排在护盾重置（-50）**之后**，
+    // 否则刚发的 12 点盾会被同一拍的清盾立刻抹掉（见 battleRoot 的护盾重置注释）
+    priority: -100,
     filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 2,
     react: (instr, c) => c.kernel.submitInstruction(
       new GainShieldInstruction({ target: c.player, amount: 12 }), instr),

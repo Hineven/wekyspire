@@ -92,6 +92,21 @@ export function wouldBeLethal(instr, target) {
   return target.hp - dmg <= target.getStat('minHp');
 }
 
+// 清空护盾（回合开始的护盾重置）。**执行时机必须晚于回合开始的效果结算**：
+// 燃烧等「固定伤害」按 EFFECTS.md 可被护盾吸收，若先清盾再结算，护盾那一步永远读到 0，
+// 燃烧就会事实上变成穿透（2026-09 修：此前正是这个顺序 bug）。
+export class ClearShieldInstruction extends BattleInstruction {
+  constructor({ target }, opts = {}) {
+    super(opts);
+    this.target = target; // Unit
+  }
+
+  execute() {
+    this.target.shield = 0;
+    return true;
+  }
+}
+
 // 治疗：白名单 ['amount']，不超过 maxHp。
 export class ApplyHealInstruction extends BattleInstruction {
   constructor({ target, amount }, opts = {}) {

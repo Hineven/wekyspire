@@ -9,7 +9,8 @@ import { activeRelics, refreshRunModifiers } from '../run/prep.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
-import { DealDamageInstruction } from './combat.js';
+import { TurnStartInstruction } from './turn.js';
+import { DealDamageInstruction, ClearShieldInstruction } from './combat.js';
 
 // 战斗根指令：完成 = 战斗结束。子节点固定为 战前 → 回合循环 → 战后。
 export class BattleRootInstruction extends BattleInstruction {
@@ -74,6 +75,36 @@ export class PreBattleInstruction extends BattleInstruction {
         filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy',
         react: (instr, c) => { c.battleState.lastPlayerTarget = instr.target.uniqueID; },
         owner: 'tracker:lastPlayerTarget',
+      });
+
+      // 护盾重置（回合开始）：**必须晚于回合开始的效果结算**——燃烧/中毒等"回合开始"伤害
+      // 先结算（固定伤害按 EFFECTS.md 可被护盾吸收），随后才清盾。
+      // 优先级分带（顺序敏感，改这里前先读这段）：
+      //   默认 0   = 回合开始的结算类效果（燃烧/再生/纳气…）→ 看得到"上一轮留下的护盾"
+      //   -50      = 本订阅（清盾）
+      //   ≤ -100   = 回合开始的「出现类」效果（如「第二回合开始时获得12护盾」的光滑小圆盾）——
+      //              它们必须排在清盾之后，否则刚发的盾会被立刻清掉。
+      // 首回合不清：PreBattle 已把护盾置 0，而"战斗开始时获得护盾"的遗物刚发下来，
+      // 清掉等于白给（黑山岩/拟钢碎片）。
+      // 首回合豁免只给**玩家**：玩家的开局盾来自遗物（黑山岩/拟钢碎片），若在自己第一回合开始就清，
+      // 等于白给。**敌方首回合照清**——敌方开局盾是设计好的"只护住玩家第一回合"
+      // （沼泽伏击者 18 盾），清早了才是对的（既有用例「开局自带盾18」即此意图）。
+      ctx.kernel.addSubscription({
+        when: TurnStartInstruction,
+        phase: 'post',
+        priority: -50,
+        filter: (instr, c) => instr.side === 'player'
+          ? c.battleState.turn.count > 1
+          : true,
+        react: (instr, c) => {
+          const targets = instr.side === 'player'
+            ? [c.player]
+            : c.battleState.enemies.filter(e => !e.isDead());
+          for (const t of targets) {
+            c.kernel.submitInstruction(new ClearShieldInstruction({ target: t }), instr);
+          }
+        },
+        owner: 'core:shieldReset',
       });
 
       // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；

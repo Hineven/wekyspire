@@ -68,10 +68,8 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.battleState.turn.side = 'player';
         ctx.battleState.turn.count += 1;
         resetTurnHistory(ctx.battleState);
-        // 护盾在自己回合开始清零（持续整个敌方回合）。**首回合不清**：那时本无旧护盾
-        // （PreBattle 已置 0），而"战斗开始时获得护盾"的遗物（黑山岩/拟钢碎片）刚发下来，
-        // 清掉就等于白给——首回合清零是纯粹的负收益且没有要清的旧账。
-        if (ctx.battleState.turn.count > 1) ctx.player.shield = 0;
+        // 护盾重置不在这里——它由 battleRoot 注册的订阅在**回合开始效果结算之后**执行
+        // （先清盾会让燃烧等固定伤害永远吃不到护盾，2026-09 修）
         ctx.player.actionPoints = ctx.player.maxActionPoints;
         // 魏启自然恢复：每回合开始 +1（battle.md §6；走指令——上限截断与 PRE 修饰同管线）
         ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), this);
@@ -130,7 +128,6 @@ export class EnemyTurnInstruction extends BattleInstruction {
     switch (this._stage) {
       case 0:
         ctx.battleState.turn.side = 'enemy';
-        for (const e of aliveEnemies(ctx.battleState)) e.shield = 0;
         ctx.kernel.submitInstruction(new EnemyTurnStartInstruction(), this);
         return false;
       case 1:
