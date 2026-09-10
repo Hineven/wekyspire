@@ -101,7 +101,7 @@ const eventText = (r) => ({
         <button v-if="ctrl.campOptions().includes('rest')" class="option-tile" @click="ctrl.campChoose('rest')">
           <span class="tile-icon">🔥</span>
           <div class="tile-title">休整</div>
-          <div class="tile-desc">回复 50% 生命，魏启全部回满</div>
+          <div class="tile-desc">回复 35% 最大生命，魏启全部回满</div>
         </button>
       </div>
       <template v-if="ctrl.campOptions().includes('upgrade')">

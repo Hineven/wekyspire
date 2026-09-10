@@ -2,8 +2,13 @@
 //
 // 会话 = tmp/playtests/<名>.json { seed, actions: [] }。每次调用把全部动作确定性
 // 重放一遍（战斗种子由 run 种子派生、奖励走 run rng，同种子同动作序列必同局），
-// 新动作成功后才入档——中途战斗状态无需序列化。动作一律用「位置索引」寻址
-// （手牌第 N 张 / 构筑第 N 张 / 候选第 N 个），不用 uniqueID（其含随机后缀）。
+// 新动作成功后才入档——中途战斗状态无需序列化。
+//
+// 寻址约定（2026-09 子代理防呆强化）：
+//   - 打牌/选牌一律「编号+卡名」双重确认：编号定位、卡名校验，不匹配报错并提示实际卡名；
+//   - 不用 uniqueID（其含随机后缀）；
+//   - 抽牌是顺序抽（牌库顶=数组 index 0）：战斗中 `lib` 可查抽牌顺序，预知未来抽卡；
+//   - 升级前先 `preview up <构筑#>` 看升阶前后对比（只读），再 act upgrade/up 执行。
 //
 // 用法：
 //   node tools/headlessPlay.mjs <会话名> new <种子>        # 建档
@@ -44,19 +49,23 @@ import {
 import {
   trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining,
 } from '../src/core/run/rooms/training.js';
-import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../src/core/run/rooms/camp.js';
+import { campOptions, campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER } from '../src/core/run/rooms/camp.js';
 import { playEvent } from '../src/core/run/rooms/event.js';
 import { spinSlot, SLOT_PLACEHOLDER } from '../src/core/run/rooms/slotMachine.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
 const HELP = `动作表（按当前阶段）：
-  战斗: play <手牌#> [敌#] | swap <手牌#>（首次免费，之后费用逐次+1） | end | in <候选#...> | auto
-  奖励: pack <#|体修|火|通用> | take <#> | skip | next
-  房间: act rest | act remi | act upgrade <构筑#> | act up <构筑#> | act draw
-        | act take <#> | act skipdraw | act skip | act spin | act play | next
-  进阶: dim 火|跳过（跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | seed <#,#,#> | reroll | ability <#|skip>
-  通用: state | deck | terms（词条/效果释义） | note <文本> | help`;
+  战斗: play <手牌#> <卡名> [敌#] | swap <手牌#> <卡名>（弃1抽1，首次免费之后逐次+1） | end | auto
+        in <候选#> <卡名>（应答输入请求） | lib（查牌库——抽牌严格按顺序，可预知未来抽到什么）
+  奖励: pack <#|体修|火|通用> | take <候选#> <卡名> | skip | next
+  房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw
+        | act take <候选#> <卡名> | act skipdraw | act skip | act spin | act play | next
+  预览: preview up <构筑#>（升阶前后对比，只读）
+  进阶: dim 火|跳过（跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
+        | seed <#> <卡名>,<#> <卡名>,<#> <卡名>（选3张入组）
+  通用: state | deck | lib | terms（词条/效果释义） | note <文本> | help
+※ 打牌/选牌一律「编号+卡名」双重确认：编号定位、卡名校验，两者不匹配会报错并提示实际卡名。`;
 
 // ---------- 小工具 ----------
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
@@ -104,6 +113,15 @@ function cardLine(idx, rt, battleCtx) {
   } catch { desc = plain(def.describe()); }
   bits.push(`「${desc}」`);
   if (battleCtx) bits.push(canUseSkill(battleCtx, rt) ? '可用' : '不可用');
+  return bits.join(' | ');
+}
+
+// 无战斗上下文的卡面行（升级预览用）：名/阶/费用/关键词/描述
+function cardDefLine(def) {
+  const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
+  const bits = [`${nameTag} ${def.tier}阶 ${costText(def)}`];
+  const kw = kwText(def); if (kw) bits.push(kw);
+  bits.push(`「${plain(def.describe?.() ?? '')}」`);
   return bits.join(' | ');
 }
 
@@ -167,17 +185,36 @@ function battleLogText(S, tail = 10) {
   return lines.slice(-tail);
 }
 
-// 手牌寻址：编号（1起）或卡名/卡名前缀（唯一命中才生效；同 defId 重复卡任取第一张）
-function resolveHandIdx(hand, arg, what) {
-  if (/^\d+$/.test(arg)) return idxOk(num(arg), hand.length, what);
-  const matches = hand.filter(c => {
-    const n = defOf(c).name;
-    return n === arg || n.startsWith(arg);
-  });
-  if (!matches.length) throw new Error(`手牌中没有「${arg}」`);
-  const defIds = new Set(matches.map(c => c.defId));
-  if (defIds.size === 1) return hand.indexOf(matches[0]); // 同名重复卡等价，任打一张
-  throw new Error(`「${arg}」匹配多张不同手牌（${matches.map(c => defOf(c).name).join(' / ')}），请用编号`);
+// 手牌/候选双重确认寻址（子代理防呆）：`<编号> <卡名>` 两个参数都要对上。
+// 编号定位 + 卡名校验（def.name 全等或前缀；咏唱卡可省略「咏唱N·」前缀写正名），
+// 不匹配时报错并给出该编号的实际卡名，杜绝「打错牌」。
+const stripChantTag = (s) => String(s ?? '').replace(/^咏唱\d+·/, '');
+function nameMatches(given, actual) {
+  const g = stripChantTag(given);
+  return g === actual || actual.startsWith(g);
+}
+function resolveHandStrict(list, idxArg, nameArg, what = '手牌') {
+  const i = idxOk(num(idxArg), list.length, what);
+  const actual = defOf(list[i]).name;
+  if (nameArg == null) {
+    throw new Error(`缺少卡名参数：${what}需「编号+卡名」双重确认，如 ${what === '手牌' ? 'play' : '选'} ${idxArg} ${actual}`);
+  }
+  if (!nameMatches(nameArg, actual)) {
+    throw new Error(`${what}第${idxArg}张是「${actual}」，不是「${nameArg}」——请对照列表编号重试`);
+  }
+  return i;
+}
+// 候选表（defId 数组）同款双重确认；返回校验通过的 defId
+function resolveChoiceStrict(choices, idxArg, nameArg, what = '候选', nameOf) {
+  const i = idxOk(num(idxArg), choices.length, what);
+  const actual = nameOf(choices[i]);
+  if (nameArg == null) {
+    throw new Error(`缺少卡名参数：${what}需「编号+卡名」双重确认，如 take ${idxArg} ${actual}`);
+  }
+  if (!nameMatches(nameArg, actual)) {
+    throw new Error(`${what}第${idxArg}张是「${actual}」，不是「${nameArg}」——请对照候选列表重试`);
+  }
+  return choices[i];
 }
 
 function settleBattle(S) {
@@ -242,12 +279,12 @@ function exec(S, raw) {
       return;
     case 'play': {
       const battle = ensureBattle(S);
-      if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#...>）');
+      if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#> <卡名>）');
       const hand = battle.battleState.zones.hand;
-      const skill = hand[resolveHandIdx(hand, String(a), '手牌')];
+      const skill = hand[resolveHandStrict(hand, a, b)];
       const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
-      const target = b != null
-        ? battle.battleState.enemies[idxOk(num(b), battle.battleState.enemies.length, '敌人')] : null;
+      const target = t[3] != null
+        ? battle.battleState.enemies[idxOk(num(t[3]), battle.battleState.enemies.length, '敌人')] : null;
       if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) throw new Error('无法打出（费用/条件不满足）');
       S.lastOutcome = `打出 ${name}`;
       if (isBattleFinished(battle)) settleBattle(S);
@@ -257,7 +294,7 @@ function exec(S, raw) {
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
       if (!hand.length) throw new Error('手牌为空，无法换牌');
-      const skill = hand[resolveHandIdx(hand, String(a), '手牌')];
+      const skill = hand[resolveHandStrict(hand, a, b)];
       if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
       S.lastOutcome = `换牌 ${defOf(skill).name}`;
       return;
@@ -274,10 +311,29 @@ function exec(S, raw) {
       const pending = battle.battleState.pendingInput;
       if (!pending) throw new Error('当前没有输入请求');
       const { request } = pending;
-      if (request.kind === 'confirm') { respondInput(battle, true); }
-      else {
-        const ids = t.slice(1).map(x => idxOk(num(x), request.candidates.length, '候选'));
-        respondInput(battle, ids.map(i => request.candidates[i]));
+      if (request.kind === 'confirm') {
+        if (t.length > 1) throw new Error('confirm 类输入无需参数');
+        respondInput(battle, true);
+      } else {
+        const cands = request.candidates ?? [];
+        const rest = t.slice(1);
+        if (rest.length === 0 || rest.length % 2 !== 0) {
+          throw new Error('候选需成对「编号 卡名」：in <候选#> <卡名>（候选名见上方待输入列表）');
+        }
+        const ids = [];
+        for (let k = 0; k < rest.length; k += 2) {
+          const i = idxOk(num(rest[k]), cands.length, '候选');
+          const id = cands[i];
+          const card = battle.battleState.zones.hand.find(h => h.uniqueID === id);
+          if (card) { // 手牌候选做双重确认；非手牌候选（如有）无从校验，放行
+            const actual = defOf(card).name;
+            if (!nameMatches(rest[k + 1], actual)) {
+              throw new Error(`候选第${rest[k]}个是「${actual}」，不是「${rest[k + 1]}」——请对照待输入列表重试`);
+            }
+          }
+          ids.push(id);
+        }
+        respondInput(battle, ids);
       }
       S.lastOutcome = '已应答输入';
       if (isBattleFinished(battle)) settleBattle(S);
@@ -320,7 +376,8 @@ function exec(S, raw) {
     case 'take': {
       if (stage !== 'reward') throw new Error('当前不在奖励阶段');
       const choices = run.rewards.skillChoices;
-      const defId = choices[idxOk(num(a), choices.length, '候选')];
+      const defId = resolveChoiceStrict(choices, a, b, '候选',
+        id => getSkillDefinition(id)?.name ?? id);
       chooseSkillReward(run, defId);
       S.lastOutcome = `获得卡牌：${getSkillDefinition(defId).name}`;
       return;
@@ -337,10 +394,16 @@ function exec(S, raw) {
       if (S.roomDone) throw new Error('本房间动作已完成，用 next 离开');
       const room = run.currentRoom;
       if (room === 'camp') {
-        if (a === 'rest') { campRest(run); S.roomDone = true; S.lastOutcome = '休整：恢复50%生命，魏启回满'; return; }
+        if (a === 'rest') {
+          const before = run.player.hp;
+          campRest(run);
+          S.roomDone = true;
+          S.lastOutcome = `休整：恢复${run.player.hp - before}生命（${Math.round(CAMP_PLACEHOLDER.restHealRatio * 100)}%最大生命），魏启回满`;
+          return;
+        }
         if (a === 'remi') { campRecoverRemi(run); S.roomDone = true; S.lastOutcome = '找回瑞米'; return; }
         if (a === 'upgrade') {
-          const card = run.player.deck[idxOk(num(b), run.player.deck.length, '构筑卡')];
+          const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
           const gateErr = upgradeGateError(run, card);
           if (gateErr) throw new Error(gateErr);
           const before = defOf(card).name;
@@ -349,11 +412,11 @@ function exec(S, raw) {
           S.lastOutcome = `营地升级：${before} → ${defOf(card).name}`;
           return;
         }
-        throw new Error('营地动作：act rest | act remi | act upgrade <构筑#>');
+        throw new Error('营地动作：act rest | act remi | act upgrade <构筑#> <卡名>');
       }
       if (room === 'training') {
         if (a === 'up') {
-          const card = run.player.deck[idxOk(num(b), run.player.deck.length, '构筑卡')];
+          const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
           const gateErr = upgradeGateError(run, card);
           if (gateErr) throw new Error(gateErr);
           const before = defOf(card).name;
@@ -364,7 +427,8 @@ function exec(S, raw) {
         if (a === 'draw') { trainDrawChoices(run); S.lastOutcome = '训练抓牌候选已生成'; return; }
         if (a === 'take') {
           const choices = run.roomData?.drawChoices ?? [];
-          const defId = choices[idxOk(num(b), choices.length, '抓牌候选')];
+          const defId = resolveChoiceStrict(choices, b, t[3], '抓牌候选',
+            id => getSkillDefinition(id)?.name ?? id);
           trainDraw(run, defId);
           S.roomDone = true;
           S.lastOutcome = `训练抓牌：${getSkillDefinition(defId).name}`;
@@ -372,7 +436,7 @@ function exec(S, raw) {
         }
         if (a === 'skipdraw') { trainDraw(run, null); S.roomDone = true; S.lastOutcome = '跳过训练抓牌'; return; }
         if (a === 'skip') { skipTraining(run); S.roomDone = true; S.lastOutcome = '跳过训练（计一次训练）'; return; }
-        throw new Error('训练动作：act up <构筑#> | act draw | act take <#> | act skipdraw | act skip');
+        throw new Error('训练动作：act up <构筑#> <卡名> | act draw | act take <#> <卡名> | act skipdraw | act skip');
       }
       if (room === 'slot') {
         if (a === 'spin') {
@@ -405,9 +469,16 @@ function exec(S, raw) {
     case 'seed': {
       const off = run.cardOffering;
       if (!off) throw new Error('当前没有种子卡待选');
-      const picks = (t.slice(1).join(',').split(',').filter(Boolean))
-        .map(x => off.cards[idxOk(num(x), off.cards.length, '种子卡')]);
-      if (picks.length !== 3) throw new Error('种子卡必须选 3 张：seed 1,4,7');
+      const groups = t.slice(1).join(' ').split(',').map(s => s.trim()).filter(Boolean);
+      if (groups.some(g => g.split(/\s+/).length !== 2)) {
+        throw new Error('种子卡需「编号 卡名」成对：seed 3 引焰,6 火弹术,4 蓄热火球（共3张）');
+      }
+      const picks = groups.map(g => {
+        const [idxArg, nameArg] = g.split(/\s+/);
+        return resolveChoiceStrict(off.cards, idxArg, nameArg, '种子卡',
+          id => getSkillDefinition(id)?.name ?? id);
+      });
+      if (picks.length !== 3) throw new Error('种子卡必须选 3 张：seed 3 引焰,6 火弹术,4 蓄热火球');
       chooseSeedCards(run, picks);
       S.lastOutcome = `种子入组：${picks.map(id => getSkillDefinition(id).name).join('、')}`;
       return;
@@ -425,6 +496,33 @@ function exec(S, raw) {
         chooseAscensionAbility(run, id);
         S.lastOutcome = `获得能力：${id}`;
       }
+      return;
+    }
+
+    // ---- 升级预览（只读，不入档；FAST TODO 2026-09 实装）----
+    case 'preview': {
+      if (a !== 'up') throw new Error('用法：preview up <构筑#> [卡名]');
+      const deck = run.player.deck;
+      const i = idxOk(num(b), deck.length, '构筑卡');
+      const card = deck[i];
+      const actual = defOf(card).name;
+      if (t[3] != null && !nameMatches(t[3], actual)) {
+        throw new Error(`构筑第${b}张是「${actual}」，不是「${t[3]}」——请对照 deck 编号重试`);
+      }
+      const targets = gatedPromotionTargets(run, defOf(card));
+      if (!targets.length) {
+        S.lastOutcome = `【升级预览】${actual}：${upgradeGateError(run, card) ?? '不可升级'}`;
+        return;
+      }
+      const L = [`【升级预览】当前（构筑第${b}张）：${cardDefLine(defOf(card))}`];
+      for (const tid of targets) {
+        const next = getSkillDefinition(tid);
+        L.push(`  升级后 → ${cardDefLine(next)}`);
+        const chain = gatedPromotionTargets(run, next);
+        if (chain.length) L.push(`    （后续链：${chain.map(x => getSkillDefinition(x).name).join(' → ')}）`);
+      }
+      L.push('  确认升级：营地 act upgrade <#> <卡名> / 训练场 act up <#> <卡名>');
+      S.lastOutcome = L.join('\n');
       return;
     }
 
@@ -472,7 +570,7 @@ function render(S) {
       if (al.isDead()) continue;
       L.push(`瑞米: HP ${al.hp}/${al.maxHp} 意图: ${intentText(al)}`);
     }
-    L.push(`牌库 ${bs.zones.deck.length} | 焚毁 ${bs.zones.burnt.length} | 手牌 ${effectiveHandCount(bs)}/${p.maxHandSize}（加权）`);
+    L.push(`牌库 ${bs.zones.deck.length}（lib 查抽牌顺序——顺序抽，可预知） | 焚毁 ${bs.zones.burnt.length} | 手牌 ${effectiveHandCount(bs)}/${p.maxHandSize}（加权）`);
     L.push(`手牌:`);
     bs.zones.hand.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, S.battle.ctx)));
     L.push(`本回合累计: 打${bs.history.turn.played} 弃${bs.history.turn.discarded} 抽${bs.history.turn.drawn}`);
@@ -486,7 +584,7 @@ function render(S) {
         }).join(' '));
       }
     }
-    L.push(`→ play <手牌#或卡名> [敌#] / swap <#或卡名>（弃1抽1，费${swapCostOf(bs)}AP） / end / in <候选#...>`);
+    L.push(`→ play <手牌#> <卡名> [敌#] / swap <手牌#> <卡名>（弃1抽1，费${swapCostOf(bs)}AP） / end / in <候选#> <卡名> / lib 看牌库`);
     const log = battleLogText(S);
     if (log.length) {
       L.push(`最近结算:`);
@@ -506,7 +604,7 @@ function render(S) {
         const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
         L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
       });
-      L.push(`→ take <#> / skip`);
+      L.push(`→ take <#> <卡名> / skip`);
     }
   } else if (stage === 'room') {
     const room = run.currentRoom;
@@ -514,7 +612,7 @@ function render(S) {
       L.push(`（房间动作已完成 → next 离开）`);
     } else if (room === 'camp') {
       const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
-      L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}（act rest | act remi | act upgrade <构筑#>，之后 next）`);
+      L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比，之后 next）`);
     } else if (room === 'training') {
       L.push(`训练场（累计训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
       if (run.roomData?.drawChoices) {
@@ -524,11 +622,11 @@ function render(S) {
           const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
           L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
         });
-        L.push(`→ act take <#>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
+        L.push(`→ act take <#> <卡名>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
       } else if (trainingMode(run) === 'upgrade') {
         const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
         L.push(`可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
-        L.push(`→ act up <构筑#>（编号即 deck 视图行号）/ act skip`);
+        L.push(`→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）/ act skip`);
       } else {
         L.push(`→ act draw（看候选）/ act skip`);
       }
@@ -547,7 +645,7 @@ function render(S) {
         const def = getSkillDefinition(id);
         L.push(`  [${i + 1}] ${def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·` : ''}${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
       });
-      L.push(`→ seed <#,#,#> / reroll`);
+      L.push(`→ seed <#> <卡名>,<#> <卡名>,<#> <卡名> / reroll`);
     }
     if (run.ascensionOffer) {
       L.push(`能力候选:`);
@@ -605,6 +703,22 @@ function renderDeck(S) {
   return L.join('\n');
 }
 
+// 牌库查阅（战斗中）：抽牌顺序视图——抽牌是顺序抽的，可预知未来抽到什么。
+// 注：本场无弃牌堆，弃牌/换牌直接回牌库底（可在下表尾部看到）。
+function renderLib(S) {
+  if (!S.battle || S.run.gameStage !== 'battle') {
+    return '【牌库】lib 在战斗中查看抽牌顺序（平时用 deck 看构筑）。';
+  }
+  const z = S.battle.battleState.zones;
+  const L = ['【牌库】抽牌严格按下列顺序（[1] 就是下一张抽到的）——可预知未来抽卡；弃牌/换牌回牌库底：'];
+  if (!z.deck.length) {
+    L.push('  （牌库已空——本场无弃牌堆；抽牌等效果会因无牌可抽而落空，注意卡牌循环）');
+  } else {
+    z.deck.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, null)));
+  }
+  return L.join('\n');
+}
+
 function renderTerms() {
   const L = ['【词条表】（卡面关键词的完整释义，等同游戏内悬浮说明）'];
   for (const { name, text } of listNamedTerms()) L.push(`  ${name} — ${text}`);
@@ -649,24 +763,27 @@ if (argv[0] === 'new') {
 if (!fs.existsSync(file)) { console.error(`会话不存在：${file}（先 new）`); process.exit(1); }
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 const action = argv.join(' ').trim();
-const readOnly = !action || action === 'state' || action === 'help' || action === 'terms';
+// 纯视图命令不进 exec；preview 只读（进 exec 取结果但不入档）
+const pureView = !action || /^(state|help|terms|deck|lib)$/.test(action);
+const noRecord = pureView || action.startsWith('preview');
 
 let S;
 try {
   S = freshState(data.seed);
   for (const a of data.actions) { exec(S, a); if (TRACE) traceLine(S, a); }
-  if (!readOnly) exec(S, action);
+  if (!pureView) exec(S, action);
 } catch (err) {
   console.error(`✗ ${err.message}`);
   console.error('（动作未入档，状态未变）当前状态：');
   try { console.log(render(S)); } catch { /* 状态本身异常时保持纯报错 */ }
   process.exit(1);
 }
-if (!readOnly) {
+if (!noRecord) {
   data.actions.push(action);
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 if (action === 'help') console.log(HELP);
 else if (action === 'deck') console.log(renderDeck(S));
-else if (action === 'terms') console.log(renderTerms());
+else if (action === 'lib') console.log(renderLib(S));
+else if (action === 'terms') console.log(renderTerms(S));
 else console.log(render(S));

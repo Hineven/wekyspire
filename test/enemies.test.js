@@ -25,20 +25,27 @@ function tank() {
 }
 
 describe('新效果结算', () => {
-  it('荆棘：受到攻击时对攻击者造成层数点穿透伤害（无来源不反）', () => {
+  it('荆棘：受到攻击时对攻击者造成层数点普通伤害（护盾可挡；无来源不反）', () => {
     const d = new BattleDriver({ deck: ['punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const enemy = d.state.enemies[0];
     d.dispatch(new AddEffectInstruction({ target: enemy, effectId: 'thorns', stacks: 3 }));
     const hp0 = d.player.hp;
     d.dispatch(new DealDamageInstruction({ source: d.player, target: enemy, amount: 10 }));
-    expect(d.player.hp).toBe(hp0 - 3); // 反伤 3，穿透（无视护盾/防御）
+    expect(d.player.hp).toBe(hp0 - 3); // 反伤 3（普通伤害管线）
+
+    // 普通反伤：先扣护盾再扣血（2026-09 定调，不再穿透）
+    d.player.shield = 5;
+    const hp1 = d.player.hp;
+    d.dispatch(new DealDamageInstruction({ source: d.player, target: enemy, amount: 10 }));
+    expect(d.player.hp).toBe(hp1);            // 反伤 3 全被护盾吸收
+    expect(d.player.shield).toBe(2);
 
     // 环境伤害（无来源）不触发反伤
     d.player.shield = 5;
-    const hp1 = d.player.hp;
+    const hp2 = d.player.hp;
     d.dispatch(new DealDamageInstruction({ source: null, target: enemy, amount: 5 }));
-    expect(d.player.hp).toBe(hp1);
+    expect(d.player.hp).toBe(hp2);
   });
 
   it('蓄势：每层攻击 +1（读轨）', () => {

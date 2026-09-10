@@ -106,14 +106,15 @@ registerEffect({
   }],
 });
 
-// 荆棘：受到攻击时，攻击来源受到层数点穿透伤害（无来源的环境伤害不反）。
+// 荆棘：受到攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡；
+// 无来源的环境伤害不反）。2026-09 定调：反伤不再穿透——穿透固定伤害过强。
 // 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。
 registerEffect({
   id: 'thorns',
   type: 'buff',
   stacking: 'count',
   name: '荆棘',
-  description: '受到攻击时，对攻击者造成层数点穿透伤害（无视护盾）。',
+  description: '受到攻击时，对攻击者造成层数点伤害（可被护盾抵挡）。',
   icon: '🌵',
   color: 'green',
   subscriptions: (unit) => [{
@@ -124,7 +125,7 @@ registerEffect({
       const stacks = unit.getEffectStacks('thorns');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: instr.source, amount: stacks, pierce: true, tags: ['thorns'],
+        source: unit, target: instr.source, amount: stacks, tags: ['thorns'],
       }), instr);
     },
   }],
