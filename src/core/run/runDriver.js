@@ -58,7 +58,7 @@ export class RunDriver {
     this.run = createRun({
       seed, profile,
       ...(totalFloors !== undefined ? { totalFloors } : {}),
-      player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3, ...player }),
+      player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3, ...player }),
     });
     this.run.player.deck = deck.map(id => createSkillRuntime(id));
     this.run.player.abilities = abilities;

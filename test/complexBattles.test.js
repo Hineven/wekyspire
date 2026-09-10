@@ -124,7 +124,7 @@ describe('复杂战斗：多敌人', () => {
     d.endTurn();
     const hits = d.calls('damage').filter(c => c.args[0].target === d.player);
     expect(hits.map(c => c.args[0].source)).toEqual([e1, e2]);
-    expect(d.player.hp).toBe(18);
+    expect(d.player.hp).toBe(38);
 
     // 回合 2：补刀前排，后续出牌自动打后排
     d.play('punch');
@@ -144,12 +144,12 @@ describe('复杂战斗：veto（眩晕）', () => {
     expect(slime.getEffectStacks('stun')).toBe(1);
 
     d.endTurn(); // 敌方回合：行动应被 veto
-    expect(d.player.hp).toBe(30);
+    expect(d.player.hp).toBe(50);
     expect(slime.getEffectStacks('stun')).toBe(0); // 替代指令补位执行，层数扣尽
     expect(slime.actionIndex).toBe(0);             // 行动未发生，游标未推进
 
     d.endTurn(); // 再一回合：正常行动
-    expect(d.player.hp).toBe(24);
+    expect(d.player.hp).toBe(44);
     expect(slime.actionIndex).toBe(1);
   });
 });
@@ -255,7 +255,7 @@ describe('复杂战斗：队友死亡', () => {
     const hpBefore = hunter.hp;
     d.endTurn(); // 回合 3：瑞米不再行动；猎人转火玩家
     expect(hunter.hp).toBe(hpBefore);
-    expect(d.player.hp).toBe(22); // 30-8
+    expect(d.player.hp).toBe(42); // 50-8
   });
 });
 

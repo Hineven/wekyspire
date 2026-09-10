@@ -109,7 +109,7 @@ function cardLine(idx, rt, battleCtx) {
 
 // ---------- 会话状态机（replay 解释器） ----------
 function freshState(seed) {
-  const run = createRun({ seed, player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3 }) });
+  const run = createRun({ seed, player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3 }) });
   run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
   run.player.abilities = [];
   return { run, battle: null, lastOutcome: '', presenter: createRecordingPresenter() };

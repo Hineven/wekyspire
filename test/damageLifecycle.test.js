@@ -83,7 +83,7 @@ describe('反伤：受击回击', () => {
     d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'thorns', stacks: 3 }));
 
     hitPlayer(d, 5);
-    expect(d.player.hp).toBe(30 - 5);
+    expect(d.player.hp).toBe(50 - 5);
     expect(slime.hp).toBe(20 - 3); // 反伤 3
   });
 
@@ -98,12 +98,12 @@ describe('反伤：受击回击', () => {
     d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'dodge', stacks: 1 }));
 
     hitPlayer(d, 8);
-    expect(d.player.hp).toBe(30);          // 闪避归零
+    expect(d.player.hp).toBe(50);          // 闪避归零
     expect(d.player.getEffectStacks('dodge')).toBe(0);
     expect(slime.hp).toBe(20);             // dealt=0，不反伤
 
     hitPlayer(d, 8);                       // 闪避耗尽，正常承伤+反伤
-    expect(d.player.hp).toBe(30 - 8);
+    expect(d.player.hp).toBe(50 - 8);
     expect(slime.hp).toBe(20 - 3);
   });
 });
@@ -147,6 +147,6 @@ describe('不灭：minHp 地板', () => {
     expect(d.player.getEffectStacks('undying')).toBe(1);
     d.endTurn(); // 1 → 0，注销（敌方行动：攻 3）
     expect(d.player.getEffect('undying')).toBeNull();
-    expect(d.player.hp).toBe(30 - 12); // 史莱姆攻/盾交替，只命中两次
+    expect(d.player.hp).toBe(50 - 12); // 史莱姆攻/盾交替，只命中两次
   });
 });

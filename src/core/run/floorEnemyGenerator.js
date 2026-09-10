@@ -5,6 +5,7 @@
 //   2. 每个敌人带难度元数据 { base, min, max, floorMin, floorMax }（content/enemies.js）：
 //      实例难度 d ∈ [min,max]、楼层 ∈ [floorMin,floorMax] 才可生成——机制老旧或数值
 //      漂移超出设计包络的敌人自然退役，不会出现「44 层超级史莱姆」；
+//      另有 unique 标志（每场至多一只，如怨灵——成对出现会叠死输出轴）；
 //   3. 属性加成**只由实例难度计算**（HP 倍率 + 攻击面板加成），楼层不再直接缩放：
 //      高层变难靠「更难的敌人 + 更大的编成」表达，而不是线性吹大杂鱼面板；
 //   4. 战斗模板（主题编成）：固定结构（如「史莱姆战 = 1 史莱姆 + 1 其他」）+ 楼层区间。
@@ -20,12 +21,14 @@ import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from 
 
 // ---- 楼层难度曲线（调平衡只动这里）----
 // 「开始几层较陡，后面稳定爬升」：
-//   1-10（章1）：2 → 4 → 5 → 6 … 8（教学 → 双敌陡升，章末收平等着打 Boss）；
+//   1-10（章1）：2 → 4 → 5 → 6 … 7（教学 → 双敌陡升，章末收平等着打 Boss）；
 //   12-21（章2）：9 → 13；23-32（章3）：13 → 17；34-43（章4）：17 → 21（每 2 层 +1）。
 // Boss 层难度按章取值（单只吃满预算，体型由难度缩放承载）。
+// 章1 第 6 层压到 6（而非 7）：精英日挪到第 6 层后按 D 缩放会把雪狼吹到 126 血，
+// 降一档让首精英保持 98 血的调定强度（试玩反馈：首个 Boss 前压力过高）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
-const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 7, 7, 7, 7, 7]; // 章1 表驱动（陡升段，章末收平）
+const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 6, 7, 7, 7, 7]; // 章1 表驱动（陡升段，章末收平）
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
@@ -79,10 +82,11 @@ const TEMPLATES = [
 ];
 const BOSS_ID = 'pyro'; // Boss 只经 boss 分支出场，永不进通配池
 
-// 精英层排期（确定性，好记好测）：每章第 5、8 层（5/8、16/19、27/30、38/41）。
+// 精英层排期（确定性，好记好测）：每章第 6、9 层（6/9、17/20、28/31、39/42）。
+// 2026-09 试玩后从 5/8 后挪：开局多一层普通战铺垫，再碰精英。
 // 该章尚无精英内容时（精英池为空）自动回落普通编成——后续章节加精英零生成器改动。
 export const isEliteFloor = (floor) =>
-  floor % FLOORS_PER_CHAPTER === 5 || floor % FLOORS_PER_CHAPTER === 8;
+  floor % FLOORS_PER_CHAPTER === 6 || floor % FLOORS_PER_CHAPTER === 9;
 
 // 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配；
 // difficulty 缺失视为不可生成（防御）。
@@ -170,19 +174,26 @@ export function generateEncounter(run) {
 
   // 选敌落位：份额落在哪个敌人的难度区间就选谁（区间内均匀随机；池区间有
   // 空隙时兜底取钳位距离最近者，份额钳回其区间）。
+  // unique 敌人（如怨灵：虚弱不衰减，成对出现会焊死输出轴）每场至多一只：
+  // 已被前面槽位占用的 unique 不再进池。过滤只影响选材不影响份额分配，
+  // 极端情况下份额被迫钳回较窄区间、Σd 偏离 D 一两点——落在「接近层总和」容差内。
+  const used = new Set();
   const slots = bounds.map((b, i) => {
-    if (b.fixed) return { defId: b.fixed, d: shares[i] };
-    const poolOfSlot = slotPool(picked.slots[i], floor);
+    if (b.fixed) { used.add(b.fixed); return { defId: b.fixed, d: shares[i] }; }
+    const full = slotPool(picked.slots[i], floor);
+    const avail = full.filter(x => !(x.unique && used.has(x.id)));
+    const poolOfSlot = avail.length > 0 ? avail : full; // 防御：过滤后为空则放宽
     const t = shares[i];
     let cands = poolOfSlot.filter(x => x.difficulty.min <= t && t <= x.difficulty.max);
     if (cands.length === 0) {
-      cands = [pool.reduce((best, x) => {
+      cands = [poolOfSlot.reduce((best, x) => {
         const dist = Math.abs(Math.min(Math.max(t, x.difficulty.min), x.difficulty.max) - t);
         const bestDist = Math.abs(Math.min(Math.max(t, best.difficulty.min), best.difficulty.max) - t);
         return dist < bestDist ? x : best;
       })];
     }
     const def = rng.pick(cands);
+    used.add(def.id);
     const d = Math.min(Math.max(t, def.difficulty.min), def.difficulty.max);
     return { defId: def.id, d };
   });

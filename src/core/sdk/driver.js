@@ -30,7 +30,7 @@ export class BattleDriver {
   } = {}) {
     this.presenter = createRecordingPresenter();
     const runState = createRunState({
-      player: new Player({ maxHp: 30, maxMana: 3, maxActionPoints: 3, ...player }),
+      player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3, ...player }),
     });
     runState.player.deck = deck.map(d => {
       if (typeof d === 'string') return createSkillRuntime(d);

@@ -192,6 +192,17 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
     expect(high.atk).toBeGreaterThanOrEqual(low.atk);
   });
 
+  it('unique 敌人每场至多一只：怨灵在任何楼层/种子下不成对出现', () => {
+    // 怨灵可用楼层 2-18 全扫（含原双怨灵重灾区第 7 层与三人众的第 12-18 层）
+    for (let floor = 2; floor <= 18; floor++) {
+      if (isBossFloor(floor) || isEliteFloor(floor)) continue;
+      for (let i = 0; i < 10; i++) {
+        const enc = generateEncounter(runAt(floor, 2000 + i * 13));
+        expect(enc.filter(e => e.defId === 'wraith').length, `${floor}/${i}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
   it('全楼层可行性：1-44 每层任何种子都生成成功，且 Σ难度 贴近层难度', () => {
     for (let floor = 1; floor <= 44; floor++) {
       for (let i = 0; i < 6; i++) {
@@ -282,7 +293,7 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
     // 史莱姆战可能与其他双敌模板竞争——只验证「出现史莱姆的 2 敌编成里必是 1 史莱姆」
     // 的结构约束，不锁定模板选择本身（那是 rng 的事）
     for (let i = 0; i < 30; i++) {
-      const enc = generateEncounter(runAt(6, 900 + i));
+      const enc = generateEncounter(runAt(7, 900 + i));
       const slimes = enc.filter(e => e.defId === 'slime').length;
       expect(enc).toHaveLength(2);
       expect(slimes).toBeLessThanOrEqual(1);
@@ -573,13 +584,13 @@ describe('精英怪房（生成侧）', () => {
     return run;
   };
 
-  it('排期：每章第 5、8 层为精英层；Boss/普通层不是', () => {
-    for (const f of [5, 8, 16, 19, 27, 30, 38, 41]) expect(isEliteFloor(f)).toBe(true);
-    for (const f of [1, 4, 6, 10, 11, 15, 17, 22, 44]) expect(isEliteFloor(f)).toBe(false);
+  it('排期：每章第 6、9 层为精英层；Boss/普通层不是', () => {
+    for (const f of [6, 9, 17, 20, 28, 31, 39, 42]) expect(isEliteFloor(f)).toBe(true);
+    for (const f of [1, 4, 5, 8, 10, 11, 15, 16, 22, 44]) expect(isEliteFloor(f)).toBe(false);
   });
 
   it('章 1 精英层：1-2 敌、恒含一只雪狼、Σ=层难度、雪狼按 base 锚点缩放', () => {
-    for (const floor of [5, 8]) {
+    for (const floor of [6, 9]) {
       for (let i = 0; i < 12; i++) {
         const enc = generateEncounter(runAt(floor, 600 + i));
         expect(enc.length, `${floor}`).toBeGreaterThanOrEqual(1);
@@ -600,7 +611,7 @@ describe('精英怪房（生成侧）', () => {
 
   it('精英不进普通层：章 1 非精英层任何种子都不出雪狼', () => {
     for (let i = 0; i < 20; i++) {
-      const enc = generateEncounter(runAt(6, 800 + i));
+      const enc = generateEncounter(runAt(5, 800 + i));
       expect(enc.some(e => e.defId === 'snowwolf')).toBe(false);
     }
   });

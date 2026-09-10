@@ -150,10 +150,13 @@ registerEnemy({
 
 // ⑤ 怨灵：攻6 → 咒（虚弱2：玩家攻击-2）→ 攻8 三拍循环——削弱玩家的输出轴，
 // 长线磨损。2026-09 稿改三拍（旧两拍版每两回合一虚，玩家直接萎了——超模）。
+// unique：每场至多一只——虚弱不衰减，双怨灵会把永久 -4 攻击叠到前期无法翻盘；
+// 血量 22→18 同步削弱（试玩反馈：前期压力过高）。
 registerEnemy({
   difficulty: { base: 3, min: 2, max: 4, floorMin: 2, floorMax: 18 },
+  unique: true,
   id: 'wraith', name: '怨灵',
-  createUnit: () => new Enemy({ defId: 'wraith', name: '怨灵', maxHp: 22 }),
+  createUnit: () => new Enemy({ defId: 'wraith', name: '怨灵', maxHp: 18 }),
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {

@@ -179,7 +179,7 @@ describe('高热系列：激活一次性纳气+自施燃烧，解除不重复发
       expect(d.player.getEffectStacks('burn'), id).toBe(4);
 
       d.endTurn(); // 史莱姆攻6；回合2开始：纳气兑现+N蓝，燃烧跳4
-      expect(d.player.hp, id).toBe(30 - 6 - 4);
+      expect(d.player.hp, id).toBe(50 - 6 - 4);
       // 入战4 + 回合1/回合2 各自然+1 + 纳气N（首回合开始也有自然恢复）
       expect(d.player.mana, id).toBe(4 + 1 + 1 + naqi);
       expect(d.player.getEffectStacks('burn'), id).toBe(3);
@@ -293,13 +293,13 @@ describe('忍耐：燃烧受伤转魏启', () => {
     d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'burn', stacks: 7 }));
 
     d.endTurn(); // 史莱姆攻6；回合2开始：燃烧跳7（穿透）→ 回1蓝余2，层数6
-    expect(d.player.hp).toBe(30 - 6 - 7);
+    expect(d.player.hp).toBe(50 - 6 - 7);
     expect(d.player.mana).toBe(0 + 1 + 1); // 自然+1 + 忍耐+1
     expect(d.player.getEffectStacks('burn')).toBe(6);
     expect(card.patiencePool).toBe(2);
 
     d.endTurn(); // 史莱姆第2动开盾；回合3开始：燃烧跳6 → 余2+6=8 再回1（余3）
-    expect(d.player.hp).toBe(30 - 6 - 7 - 6);
+    expect(d.player.hp).toBe(50 - 6 - 7 - 6);
     expect(d.player.mana).toBe(2 + 1 + 1);
     expect(card.patiencePool).toBe(3);
   });
@@ -364,14 +364,14 @@ describe('通用单卡：火源归一 / 火墙 / 含焰术 / 膨胀', () => {
     expect(d.player.getEffectStacks('burn')).toBe(3);
 
     d.endTurn(); // 敌回合1：史莱姆攻击被阻挡；回合2开始：燃烧跳3
-    expect(d.player.hp).toBe(30 - 3); // 攻击 0 + 燃烧 3
+    expect(d.player.hp).toBe(50 - 3); // 攻击 0 + 燃烧 3
     expect(d.player.getEffectStacks('burn')).toBe(2);
 
     d.endTurn(); // 敌回合2：史莱姆开盾；回合3开始：燃烧跳2
-    expect(d.player.hp).toBe(30 - 3 - 2);
+    expect(d.player.hp).toBe(50 - 3 - 2);
 
     d.endTurn(); // 敌回合3：史莱姆再攻6——火墙已用尽，不再阻挡；回合4开始：燃烧跳1
-    expect(d.player.hp).toBe(30 - 3 - 2 - 6 - 1);
+    expect(d.player.hp).toBe(50 - 3 - 2 - 6 - 1);
   });
 
   it('含焰术：防火1——燃烧结算被跳过（层数照常递减）', () => {
@@ -382,7 +382,7 @@ describe('通用单卡：火源归一 / 火墙 / 含焰术 / 膨胀', () => {
     d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'burn', stacks: 5 }));
 
     d.endTurn(); // 史莱姆攻6；回合2开始：燃烧伤害被防火跳过，层数 5→4
-    expect(d.player.hp).toBe(30 - 6);
+    expect(d.player.hp).toBe(50 - 6);
     expect(d.player.getEffectStacks('burn')).toBe(4);
   });
 

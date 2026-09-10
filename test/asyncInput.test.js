@@ -261,7 +261,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
 
     d.respond(true); // 确认反击
     expect(slime.hp).toBe(20 - 7);
-    expect(d.player.hp).toBe(30 - 6); // 反击后敌方行动照常结算
+    expect(d.player.hp).toBe(50 - 6); // 反击后敌方行动照常结算
     expect(d.isWaiting()).toBe(true);  // 回到下一玩家回合
     expect(d.state.turn.side).toBe('player');
   });
@@ -278,7 +278,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
     d.endTurn();
     d.respond(false);
     expect(slime.hp).toBe(20);
-    expect(d.player.hp).toBe(30 - 6);
+    expect(d.player.hp).toBe(50 - 6);
     expect(d.isWaiting()).toBe(true);
   });
 });
