@@ -1,5 +1,5 @@
 import { registerRelic } from '../relics/registry.js';
-import { TurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { TurnStartInstruction, PlayerTurnEndInstruction, PlayerTurnInstruction } from '../instructions/turn.js';
 import {
   DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
 } from '../instructions/combat.js';
@@ -8,7 +8,9 @@ import { DrawCardsInstruction } from '../instructions/cards.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { getSkillDefinition } from '../skills/registry.js';
-import { gainMaxHp } from '../run/prep.js';
+import { getEffectDefinition } from '../effects/registry.js';
+import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
+import { isBossFloor } from '../run/runFlow.js';
 
 // 遗物内容（RELICS.md 2026-09-10 第一批：只上「不需要新机制」的那些，见 todos/ 记录）。
 //
@@ -20,6 +22,11 @@ import { gainMaxHp } from '../run/prep.js';
 //   acquisition 来源标签 ['draft','shop','event']（缺省 draft+shop）；event = 仅事件获得
 //   onAcquire(run)  拾起时（一次性）；gainMaxHp 同时抬基础值与当前生命
 //   runModifiers(p) 或 {字段: 增量}：run 级数值修正——**从 baseStats 重算**，不增量累加
+//   battleModifiers(p) 或 {字段: 增量}：**本场战斗**修正（生命周期 = 一场战斗；由 PreBattle
+//     折入同一次重算，随 battleState 消失，故不需要任何回滚）。战中会变的修正（海神戟第 4
+//     回合撤销）用 prep.applyBattleModifier(ctx, 字段, 增量) 改。
+//   onBattleVictory(run, battle)：战斗**胜利**后的 run 层结算（run 级资源只在这里改——
+//     战斗内订阅不得直写 run 状态）。
 //   onCampRest(run) 营地休整时（非槽位式的常驻钩子）
 //   onBattleStart(ctx) / subscriptions(ctx)：战斗内钩子（仅「已激活」遗物挂载）
 const COST0 = { cost: 0 };
@@ -400,4 +407,188 @@ registerRelic({
       },
     }];
   },
+});
+
+// ====================================================================
+// 第二批（RELICS.md 2026-09-11）：需要「新机制」的那些。
+// 数值修正统一走「修正 + 运行时重算」：run 级 = runModifiers，本场 = battleModifiers /
+// applyBattleModifier。两者都随生命周期自然消失，故本批**没有一处回滚代码**。
+// ====================================================================
+
+// ---- 本场资源 / 上限 ----
+
+registerRelic({
+  id: 'microAwfd', name: '微型AWFD', rarity: 'A', cost: 1,
+  description: '战斗开始时，获得 1 魏启；本场战斗魏启上限 +1。',
+  battleModifiers: { maxMana: 1 },
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }));
+  },
+});
+
+registerRelic({
+  id: 'ancientTome', name: '古书序章', rarity: 'B', cost: 3,
+  description: '战斗开始时，抽 1 张牌；本场战斗手牌上限 +1。',
+  battleModifiers: { maxHandSize: 1 },
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'relic' }));
+  },
+});
+
+registerRelic({
+  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 2,
+  description: '战斗的前 3 个回合，你的手牌上限 -1；第 4 回合开始时，获得力量 5。',
+  onBattleStart(ctx) {
+    applyBattleModifier(ctx, 'maxHandSize', -1);
+  },
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 4,
+    react: (instr, c) => {
+      applyBattleModifier(c, 'maxHandSize', 1); // 撤销 -1：第 4 回合起手牌上限回归
+      c.kernel.submitInstruction(
+        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 5 }), instr);
+    },
+  }],
+});
+
+// ---- 回合节奏 / 资源钩子 ----
+
+registerRelic({
+  id: 'clearCrystal', name: '澈晶石', rarity: 'B', cost: 1,
+  description: '回合开始时，若你的魏启为 0，则获得 1 魏启。',
+  // 时间点取 PlayerTurnInstruction 的 PRE：自然恢复（+1）是它的子指令，POST 时魏启已被抬过，
+  // 再也看不到 0——要「为 0 则补 1」必须读恢复前的值。
+  subscriptions: () => [{
+    when: PlayerTurnInstruction,
+    phase: 'pre',
+    filter: (instr, c) => c.player.mana === 0,
+    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr),
+  }],
+});
+
+registerRelic({
+  id: 'blackCrystalShard', name: '黑晶剑残片', rarity: 'A', cost: 1,
+  description: '战斗开始时，获得力量 2；每回合开始时，你受 2 伤害。',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(
+      new AddEffectInstruction({ target: ctx.player, effectId: 'strength', stacks: 2 }));
+  },
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === 'player',
+    react: (instr, c) => c.kernel.submitInstruction(
+      new DealDamageInstruction({ target: c.player, amount: 2, tags: ['relic'] }), instr),
+  }],
+});
+
+registerRelic({
+  id: 'frostBrooch', name: '霜雪胸针', rarity: 'S', cost: 1,
+  description: '每场战斗一次：当你的生命降至一半以下时，获得力量 3 与格挡 3。',
+  subscriptions: () => {
+    let used = false; // 每场战斗一次（工厂每场调用一次）
+    return [{
+      when: DealDamageInstruction,
+      phase: 'post',
+      filter: (instr, c) => !used && instr.target === c.player && c.player.hp > 0
+        && c.player.hp * 2 <= c.player.maxHp,
+      react: (instr, c) => {
+        used = true;
+        c.kernel.submitInstruction(
+          new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
+        c.kernel.submitInstruction(
+          new GainShieldInstruction({ target: c.player, amount: 3 }), instr);
+      },
+    }];
+  },
+});
+
+registerRelic({
+  id: 'ranCrystal', name: '冉晶石', rarity: 'A', cost: 3,
+  description: '每回合开始时，获得 1 魏启，并对所有单位造成 1 点固定伤害（含你自己）。',
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === 'player',
+    react: (instr, c) => {
+      c.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr);
+      const all = [c.player, ...c.battleState.enemies, ...c.battleState.allies];
+      for (const u of all) {
+        if (u.isDead()) continue;
+        c.kernel.submitInstruction(new DealDamageInstruction({
+          target: u, amount: 1, fixed: true, tags: ['relic'],
+        }), instr);
+      }
+    },
+  }],
+});
+
+// ---- 战斗开始：群伤 / 负面 / 免疫 ----
+
+registerRelic({
+  id: 'evansCrown', name: '埃文斯冠冕', rarity: 'S', cost: 2,
+  description: '战斗开始时，对所有敌人造成 4 点固定伤害，并赋予虚弱 2。',
+  onBattleStart(ctx) {
+    for (const e of ctx.battleState.enemies) {
+      if (e.isDead()) continue;
+      ctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: ctx.player, target: e, amount: 4, fixed: true, tags: ['relic'],
+      }));
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: e, effectId: 'weaken', stacks: 2 }));
+    }
+  },
+});
+
+registerRelic({
+  id: 'resonanceRound', name: '谐振弹', rarity: 'B', cost: 2,
+  description: '非 Boss 战开始时，随机赋予一名敌人晕眩 1。',
+  onBattleStart(ctx) {
+    if (isBossFloor(ctx.runState.floor)) return;
+    const alive = ctx.battleState.enemies.filter(e => !e.isDead());
+    if (!alive.length) return;
+    const pick = alive[ctx.battleState.rng.int(0, alive.length - 1)];
+    ctx.kernel.submitInstruction(
+      new AddEffectInstruction({ target: pick, effectId: 'stun', stacks: 1 }));
+  },
+});
+
+registerRelic({
+  id: 'oldTacticalGoggles', name: '老旧的战术目镜', rarity: 'C', cost: 1,
+  // RELICS.md 写的是「易伤 1」，EFFECTS.md 只有「伤残」＝受伤 +层数，按同口径落地
+  // （术语待用户定名；若两者应不同机制，再补一条 EFFECTS.md 定义）。
+  description: '战斗开始时，随机赋予一名敌人伤残 1（受到的伤害 +1）。',
+  onBattleStart(ctx) {
+    const alive = ctx.battleState.enemies.filter(e => !e.isDead());
+    if (!alive.length) return;
+    const pick = alive[ctx.battleState.rng.int(0, alive.length - 1)];
+    ctx.kernel.submitInstruction(
+      new AddEffectInstruction({ target: pick, effectId: 'maim', stacks: 1 }));
+  },
+});
+
+registerRelic({
+  id: 'realmDust', name: '界尘', rarity: 'A', cost: 1,
+  description: '战斗开始后，免疫第一次负面效果赋予。',
+  subscriptions: () => {
+    let used = false;
+    return [{
+      when: AddEffectInstruction,
+      phase: 'pre',
+      // 只拦「赋予」（层数 > 0）：扣减/清除负面效果不该被免疫挡掉
+      filter: (instr, c) => !used && instr.target === c.player && instr.stacks > 0
+        && getEffectDefinition(instr.effectId)?.type === 'debuff',
+      react: (instr, c) => { used = true; c.kernel.veto(instr, 'realmDust'); },
+    }];
+  },
+});
+
+// ---- 战后 run 级结算（走 run 层钩子，见 runFlow.finishBattle）----
+
+registerRelic({
+  id: 'royalCrystal', name: '皇晶石', rarity: 'B', nonSlot: true,
+  description: '每场战斗胜利后，额外获得 4 金币。',
+  onBattleVictory: (run) => { run.player.money += 4; },
 });

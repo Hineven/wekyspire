@@ -29,7 +29,9 @@ export class PreBattleInstruction extends BattleInstruction {
       //   · 不重算就会踩"逐战叠加"的坑（PreBattle 重置护盾/效果/AP/魏启，但不重置 maxHp/防御）；
       //   · 放在能力之后则会**覆盖**能力/卡牌的战斗内增量（如「心宽」onBattleStart 里
       //     直接 maxHandSize += 2）——那是叠加在基准之上的增量，不是基准本身。
-      refreshRunModifiers(runState);
+      // 传 battleState：把遗物声明的**本场**修正一起折入（battleState.modifiers 每场新建 = 0，
+      // 所以本场动态修正在这里天然从零起算）。
+      refreshRunModifiers(runState, battleState);
 
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
       // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1
@@ -143,6 +145,9 @@ export class PostBattleInstruction extends BattleInstruction {
     }
     ctx.player.clearEffects();
     ctx.player.shield = 0;
+    // 战后重算：本场修正（battleState.modifiers 与遗物声明的 battleModifiers）随之出清。
+    // 这不是"回滚"，就是同一个重算函数在战后被多调一次——幂等、无记账。
+    refreshRunModifiers(ctx.runState, null);
     battleState.result = ctx.kernel.verdict;
     ctx.kernel.clearWindow('battle');
     ctx.presenter?.battleEnd?.({ result: ctx.kernel.verdict });

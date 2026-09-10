@@ -1,6 +1,6 @@
 import { registerEffect } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
-import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -462,6 +462,50 @@ registerEffect({
           fixed: true, tags: ['miracle'],
         }), instr);
       }
+    },
+  }],
+});
+
+// ---- 脆弱 / 伤残（EFFECTS.md §负面效果；2026-09-11 实装）----
+// 这两个是老虎机「恶魔 roll」也需要的通用负面效果，遗物「老旧的战术目镜」先用上。
+
+// 脆弱：获得护盾时，获得量减少层数层（不可小于 0）。层数不随触发递减（文档未写递减）。
+registerEffect({
+  id: 'fragile',
+  type: 'debuff',
+  stacking: 'count',
+  name: '脆弱',
+  description: '获得护盾时，获得量减少层数层。',
+  icon: '🪨',
+  color: 'purple',
+  subscriptions: (unit) => [{
+    when: GainShieldInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit,
+    react: (instr) => {
+      const stacks = unit.getEffectStacks('fragile');
+      if (stacks > 0) instr.setPayload('amount', Math.max(0, instr.payload.amount - stacks));
+    },
+  }],
+});
+
+// 伤残：所有来源伤害增加层数层。固定伤害跳过修正步（F2）且 payload 白名单为空，不受影响
+// （与格挡同一条铁律，见上方 block 的注释）。
+registerEffect({
+  id: 'maim',
+  type: 'debuff',
+  stacking: 'count',
+  name: '伤残',
+  description: '受到的伤害增加层数层（固定伤害不受影响）。',
+  icon: '🩸',
+  color: 'purple',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit && !instr.fixed,
+    react: (instr) => {
+      const stacks = unit.getEffectStacks('maim');
+      if (stacks > 0) instr.setPayload('damage', instr.payload.damage + stacks);
     },
   }],
 });

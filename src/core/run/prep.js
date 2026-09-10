@@ -42,17 +42,43 @@ export function gainMaxHp(run, amount) {
 }
 
 /**
+ * 永久增加魏启上限（进阶事件用；镜像 gainMaxHp）。
+ * **必须抬 baseStats**——否则下一次 refreshRunModifiers 会把它重算掉
+ * （这就是「进阶 1 次后魏启上限仍是 3」那个 bug 的根因）。
+ */
+export function gainMaxMana(run, amount) {
+  const p = run.player;
+  p.baseStats.maxMana += amount;
+  p.maxMana += amount;
+  p.mana = Math.min(p.maxMana, p.mana + amount);
+  return run;
+}
+
+/**
  * 从 baseStats 重算 run 级数值：base + Σ**已激活**遗物的 runModifiers 补丁。
  * 每次装备/卸下/拾取/进战前调用一次——"从基准重算"而非"增量累加"，杜绝逐战叠加。
  */
-export function refreshRunModifiers(run) {
+export function refreshRunModifiers(run, battleState = null) {
   const p = run.player;
   const base = p.baseStats ?? {};
   const patch = { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0 };
   for (const id of activeRelics(run)) {
-    const mods = getRelicDefinition(id)?.runModifiers;
+    const def = getRelicDefinition(id);
+    const mods = def?.runModifiers;
     const add = typeof mods === 'function' ? mods(p) : (mods ?? {});
     for (const k of Object.keys(patch)) patch[k] += add[k] ?? 0;
+    // 遗物声明的**战斗级**修正：只在战斗内折入（生命周期 = 一场战斗，
+    // 传 battleState 才生效；prep 装卸时自动不计）。
+    if (battleState) {
+      const bmods = def?.battleModifiers;
+      const badd = typeof bmods === 'function' ? bmods(p) : (bmods ?? {});
+      for (const k of Object.keys(patch)) patch[k] += badd[k] ?? 0;
+    }
+  }
+  // 战斗内的**动态**修正（战中获得的临时上限：燃元的 +魏启上限、海神戟第 3 回合结束等）。
+  // 存在 battleState 上 → 随战斗对象一起消失，不需要任何回滚/记账。
+  if (battleState?.modifiers) {
+    for (const k of Object.keys(patch)) patch[k] += battleState.modifiers[k] ?? 0;
   }
   p.maxMana = (base.maxMana ?? 3) + patch.maxMana;
   p.maxActionPoints = (base.maxActionPoints ?? 3) + patch.maxActionPoints;
@@ -62,6 +88,23 @@ export function refreshRunModifiers(run) {
   p.mana = Math.min(p.mana, p.maxMana);        // 上限下调时不残留
   p.actionPoints = Math.min(p.actionPoints, p.maxActionPoints);
   return run;
+}
+
+/**
+ * 战斗级数值修正的唯一入口：改 battleState.modifiers 并**立刻重算**。
+ * 内容侧（卡/遗物/能力）不要直写 player 的上限字段——直写会漏掉重算，
+ * 战后也不会随 battleState 消失（本函数是这条纪律的收口点）。
+ */
+export function applyBattleModifier(ctx, field, delta) {
+  const bs = ctx.battleState;
+  if (!bs) throw new Error('战斗级数值修正只能在战斗内使用（缺少 battleState）');
+  bs.modifiers ??= { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0 };
+  if (!(field in bs.modifiers)) {
+    throw new Error(`未知的战斗级修正字段：${field}（可用：${Object.keys(bs.modifiers).join('/')}）`);
+  }
+  bs.modifiers[field] += delta;
+  refreshRunModifiers(ctx.runState, bs);
+  return bs.modifiers[field];
 }
 
 /**

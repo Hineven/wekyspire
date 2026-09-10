@@ -5,6 +5,8 @@ import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
 import { ensureShopStock } from './rooms/shop.js';
+import { activeRelics } from './prep.js';
+import { getRelicDefinition } from '../relics/registry.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -93,6 +95,9 @@ export function finishBattle(run, verdict, battle = null) {
   const remi = battle?.battleState.allies.find(a => a.defId === 'remi');
   if (remi?.isDead()) run.remi.drivenOff = true;
   if (verdict === 'victory') {
+    // 遗物的战斗胜利钩子：**run 级资源只在 run 层改**（战斗内订阅不得直写 run 状态）。
+    // 放在 spawnRewards 之前——遗物收益与战后奖励分开记账。
+    for (const id of activeRelics(run)) getRelicDefinition(id)?.onBattleVictory?.(run, battle);
     if (isBossFloor(run.floor)) {
       run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
       run.player.hp = run.player.maxHp; // 章间休整：HP 回满
