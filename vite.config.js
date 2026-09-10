@@ -1,6 +1,10 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { readFileSync } from 'node:fs'
+
+// 版本号单一事实源 = package.json；只在构建期注入 version 字段（不内联整份 JSON）
+const pkgVersion = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
 
 // https://vitejs.dev/config/
 export default defineConfig(({mode}) => {
@@ -9,6 +13,7 @@ export default defineConfig(({mode}) => {
   console.log(viteEnv);
   return {
     base: viteEnv.VITE_BASE || './',
+    define: { __APP_VERSION__: JSON.stringify(pkgVersion) },
     plugins: [vue({
       template: {
         compilerOptions: {
