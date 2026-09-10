@@ -46,6 +46,37 @@ const DEFAULT_DECK = [...BODY_STARTER_DECK];
 // false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
 const USE_PCG_ROOMS = true;
 
+// 塔楼抵达节拍时长（ms）：指令 durationMs 与等待侧兜底共用同一数值源
+const FLOOR_ARRIVE_MS = 4000;
+
+/**
+ * 等待塔楼抵达动画播完（塔楼高亮块"长出"）。
+ *
+ * **必须 resolve**：战后剧本与 notify（面板 / 金币 / 资源行刷新）都排在这一拍之后。
+ * 早先这里漏了 resolve——网页端每次战后 notify 都不执行（奖励面板不出现、金币停在旧值），
+ * 此前只有 Vue 面板靠 reactive 自行刷新才把它掩盖过去。
+ *
+ * 两道保险丝：① 指令自身 durationMs（队列节拍卫生）；② 等待侧 setTimeout——若指令因
+ * 队列被堵而根本没启动，队列那个 durationMs 计时器压根不会被创建（计时器是在
+ * _startInstruction 里挂的），只能靠等待侧兜底放行。
+ *
+ * 单列为可测函数：endBattle 走真实 BattleStage（要 canvas），headless 下无法整链驱动。
+ */
+export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms = FLOOR_ARRIVE_MS } = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = () => { if (settled) return; settled = true; resolve(); };
+    sequencer.enqueueInstruction({
+      meta: { event: 'tower:floor-arrive', floor },
+      durationMs: ms,
+      start: ({ id, emit }) => mapStage.arriveFloor(floor, totalFloors, {
+        onDone: () => { emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id }); settle(); },
+      }),
+    });
+    setTimeout(settle, ms + 200);
+  });
+}
+
 // 存档快照 → run：advanceFloor 推进层数（遭遇/房间按 seed 确定性，无需回放），
 // 再覆盖养成字段。存档语义 = 检查点：落盘只在 prep，故恢复后必处 prep。
 function restoreFromSave(run, save) {
@@ -224,16 +255,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     (async () => {
       if (stageManager) await cutscene.sceneTransition(doSwap);
       else doSwap(); // headless/无舞台：直切
-      // 塔楼抵达（S5）：排在黑幕 reveal 之后（同一队列串行），当前层高亮块长出
+      // 塔楼抵达（S5）：排在黑幕 reveal 之后（同一队列串行），当前层高亮块长出；
+      // 等待语义与两道保险丝见 awaitFloorArrive 的注释（曾因漏 resolve 卡死战后链条）
       if (stageManager && mapStage) {
-        await new Promise(resolve => {
-          runSequencer.enqueueInstruction({
-            meta: { event: 'tower:floor-arrive', floor: run.floor },
-            durationMs: 4000, // 前端卡死保险丝
-            start: ({ id, emit }) => mapStage.arriveFloor(run.floor, run.totalFloors, {
-              onDone: () => emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id }),
-            }),
-          });
+        await awaitFloorArrive(runSequencer, mapStage, {
+          floor: run.floor, totalFloors: run.totalFloors,
         });
       }
       await playPendingCutscenes(); // reward 阶段命中项（Boss 层 = postBoss）

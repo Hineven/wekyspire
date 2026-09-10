@@ -11,7 +11,8 @@ import { buildPrepPanel, buildRewardPanel } from '../src/stage/panels/index.js';
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
-import { createRunController } from '../src/shell/runController.js';
+import { createRunController, awaitFloorArrive } from '../src/shell/runController.js';
+import { AnimationSequencer } from '../src/core/anim/sequencer.js';
 import { clearSave } from '../src/shell/saves.js';
 import { attachTooltipForwarding } from '../src/shell/tooltipForward.js';
 import { tooltipState } from '../src/shell/tooltipHub.js';
@@ -23,12 +24,17 @@ import { tooltipState } from '../src/shell/tooltipHub.js';
 // 假舞台只记录推流；通道语义与 MapStage 的真实现一致（setPanel / setPanelIntentHandler）
 function fakeMapStage() {
   const pushes = [];
+  const statuses = [];
   const stage = {
     pushes,
+    statuses,
     intentHandler: null,
-    setStatus() {},
+    setStatus(s) { statuses.push(s); },
     setPanel(snap) { pushes.push(snap); },
     setPanelIntentHandler(fn) { stage.intentHandler = fn; },
+    setFloor() {},
+    // 抵达动画立即回执：真实实现走 gsap，这里只关心"回执之后链条有没有继续"
+    arriveFloor(_floor, _total, { onDone } = {}) { onDone?.(); },
   };
   return stage;
 }
@@ -424,6 +430,19 @@ describe('rewardSnapshot + 模态面板（卡片三选一）', () => {
     panel.dispose();
   });
 
+  it('模态层序：文字/按钮/卡面全部高于背板（否则背板会盖住它们）', () => {
+    const run = rewardRun(57);
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('reward', buildRewardPanel(rewardSnapshot(run)));
+    const bgZ = panel.backdropZ;
+    for (const { object } of panel._rows) {
+      if (object) expect(object.position.z).toBeGreaterThan(bgZ); // 文本行
+    }
+    for (const btn of panel.buttons) expect(btn.position.z).toBeGreaterThan(bgZ);
+    for (const c of panel._cards) expect(c.object.position.z).toBeGreaterThan(bgZ);
+    panel.dispose();
+  });
+
   it('端到端：奖励意图落回 core（领取 → 卡进组 → 离房）', () => {
     clearSave(false); clearSave(true);
     const map = fakeMapStage();
@@ -440,6 +459,42 @@ describe('rewardSnapshot + 模态面板（卡片三选一）', () => {
     expect(ctrl.run.gameStage).not.toBe('reward'); // 领取即离房
     // notify 回推的是新阶段的面板（reward 已结束）
     expect(map.pushes.at(-1)?.kind).not.toBe('reward');
+  });
+});
+
+describe('塔楼抵达节拍：等待必须能结束（回归：曾漏 resolve 卡死战后链条）', () => {
+  // 回归背景：endBattle 等待抵达动画的 Promise 漏了 resolve，网页端每次战后
+  // notify 都不执行——奖励面板不出现、金币停在旧值；Vue 版面板靠 reactive 掩盖了它。
+  // 该逻辑单列为 awaitFloorArrive，正是因为在 headless 下无法整链驱动（BattleStage 要 canvas）。
+  const tick = (ms) => new Promise(r => setTimeout(r, ms));
+
+  it('动画正常回执 → 立即结束等待（不是等保险丝）', async () => {
+    const seq = new AnimationSequencer({ bus: mitt() });
+    const map = fakeMapStage();
+    const t0 = Date.now();
+    await awaitFloorArrive(seq, map, { floor: 3, totalFloors: 44, ms: 5000 });
+    expect(Date.now() - t0).toBeLessThan(400); // 回执即放行，远早于 5s 保险丝
+  });
+
+  it('动画永不回执（rAF 暂停/队列被堵）→ 由等待侧保险丝放行，不永久卡死', async () => {
+    const seq = new AnimationSequencer({ bus: mitt() });
+    const map = fakeMapStage();
+    map.arriveFloor = () => {}; // 永不回执
+    const t0 = Date.now();
+    await awaitFloorArrive(seq, map, { floor: 3, totalFloors: 44, ms: 120 });
+    const dt = Date.now() - t0;
+    expect(dt).toBeGreaterThanOrEqual(100); // 确实等过
+    expect(dt).toBeLessThan(1500);          // 但一定会放行
+  });
+
+  it('抵达指令带上正确的层号与帧事件（便于排障）', async () => {
+    const seq = new AnimationSequencer({ bus: mitt() });
+    const seen = [];
+    const map = fakeMapStage();
+    map.arriveFloor = (f, t, { onDone } = {}) => { seen.push([f, t]); onDone?.(); };
+    await awaitFloorArrive(seq, map, { floor: 7, totalFloors: 44, ms: 200 });
+    expect(seen).toEqual([[7, 44]]);
+    expect(seq._instructions.every(i => i.status === 'finished')).toBe(true); // 队列不留残节拍
   });
 });
 

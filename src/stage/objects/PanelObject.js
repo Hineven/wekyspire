@@ -100,6 +100,7 @@ export class PanelObject extends THREE.Group {
         });
         btn.setData({ label: w.label, sublabel: w.sublabel, enabled: w.enabled !== false, active: !!w.active });
         btn.placeCenter(centerX, y - hWu / 2);
+        btn.position.z = Z.CONTENT; // 必须高于背板：模态背板在 z=BACKDROP，压在内容之上会盖住文字/按钮
         this.add(btn);
         this._buttons.set(w.id, btn);
         this._buttonActions.set(w.id, { action: w.action, enabled: w.enabled !== false });
@@ -121,6 +122,7 @@ export class PanelObject extends THREE.Group {
         text.scale.set(text.scale.x * s, text.scale.y * s, 1);
         if (this.form === 'modal' || w.align === 'center') text.placeCenterTop(centerX, y);
         else text.placeLeftTop(left, y);
+        text.position.z = Z.CONTENT; // 同按钮：内容一律在背板之上
         this.add(text);
         this._rows.push({ widget: w, object: text, top: y, h: hWu, contentH: text.scale.y });
       }
@@ -177,6 +179,8 @@ export class PanelObject extends THREE.Group {
   }
 
   get isModal() { return this.form === 'modal'; }
+  /** 模态背板所在 z（内容必须高于它；供契约测试断言层序）。 */
+  get backdropZ() { return Z.BACKDROP; }
   /** 面板内是否有卡面（宿主据此决定要不要订阅"卡图到图重烘"）。 */
   get ownsCardArtWait() { return this._cards.length > 0; }
 
@@ -245,6 +249,7 @@ export class PanelObject extends THREE.Group {
         });
         btn.setData({ label: item.name, sublabel: item.desc, enabled: item.enabled !== false });
         btn.placeCenter(x, y - hWu / 2);
+        btn.position.z = Z.CONTENT;
         this.add(btn);
         this._buttons.set(pickId, btn);
         this._buttonActions.set(pickId, { action: item.action, enabled: item.enabled !== false });
