@@ -28,6 +28,12 @@ npm run preview    # 本地预览构建产物
 
 项目约定：**不要**用 dev 服务器代替测试来「验证编译错误」——改完跑 `npm test` 即可，浏览器行为由用户验收。
 
+## headless 试玩与直播观战（dev 工具，不进构建产物）
+
+- `tools/headlessPlay.mjs` — LLM/脚本可玩的**文本界面**（replay 式会话：会话文件 `tmp/playtests/<名>.json` = `{seed, actions}`，每次调用全量重放 + 执行新动作，成功才入档）。引擎在 `tools/playSession.mjs`（与守护进程共用 exec/render，输出不漂移）。
+- `tools/broadcast.mjs` — **直播中继**（只读观察会话文件 + HTTP/SSE 推流，零新依赖）。它把 core + bridge presenter 产出的**动画指令描述符**推给浏览器，由浏览器用本地 sequencer 重建播放——因此观战页能复用 `BattleStage`/`BattleHud`/`TooltipOverlay` 全套真实战斗渲染。观战页 `http://localhost:5177/watch.html?port=5199&session=<名>`（默认端口 5199，避开 Vite 的 5177/5178），会话索引 `http://127.0.0.1:5199/`。
+- 契约层：`src/bridge/wire.js`（指令描述符 ↔ 指令重建、payload 过线压平）、`src/bridge/remoteBridge.js`（浏览器端镜像 bridge）、`src/core/anim/sequencer.js` 指令的可选 `wire` 描述符字段、`src/bridge/stateSync.js`（生产 bridge 与中继共用的标脏/补同步调度器）。
+
 ## 部署
 
 `.github/workflows/main.yml`：push 到 `master` 分支触发，`npm ci` → `VITE_BASE=<pages base_path> npm run build` → 部署 `dist/` 到 GitHub Pages。仓库根目录的 `dist/` 是构建产物，不要手改。

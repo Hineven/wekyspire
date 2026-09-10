@@ -2,6 +2,7 @@ import mitt from 'mitt';
 import { createBattle, startBattle, isBattleFinished } from '../core/flow/battle.js';
 import AnimationSequencer from '../core/anim/sequencer.js';
 import { createBridgePresenter } from './presenter.js';
+import { createStateSync } from './stateSync.js';
 import { projectBattle, projectCardFull } from './projection.js';
 import { createIntents } from './intents.js';
 import { createInteractionHandler } from './interactionHandler.js';
@@ -27,30 +28,20 @@ export function createBridge({
 
   let dirty = true;
   let cachedProjection = null;
-  // 显示状态兜底：每次标脏都记下来，队列排空时（或 tick 末）补一次 syncState——
-  // Core 存在不经 presenter 的变更（意图/应答/轮转变更），保证前端显示状态
-  // 在动画队列排空时必定追上后端，不会滞留
-  let unsyncedChanges = false;
-  let syncFallbackScheduled = false;
-  let syncing = false; // syncIfIdle → syncState → markDirty 的递归守卫
-  const syncIfIdle = () => {
-    if (syncing || !unsyncedChanges || sequencer.pendingCount > 0) return;
-    syncing = true;
-    try { presenter.syncState(); } finally { syncing = false; }
-  };
-  const markDirty = () => {
-    dirty = true;
-    unsyncedChanges = true;
-    backendBus.emit(EventNames.STATE_DIRTY);
-    syncIfIdle(); // 队列空闲（即时链播完/无节拍变更）→ 立即追上显示状态
-    if (!syncFallbackScheduled) {
-      syncFallbackScheduled = true;
-      setTimeout(() => {
-        syncFallbackScheduled = false;
-        syncIfIdle();
-      }, 0);
-    }
-  };
+  // 显示状态兜底（调度器见 stateSync.js，与直播守护进程共用同一份）：
+  // 每次标脏都记下来，队列排空时（或 tick 末）补一次 syncState——Core 存在不经
+  // presenter 的变更（意图/应答/轮转变更），保证前端显示状态在动画队列排空时必定
+  // 追上后端，不会滞留。前向引用：presenter 在本文件下方装配。
+  let presenter = null;
+  const stateSync = createStateSync({
+    sequencer,
+    getPresenter: () => presenter,
+    onDirty: () => {
+      dirty = true;
+      backendBus.emit(EventNames.STATE_DIRTY);
+    },
+  });
+  const { markDirty, syncIfIdle } = stateSync;
   // 队列每完成一条指令都检查一次：排空即追上显示状态
   frontendBus.on(EventNames.ANIMATION_INSTRUCTION_FINISHED, () => syncIfIdle());
 
@@ -72,10 +63,10 @@ export function createBridge({
   // 前向引用：presenter 的 requestInput 要打到 interactionHandler，
   // 而 interactionHandler 需要 battle——用壳函数解环。
   const interactionRef = { current: null };
-  const presenter = createBridgePresenter({
+  presenter = createBridgePresenter({
     sequencer, frontendBus, backendBus, markDirty,
     getSnapshot: () => { // sync 节拍 start 时拉取最新投影作快照；一次快照覆盖此前全部变更
-      unsyncedChanges = false;
+      stateSync.clearDirty();
       return getProjection();
     },
     onRequestInput: (request) => interactionRef.current?.handleRequest(request),

@@ -1,5 +1,8 @@
 // 通用动画指令队列（自 bridge/sequencer.js 抽出，S1 去战斗化）：
-// - 指令 { id, status, tags, waitTags, durationMs, start, meta }
+// - 指令 { id, status, tags, waitTags, durationMs, start, meta, wire }
+// - wire：可选的「指令描述符」——指令的可序列化投影（{ event, payload }），供
+//   直播推流读取（tools/broadcast.mjs 的流式 tap）。本队列自身完全不碰它，
+//   本地播放路径行为与不存在该字段时逐字节一致（惰性载荷，见 enqueueInstruction）
 // - 可执行判定：位于 X 之前且与 X.waitTags 有交集的指令全部 finished，X 才能 start
 //   （默认 waitTags=['all'] = 等待所有前序；tags/waitTags 都自动含 'all'，
 //    注意：'all' 标签使默认情况下指令严格串行；要并行需显式 waitTags: []）
@@ -34,7 +37,7 @@ export default class AnimationSequencer {
     });
   }
 
-  enqueueInstruction({ tags = ['all'], waitTags, durationMs = Infinity, start, meta } = {}) {
+  enqueueInstruction({ tags = ['all'], waitTags, durationMs = Infinity, start, meta, wire = null } = {}) {
     const id = genId();
     this._instructions.push({
       id,
@@ -44,6 +47,7 @@ export default class AnimationSequencer {
       durationMs,
       start: typeof start === 'function' ? start : () => {},
       meta,
+      wire, // 可序列化描述符（直播推流用；本地路径不读）
       _startedAt: 0,
     });
     this._pump();

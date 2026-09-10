@@ -1,4 +1,5 @@
-import { EventNames, ANIM_TIMING } from './events.js';
+import { EventNames } from './events.js';
+import { enqueueAnimInstruction, WIRE_END_GATE } from './wire.js';
 
 // BridgePresenter：Core presenter 接口的默认实现。
 // 翻译规则（老版 animationSequencer + 两套状态设计的继承）：
@@ -22,13 +23,10 @@ import { EventNames, ANIM_TIMING } from './events.js';
 export function createBridgePresenter({
   sequencer, frontendBus, backendBus, markDirty, getSnapshot, onRequestInput = null, projectCard = null,
 }) {
+  // 入队走 wire.js 的共用构造：同一条指令描述符既用于本地播放、也在直播推流时
+  // 原样发给浏览器端重建（两边不会漂移）。durationMs 缺省 = ANIM_TIMING 同款兜底。
   const anim = (event, payload) => {
-    sequencer.enqueueInstruction({
-      durationMs: ANIM_TIMING[event] ?? 2500, // 未列名事件的兜底（同样是宽松保险丝）
-      meta: { event, payload },
-      // _animId 随载荷下发：Stage 播完动画后带它回 finish（回调协议）
-      start: ({ id, meta, emit }) => emit(meta.event, { ...meta.payload, _animId: id }),
-    });
+    enqueueAnimInstruction(sequencer, { event, payload });
     markDirty();
   };
 
@@ -37,15 +35,16 @@ export function createBridgePresenter({
   // 后续变更由后续的 sync 覆盖。绝不能在 start 时拉取——内核同步结算完毕，
   // 那会让首个 sync 直接剧透终态（卡牌还没飞，坟堆数字已+1）。
   // 入队时先 markDirty：状态变更本身不一定经过 presenter（如指令内直接 moveCard），
-  // 不标脏 getSnapshot 会拿到缓存的旧投影
+  // 不标脏 getSnapshot 会拿到缓存的旧投影。
+  // 快照放 meta.payload（与放 start 闭包等价——两者都在入队时刻捕获），
+  // 这样直播端能从描述符里原样重建出同一条 sync 节拍。
   const syncState = () => {
     markDirty();
     const snapshot = getSnapshot();
-    sequencer.enqueueInstruction({
+    enqueueAnimInstruction(sequencer, {
+      event: EventNames.ANIM_STATE_SYNC,
+      payload: { snapshot },
       tags: ['state'],
-      durationMs: ANIM_TIMING[EventNames.ANIM_STATE_SYNC] ?? 2000,
-      meta: { event: EventNames.ANIM_STATE_SYNC },
-      start: ({ id, emit }) => emit(EventNames.ANIM_STATE_SYNC, { snapshot, _animId: id }),
     });
   };
 
@@ -69,7 +68,9 @@ export function createBridgePresenter({
       // run 层的幕间转场/切舞台不再打断尚未播完的终局演出。
       // 自完结指令：发射即 finish（同步泵起后续——如 endBattle 入队的幕间黑幕）
       sequencer.enqueueInstruction({
-        meta: { event: 'battle:end-gate' },
+        meta: { event: WIRE_END_GATE },
+        // 非可视化记账节拍：直播端按名特判（发本地 backendBus + 自完结），不当动画播
+        wire: { event: WIRE_END_GATE, payload: { result } },
         durationMs: 0,
         start: ({ id }) => {
           backendBus.emit(EventNames.BATTLE_END, { result });
