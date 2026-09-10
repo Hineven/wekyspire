@@ -55,7 +55,7 @@ const HELP = `动作表（按当前阶段）：
   奖励: pack <#|体修|火|通用> | take <#> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> | act up <构筑#> | act draw
         | act take <#> | act skipdraw | act skip | act spin | act play | next
-  进阶: dim 火|跳过 | seed <#,#,#> | reroll | ability <#|skip>
+  进阶: dim 火|跳过（跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | seed <#,#,#> | reroll | ability <#|skip>
   通用: state | deck | terms（词条/效果释义） | note <文本> | help`;
 
 // ---------- 小工具 ----------
@@ -73,7 +73,7 @@ const costText = (def) => {
 };
 const kwText = (def) => (def.keywords ?? [])
   .filter(k => k !== 'blade').map(k => ({
-    exhaust: '消耗', transient: '短暂', innate: '固有', anchored: '锁定', slowStart: '缓启',
+    exhaust: '消耗', transient: '短暂', innate: '固有', anchored: '锁定', slowStart: '慢热',
   }[k] ?? k)).join(' ');
 const effectsText = (unit) => unit.effects?.length
   ? unit.effects.map(e => `${getEffectDefinition(e.effectId)?.name ?? e.effectId}${e.stacks}`).join(' ') : '';
@@ -539,6 +539,7 @@ function render(S) {
     }
   } else if (stage === 'ascension') {
     L.push(`→ dim 火 | dim 跳过`);
+    L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌），另回${ASCENSION_PLACEHOLDER.healAmount}血、魏启上限+1`);
     if (run.cardOffering) {
       const off = run.cardOffering;
       L.push(`种子九选三（选3张入组，刷新剩 ${off.rerollsLeft}）:`);
