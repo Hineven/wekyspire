@@ -16,6 +16,7 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
 import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
 import { PostBattleInstruction } from '../instructions/battleRoot.js';
+import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
   drawCards, burnCard, requestHandSelection, selected,
@@ -170,12 +171,12 @@ condenseFlameCard({ id: 'flameSurge', name: '焰涌', tier: 'B', naqi: 3, burnPe
 condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 5, burnPerX: 4 });
 
 // ====================================================================
-// §1.1 高热系列（回蓝：激活即一次性 纳气 + 自施燃烧；消耗咏唱）
+// §1.1 高热系列（回蓝：每回合咏唱触发 纳气 + 自施燃烧；消耗咏唱）
 // ====================================================================
 
-// 高热工厂。语义假设：「纳气N，燃烧4」为**激活时一次性效果**（battle.md C5
-// 「部分咏唱卡只提供激活时的效果」），挂 onEnable——只有激活成功才结算；解除
-// 打出时 use 为空操作，不会重复发动。设计稿未写咏唱值，按默认咏唱2计手牌压力。
+// 高热工厂。「纳气N，燃烧4」为**咏唱触发效果**（battle.md P5：激活咏唱卡每回合
+// 在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅（owner=卡牌，熄灭
+// 自动注销），点亮本身不结算。设计稿未写咏唱值，按默认咏唱2计手牌压力。
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
 function feverChantCard({ id, name, tier, naqi, promotesTo }) {
   registerSkill({
@@ -187,10 +188,13 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
     promotesTo,
     use() { return true; },
     activated: {
-      onEnable: (sctx) => {
-        addEffect(sctx, 'naqi', naqi);
-        addEffect(sctx, 'burn', 4); // 自施燃烧（代价语言）
-      },
+      subscriptions: (sctx) => [{
+        when: ChantTriggerInstruction, phase: 'post',
+        react: () => {
+          addEffect(sctx, 'naqi', naqi);
+          addEffect(sctx, 'burn', 4); // 自施燃烧（代价语言）
+        },
+      }],
     },
     describe: () => `/effect{纳气}${naqi}，自身/effect{燃烧}4`,
   });
@@ -199,11 +203,12 @@ feverChantCard({ id: 'fever', name: '发烧', tier: 'C', naqi: 1, promotesTo: 'h
 feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
 
 // ====================================================================
-// §1.1 可燃系列（防御：护盾 + 自施燃烧，2026-09 设计稿新增）
+// §1.1 可燃系列（防御：每回合咏唱触发 护盾 + 自施燃烧，2026-09 设计稿新增）
 // ====================================================================
 
-// 可燃血液工厂。与高热系列同构：激活时一次性 护盾 + 自施燃烧（副作用语言），
-// 解除再打出免费、回牌库（非消耗）——每轮重新点亮各结算一次，循环防御泵。
+// 可燃血液工厂。「护盾N，燃烧3」为**咏唱触发效果**（battle.md P5：激活咏唱卡
+// 每回合在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅，点亮本身
+// 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
 // 设计稿 A 阶未写费用 → 0 费；咏唱值未写 → 按默认咏唱2计手牌压力。
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
@@ -215,10 +220,13 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
     promotesTo,
     use() { return true; },
     activated: {
-      onEnable: (sctx) => {
-        gainShield(sctx, shield);
-        addEffect(sctx, 'burn', 3);
-      },
+      subscriptions: (sctx) => [{
+        when: ChantTriggerInstruction, phase: 'post',
+        react: () => {
+          gainShield(sctx, shield);
+          addEffect(sctx, 'burn', 3);
+        },
+      }],
     },
     describe: () => `护盾${shield}，自身/effect{燃烧}3`,
     battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,

@@ -167,28 +167,32 @@ describe('凝焰系列：X费随当前魏启缩放', () => {
   });
 });
 
-describe('高热系列：激活一次性纳气+自施燃烧，解除不重复发动', () => {
+describe('高热系列：咏唱触发纳气+自施燃烧（P5 每回合），解除后停跳', () => {
   const cases = [['fever', 1], ['highFever', 2]];
   for (const [id, naqi] of cases) {
-    it(`${id}：激活生效，纳气下回合兑现，再次打出免费解除并焚毁`, () => {
+    it(`${id}：点亮不结算，P5 触发纳气${naqi}+燃烧4，解除焚毁后不再触发`, () => {
       // maxMana 8：避免回蓝被默认上限 3 截断
       const d = makeDriver([id, 'punch', 'punch', 'punch', 'punch'], [tank()], { maxMana: 8 });
       const card = toHand(d, id);
-      d.play(id); // 0费发动：激活即 纳气N + 自身燃烧4
+      d.play(id); // 0费点亮：本身不结算
       expect(card.isActivated, id).toBe(true);
-      expect(d.player.getEffectStacks('naqi'), id).toBe(naqi);
-      expect(d.player.getEffectStacks('burn'), id).toBe(4);
+      expect(d.player.getEffectStacks('naqi'), id).toBe(0);
+      expect(d.player.getEffectStacks('burn'), id).toBe(0);
 
-      d.endTurn(); // 史莱姆攻6；回合2开始：纳气兑现+N蓝，燃烧跳4
+      d.endTurn(); // 回合1 P5 咏唱触发：纳气N + 自身燃烧4；史莱姆攻6
+      // 回合2开始：纳气兑现+N蓝，燃烧跳4（P5 触发的效果在下一回合开始兑现/跳伤）
       expect(d.player.hp, id).toBe(PLAYER_BASE_HP - 6 - 4);
       // 入战4 + 回合1/回合2 各自然+1 + 纳气N（首回合开始也有自然恢复）
       expect(d.player.mana, id).toBe(4 + 1 + 1 + naqi);
       expect(d.player.getEffectStacks('burn'), id).toBe(3);
 
-      d.play(card.uniqueID); // 免费解除：消耗咏唱 → 焚毁；效果不重复发动
+      d.play(card.uniqueID); // 免费解除：消耗咏唱 → 焚毁
       expect(zoneOf(d.state, card.uniqueID), id).toBe('burnt');
       expect(d.player.getEffectStacks('burn'), id).toBe(3);
       expect(d.player.getEffectStacks('naqi'), id).toBe(0);
+
+      d.endTurn(); // 已焚毁：P5 空转，燃烧只自然递减（回合3开始跳3 → 2）
+      expect(d.player.getEffectStacks('burn'), id).toBe(2);
     });
   }
 });
@@ -465,20 +469,33 @@ describe('边界：魏启不足 / 群伤终局截断', () => {
   });
 });
 
-describe('可燃血液系列（2026-09 稿：防御咏唱——护盾+自施燃烧）', () => {
-  // C/B：1AP；A：0费（设计稿未写费用 → 缺省约定）。激活时一次性护盾+自身燃烧3。
+describe('可燃血液系列（2026-09 稿：防御咏唱——每回合P5 护盾+自施燃烧）', () => {
+  // C/B：1AP；A：0费（设计稿未写费用 → 缺省约定）。点亮不结算；
+  // 每回合 P5 咏唱触发：护盾N + 自身燃烧3；解除后停泵、燃烧不回收。
   for (const [id, shield] of [['kindlingBlood', 8], ['kindlingBloodPlus', 12], ['kindlingBloodMaster', 12]]) {
-    it(`${id}：激活即护盾${shield}+自身燃烧3；免费解除回牌库、燃烧保留`, () => {
+    it(`${id}：点亮不结算，P5 触发护盾${shield}+燃烧3；解除后不再触发`, () => {
       const d = makeDriver([id, 'punch', 'punch'], [tank()], { maxMana: 4 });
       const card = toHand(d, id);
       d.play(id);
       expect(card.isActivated, id).toBe(true);
+      expect(d.player.shield, id).toBe(0); // 打出不触发
+      expect(d.player.getEffectStacks('burn'), id).toBe(0);
+
+      d.dispatch(new ChantTriggerInstruction()); // P5 咏唱节拍
       expect(d.player.shield, id).toBe(shield);
       expect(d.player.getEffectStacks('burn'), id).toBe(3);
+
+      d.dispatch(new ChantTriggerInstruction()); // 下回合节拍：持续触发
+      expect(d.player.shield, id).toBe(shield * 2);
+      expect(d.player.getEffectStacks('burn'), id).toBe(6);
+
       d.play(card.uniqueID); // 免费解除（非消耗 → 回牌库）
       expect(card.isActivated, id).toBe(false);
       expect(zoneOf(d.state, card.uniqueID), id).toBe('deck');
-      expect(d.player.getEffectStacks('burn'), id).toBe(3); // 解除不回收燃烧
+
+      d.dispatch(new ChantTriggerInstruction()); // 解除后空转
+      expect(d.player.shield, id).toBe(shield * 2); // 不再加盾
+      expect(d.player.getEffectStacks('burn'), id).toBe(6); // 燃烧不回收
     });
   }
 });
