@@ -40,7 +40,10 @@ const ZONE_TAGS = ['prison', 'barrack', 'chapel', 'crypt', 'library', 'kitchen',
 
 const BAND_Y = { low: 7, mid: 20, high: 34 }; // 墙面装饰高度带（地板相对挂点高）
 
-// ---- 战场 keepout：由 battleLine + slots 派生（站位矩形 + 战线走廊分段 AABB）----
+// ---- 战场 keepout：由 battleLine + **战区留白带**（keepoutSlots）派生 ----
+// 注意用 keepoutSlots 而非 slots：后者是单位**站位**带（画面安全区，2026-09 收窄防出画），
+// 留白要覆盖整条战线，两者解耦后改站位不再连带重排 PCG 道具。
+
 function slotPos(slot) {
   const bl = DUNGEON.battleLine;
   const x = bl.near.x + (bl.far.x - bl.near.x) * slot.t;
@@ -49,16 +52,17 @@ function slotPos(slot) {
 }
 
 export function buildKeepout() {
+  const band = DUNGEON.keepoutSlots ?? DUNGEON.slots;
   const hard = [];
   const soft = [];
   const push = (slot, half, list) => {
     const p = slotPos(slot);
     list.push({ x0: p.x - half, x1: p.x + half, z0: p.z - half, z1: p.z + half });
   };
-  push(DUNGEON.slots.player, 11, hard);
-  push(DUNGEON.slots.player, 8, soft);
-  for (const s of DUNGEON.slots.allies) { push(s, 9, hard); push(s, 7, soft); }
-  for (const s of DUNGEON.slots.enemies) { push(s, 10, hard); push(s, 8, soft); }
+  push(band.player, 11, hard);
+  push(band.player, 8, soft);
+  for (const s of band.allies) { push(s, 9, hard); push(s, 7, soft); }
+  for (const s of band.enemies) { push(s, 10, hard); push(s, 8, soft); }
   // 战线走廊：near→far 三段 AABB（半宽 14，盖卡牌飞行路径）
   const bl = DUNGEON.battleLine;
   for (const t of [0.15, 0.5, 0.85]) {

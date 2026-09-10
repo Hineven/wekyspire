@@ -73,7 +73,10 @@ let stageManager = null;
 let battleStage = null;
 let fitHandler = null;
 let listTimer = null;
+let corpseTimer = null;
 let logSeq = 0;
+
+const SIDEBAR_PX = 300; // 与 SpectatorPanel 的 width 一致（取景框让位用）
 
 // ---------- 连接控制（面板里的「连接地址」窗）----------
 // 连接 = 换 URL 参数并重载页面：SSE 连接与舞台都干净重建，避免在应用内管理重连状态机。
@@ -193,11 +196,16 @@ onMounted(() => {
 
   stageManager = new StageManager();
   stageManager.attach(canvas.value);
-  const fit = () => fitGameFrame({ frame: frameEl.value, stageManager });
+  // 右侧 300px 是观战侧栏：取景框为它让位（否则最右敌人的身体会被面板压住）
+  const fit = () => fitGameFrame({ frame: frameEl.value, stageManager, reserveRight: SIDEBAR_PX });
   fitHandler = fit;
   fit();
   window.addEventListener('resize', fit);
   stageManager.start();
+
+  // 尸体收殓兜底：中途接入/跳段时死亡演出节拍不在队列里，只剩快照的 isDead——
+  // 不补的话尸体会带着 0/xx 站着（幂等，正常路径下无事发生）
+  corpseTimer = setInterval(() => battleStage?.settleCorpses?.(), 500);
 
   // 会话列表常驻（连上中继就能随时切会话/看进度）；中继不可达时给出可读报错
   loadSessionList();
@@ -220,6 +228,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', fitHandler);
   clearInterval(listTimer);
+  clearInterval(corpseTimer);
   battleStage?.dispose();
   stageManager?.dispose();
   remote?.close();
@@ -264,16 +273,19 @@ onBeforeUnmount(() => {
           </ul>
         </div>
       </Transition>
-      <SpectatorPanel
-        :params="params" :relay-base="relayBase" :relay-input="relayInput"
-        :status="status" :meta="meta" :run-state="runState" :feed="feed"
-        :error="errorText" :relay-error="relayError" :banner="banner"
-        :buffered="buffered" :session-list="sessionList"
-        :link-for="linkFor" @connect="onConnect" @disconnect="onDisconnect"
-      />
     </template>
     <TooltipOverlay />
   </div>
+  <!-- 观战侧栏放在取景框**外面**：帧有 transform（fixed 后代的包含块），
+       放在帧内 right:0 会压在战斗画面上；放在帧外才是窗口右侧整条 -->
+  <SpectatorPanel
+    v-if="assetsReady"
+    :params="params" :relay-base="relayBase" :relay-input="relayInput"
+    :status="status" :meta="meta" :run-state="runState" :feed="feed"
+    :error="errorText" :relay-error="relayError" :banner="banner"
+    :buffered="buffered" :session-list="sessionList"
+    :link-for="linkFor" @connect="onConnect" @disconnect="onDisconnect"
+  />
 </template>
 
 <style>

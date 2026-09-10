@@ -348,7 +348,8 @@ export class BattleStage {
 
   _syncUnits(proj) {
     const seen = new Set();
-    const place = (unitProj, side, index) => {
+    // count = 整排数量（含已阵亡者）：槽位按数量均分，倒下不挪位（见 scenes/index.js）
+    const place = (unitProj, side, index, count = 1) => {
       seen.add(unitProj.uniqueID);
       let obj = this._units.get(unitProj.uniqueID);
       if (!obj) {
@@ -367,15 +368,15 @@ export class BattleStage {
       }
       // 战线轴槽位：位置/缩放/z 由 scene 定义换算（假透视：近大远小、近处压远处）。
       // 死亡单位不重放 scale——否则 reconcile 会把死亡收殓补间踩回去
-      const tr = slotTransform(this._sceneDef, side, index);
+      const tr = slotTransform(this._sceneDef, side, index, count);
       obj.position.set(tr.x, tr.y, tr.z);
       obj._baseScale = tr.scale;
       if (!unitProj.isDead) obj.scale.set(tr.scale, tr.scale, 1);
       obj.setUnit(unitProj);
     };
-    place(proj.player, 'player', 0);
-    proj.allies.forEach((a, i) => place(a, 'ally', i));
-    proj.enemies.forEach((e, i) => place(e, 'enemy', i));
+    place(proj.player, 'player', 0, 1);
+    proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
+    proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
     for (const [id, obj] of this._units) {
       if (!seen.has(id)) {
         this.picker.removePickable(id);
@@ -385,6 +386,31 @@ export class BattleStage {
         this._units.delete(id);
       }
     }
+  }
+
+  /**
+   * 尸体稳态收殓：把「快照已判死、视图却仍站着」的单位直接落到死后稳态（隐藏）。
+   * 正常路径不受影响（死亡演出播毕已隐藏，本方法幂等跳过）。
+   * 用途：**中途接入/跳段的播放端**——死亡演出节拍不在队列里，只剩快照的 isDead，
+   * 不补的话尸体会带着 0/xx 血条一直站着（观战端重放/接入已见，2026-09）。
+   * 与「动画不可序列化 → 读档/恢复落到稳态」同一口径，故实现在 Stage 而非某个页面。
+   * @returns 本次收殓的尸体数
+   */
+  settleCorpses() {
+    const snap = this._snapshot;
+    if (!snap) return 0;
+    let n = 0;
+    const all = [...(snap.enemies ?? []), ...(snap.allies ?? [])];
+    for (const u of all) {
+      if (!u?.isDead) continue;
+      const view = this._units.get(u.uniqueID);
+      if (!view || view.visible === false) continue;
+      view.hideIntention?.();
+      view.hideStatus?.();
+      view.visible = false; // 稳态 = 焚毁演出终态（整体退场；reconcile 不重置 visible）
+      n++;
+    }
+    return n;
   }
 
   // 全 zone 对账（持久模型）：新卡建条目+建视图（各一次），zone 按快照刷新。
