@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import * as THREE from 'three';
 import mitt from 'mitt';
 import '../src/core/content/index.js';
 import { MapStage } from '../src/stage/stages/MapStage.js';
@@ -9,9 +8,11 @@ import { ButtonObject } from '../src/stage/objects/ButtonObject.js';
 import { TextBlockObject } from '../src/stage/objects/TextBlockObject.js';
 import { panelSnapshot, prepSnapshot } from '../src/core/run/panelSnapshot.js';
 import { buildPrepPanel } from '../src/stage/panels/prepPanel.js';
-import { createRun, advanceFloor } from '../src/core/run/runFlow.js';
+import { createRun } from '../src/core/run/runFlow.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
+import { createRunController } from '../src/shell/runController.js';
+import { clearSave } from '../src/shell/saves.js';
 import { attachTooltipForwarding } from '../src/shell/tooltipForward.js';
 import { tooltipState } from '../src/shell/tooltipHub.js';
 
@@ -272,6 +273,57 @@ describe('MapStage 输入通道与面板装配', () => {
     expect(stage._downHit).toBeNull(); // 按压态被消费掉
 
     stage.dispose();
+  });
+});
+
+describe('端到端：runController 的快照下行 / 意图上行（真实编排器，非桩）', () => {
+  // 假舞台只记录推流；通道语义与 MapStage 的真实现一致（setPanel / setPanelIntentHandler）
+  function fakeMapStage() {
+    const pushes = [];
+    const stage = {
+      pushes,
+      intentHandler: null,
+      setStatus() {},
+      setPanel(snap) { pushes.push(snap); },
+      setPanelIntentHandler(fn) { stage.intentHandler = fn; },
+    };
+    return stage;
+  }
+
+  it('创建即推 prep 快照；意图落回 core 后回推新快照（装备位随之变化）', () => {
+    clearSave(false); clearSave(true);
+    const map = fakeMapStage();
+    const ctrl = createRunController({ seed: 77, mapStage: map });
+
+    // 下行：初始快照就是 prep，且 Stage 拿到的是纯数据
+    expect(map.pushes.length).toBeGreaterThan(0);
+    const first = map.pushes.at(-1);
+    expect(first.kind).toBe('prep');
+    expect(first.relicSlots).toEqual({ used: 0, total: ctrl.run.player.relicSlots });
+
+    // 上行：面板点击 → runController 分发 → core 落地 → notify 回推新快照
+    grantRelic(ctrl.run, 'warHorn');
+    expect(typeof map.intentHandler).toBe('function');
+    map.intentHandler({ action: 'equip', relicId: 'warHorn' });
+
+    expect(ctrl.run.player.equippedRelics).toEqual(['warHorn']); // core 真的变了
+    const after = map.pushes.at(-1);
+    expect(after.relicSlots.used).toBe(1);
+    expect(after.relics.find(r => r.id === 'warHorn').equipped).toBe(true);
+
+    // 再点卸下 → 回退
+    map.intentHandler({ action: 'unequip', relicId: 'warHorn' });
+    expect(ctrl.run.player.equippedRelics).toEqual([]);
+    expect(map.pushes.at(-1).relicSlots.used).toBe(0);
+  });
+
+  it('未知 action 与坏输入不抛错（面板改版期间的前后兼容）', () => {
+    clearSave(false); clearSave(true);
+    const map = fakeMapStage();
+    const ctrl = createRunController({ seed: 78, mapStage: map });
+    expect(() => map.intentHandler(null)).not.toThrow();
+    expect(() => map.intentHandler({ action: 'shopBuy' })).not.toThrow();
+    expect(() => map.intentHandler({ action: 'equip', relicId: 'noSuchRelic' })).toThrow();
   });
 });
 
