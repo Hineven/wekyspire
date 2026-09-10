@@ -8,7 +8,7 @@
 import { registerSkill } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { GainShieldInstruction } from '../instructions/combat.js';
+import { GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainActionPointsInstruction } from '../instructions/resources.js';
 import {
   AddCardInstruction, DiscardCardInstruction, MoveCardInstruction,
@@ -142,6 +142,25 @@ stimulant('stimulant', '激发', 'C', 2, 2);
 stimulant('burstStimulant', '爆发', 'B', 2, 4);
 stimulant('fullStimulant', '充分激发', 'B', 1, 2);
 
+// ---- 灵能护盾系列（MP 换纯护盾，2026-09 设计稿新增）----
+
+// 灵力护盾 C / 灵能护盾 B：2MP，冷却1：12/18 护盾。通用包的纯防御位——
+// 无纳气、无格挡，性价比随等阶拉开。
+const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
+  id, name, type: 'normal', pack: 'common', tier,
+  cost: { mana: 2, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo,
+  use(sctx) {
+    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: shield }));
+    return true;
+  },
+  describe: () => `${shield}护盾`,
+});
+psiShield('psiShield', '灵力护盾', 'C', 12, 'greaterPsiShield');
+psiShield('greaterPsiShield', '灵能护盾', 'B', 18);
+
 // ---- §2 散卡 ----
 
 // 杂技（A，1AP）：下一张进入牌库的卡抽回手牌。
@@ -180,4 +199,51 @@ registerSkill({
     return true;
   },
   describe: () => '下一张进入牌库的卡抽回手牌',
+});
+
+// 早有防备（C，1MP，消耗，固有）：起手在手的 9 护盾（先手防御位；固有开局直接
+// 入手，不占初始抽牌位）。
+registerSkill({
+  id: 'prePrepared', name: '早有防备', type: 'normal', pack: 'common', tier: 'C',
+  cost: { mana: 1, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust', 'innate'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 9 }));
+    return true;
+  },
+  describe: () => '9护盾',
+});
+
+// 盼盼小面包（C，1AP，消耗）：恢复 3 生命（即时治疗，走 ApplyHeal 管线）。
+registerSkill({
+  id: 'panpanBread', name: '盼盼小面包', type: 'normal', pack: 'common', tier: 'C',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new ApplyHealInstruction({ target: sctx.player, amount: 3 }));
+    return true;
+  },
+  describe: () => '恢复3生命',
+});
+
+// 午休（D，消耗）：晕眩1，治疗8。设计稿未写费用 → 0 费。代价语言：跳过下一次
+// 行动阶段换一张大治疗账单——「治疗」是效果（回合开始整取回血后清零，见
+// content/effects.js），与晕眩同在下一回合开始生效：睡这一觉 = 下回合动不了，
+// 醒来时回 8 点。
+registerSkill({
+  id: 'noonNap', name: '午休', type: 'normal', pack: 'common', tier: 'D',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'stun', stacks: 1 }));
+    sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'mend', stacks: 8 }));
+    return true;
+  },
+  describe: () => '/effect{晕眩}1，/effect{治疗}8',
 });

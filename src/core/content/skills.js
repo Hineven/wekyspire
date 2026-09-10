@@ -45,7 +45,7 @@ export function enemyTarget(sctx) {
     : firstAliveEnemy(sctx.battleState);
 }
 
-// ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 4 护盾）。
+// ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾，2026-09 稿 4→5）。
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'D', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -53,10 +53,10 @@ registerSkill({
   cardMode: 'normal',
   promotesTo: 'solidShield',
   use(sctx) {
-    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 4 }));
+    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 5 }));
     return true;
   },
-  describe: () => '4护盾',
+  describe: () => '5护盾',
 });
 
 // ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）

@@ -12,9 +12,10 @@
 
 import { registerSkill } from '../skills/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DealDamageInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainActionPointsInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instructions/turn.js';
+import { UseSkillInstruction } from '../instructions/skill.js';
 import { canUseSkill, effectiveHandCount } from '../skills/helpers.js';
 import {
   attackDamage, dealDamage, resolvedDamageText,
@@ -440,3 +441,29 @@ const prepareCard = (id, name, tier, ap, block, promotesTo = null) => registerSk
 prepareCard('prepareMove', '准备出招', 'D', 1, 2, 'prepareMovePlus');
 prepareCard('prepareMovePlus', '准备出招', 'C', 1, 3, 'prepareMoveMaster');
 prepareCard('prepareMoveMaster', '准备出招', 'B', 0, 3);
+
+// 血拳 B/A（1AP，消耗）：打出后，本回合每打 1 卡恢复 1/2 生命。
+// 订阅挂 'turn' 窗口——回合结束自动清扫，「本回合」的时限由窗口语义承载；
+// 排除自身（自身打出时订阅尚未生效，双保险 filter）。治疗走 ApplyHeal 管线。
+const bloodFistCard = (id, name, tier, heal, promotesTo = null) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  promotesTo,
+  use(sctx) {
+    const selfID = sctx.self.uniqueID;
+    sctx.kernel.addSubscription({
+      when: UseSkillInstruction, phase: 'post', window: 'turn',
+      filter: (instr) => instr.skill.uniqueID !== selfID,
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new ApplyHealInstruction({ target: ctx.player, amount: heal }), instr),
+    });
+    return true;
+  },
+  describe: () => `打出后，本回合每打1卡，恢复${heal}生命`,
+  battleDescribe: () => `打出后，本回合每打1卡，恢复${heal}生命`,
+});
+bloodFistCard('bloodFist', '血拳', 'B', 1, 'bloodFistA');
+bloodFistCard('bloodFistA', '血拳', 'A', 2);

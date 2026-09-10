@@ -105,9 +105,9 @@ describe('火球术系列：直伤与抽牌', () => {
 describe('爆裂术系列：蓄能与终止群伤', () => {
   // [defId, 基数, 每魏启系数]
   const cases = [
-    ['smallBurst', 30, 5],
-    ['karadiaBurst', 40, 7],
-    ['qimingBlaze', 50, 9],
+    ['smallBurst', 25, 5],
+    ['karadiaBurst', 35, 7],
+    ['qimingBlaze', 45, 9],
   ];
   for (const [id, base, coeff] of cases) {
     it(`${id}：激活期每消耗1魏启+${coeff}，免费解除打${base}+蓄能群伤`, () => {
@@ -266,7 +266,7 @@ describe('添柴系列：焚卡换魏启', () => {
 });
 
 describe('先发系列：固有消耗直伤 + 抽1', () => {
-  const cases = [['firstShot', 8], ['firstArrow', 14], ['firstFireBall', 22]];
+  const cases = [['firstShot', 8], ['firstArrow', 12], ['firstFireBall', 17]];
   for (const [id, dmg] of cases) {
     it(`${id}：不占抽牌位起手在手，${dmg}伤害并抽1（2026-09 修订：快速咏唱换抽牌）`, () => {
       const d = makeDriver([id, 'punch', 'punch', 'punch', 'punch'], [tank()]);
@@ -462,4 +462,22 @@ describe('边界：魏启不足 / 群伤终局截断', () => {
     expect(d.isFinished()).toBe(true);
     expect(d.state.enemies[0].isDead()).toBe(true);
   });
+});
+
+describe('可燃血液系列（2026-09 稿：防御咏唱——护盾+自施燃烧）', () => {
+  // C/B：1AP；A：0费（设计稿未写费用 → 缺省约定）。激活时一次性护盾+自身燃烧3。
+  for (const [id, shield] of [['kindlingBlood', 8], ['kindlingBloodPlus', 12], ['kindlingBloodMaster', 12]]) {
+    it(`${id}：激活即护盾${shield}+自身燃烧3；免费解除回牌库、燃烧保留`, () => {
+      const d = makeDriver([id, 'punch', 'punch'], [tank()], { maxMana: 4 });
+      const card = toHand(d, id);
+      d.play(id);
+      expect(card.isActivated, id).toBe(true);
+      expect(d.player.shield, id).toBe(shield);
+      expect(d.player.getEffectStacks('burn'), id).toBe(3);
+      d.play(card.uniqueID); // 免费解除（非消耗 → 回牌库）
+      expect(card.isActivated, id).toBe(false);
+      expect(zoneOf(d.state, card.uniqueID), id).toBe('deck');
+      expect(d.player.getEffectStacks('burn'), id).toBe(3); // 解除不回收燃烧
+    });
+  }
 });

@@ -1,6 +1,6 @@
 // 火灵脉·叠炎组合（续）（FIRE_VEIN_CARDS §2.1 后半 + §2.2）。
 // 自焚（自伤换高伤）/ 焰愈（燃烧换恢复）/ 焚原（死亡传播）/ 镜燃（获得反哺）
-// + 咏唱三连（燃心决 / 取暖 / 绝炎）。
+// + 咏唱四连（燃心决 / 取暖系 / 绝炎 / 火焰披风）。
 //
 // 体系语言：燃烧是叠炎组合的资源——自焚把它当代价、焰愈把它当货币、
 // 焚原与镜燃把它当瘟疫（向场上扩散）、绝炎把它变成不可逆的单向棘轮。
@@ -12,7 +12,7 @@
 
 import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies } from '../state/battleState.js';
-import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
@@ -185,14 +185,15 @@ registerSkill({
   battleDescribe: (sctx) => '获得3魏启，/effect{燃烧}7',
 });
 
-// 取暖 C｜1AP，每回合 P5 对所有存活敌人施加 1 层燃烧
+// 取暖/灼目/灼身 C/B/A｜1AP，每回合 P5 对所有存活敌人施加 N 层燃烧
 // （无存活敌人时循环体为空，静默落空）。层数走自然递减（敌方回合开始跳伤后 -1），
-// 是叠炎体系的慢速群压引擎。
-registerSkill({
-  id: 'warmUp', name: '取暖', type: 'fire', tier: 'C', series: 'fireChant',
+// 是叠炎体系的慢速群压引擎。2026-09 设计稿由单卡扩为三阶系列。
+const scorchChantCard = ({ id, name, tier, stacks, promotesTo }) => registerSkill({
+  id, name, type: 'fire', tier, series: 'fireChant',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
+  promotesTo,
   use() { return true; },
   activated: {
     subscriptions: () => [{
@@ -200,13 +201,39 @@ registerSkill({
       react: (instr, ctx) => {
         for (const e of aliveEnemies(ctx.battleState)) {
           ctx.kernel.submitInstruction(
-            new AddEffectInstruction({ target: e, effectId: 'burn', stacks: 1 }), instr);
+            new AddEffectInstruction({ target: e, effectId: 'burn', stacks }), instr);
         }
       },
     }],
   },
-  describe: () => '对所有敌人施加/effect{燃烧}1',
-  battleDescribe: (sctx) => '对所有敌人施加/effect{燃烧}1',
+  describe: () => `对所有敌人施加/effect{燃烧}${stacks}`,
+  battleDescribe: (sctx) => `对所有敌人施加/effect{燃烧}${stacks}`,
+});
+scorchChantCard({ id: 'warmUp', name: '取暖', tier: 'C', stacks: 1, promotesTo: 'dazzleEye' });
+scorchChantCard({ id: 'dazzleEye', name: '灼目', tier: 'B', stacks: 2, promotesTo: 'scorchBody' });
+scorchChantCard({ id: 'scorchBody', name: '灼身', tier: 'A', stacks: 3 });
+
+// 火焰披风 B｜3魏启，咏唱2：每回合 P5 若你正在燃烧，获得 9 护盾
+// （火灵脉防御位：燃烧从代价转为收入，与可燃血液/焰愈同轴）。只读不消耗燃烧。
+registerSkill({
+  id: 'flameCloak', name: '火焰披风', type: 'fire', tier: 'B', series: 'fireChant',
+  cost: { mana: 3, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 2,
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: ChantTriggerInstruction, phase: 'post',
+      react: (instr, ctx) => {
+        if (sctx.player.getEffectStacks('burn') > 0) {
+          ctx.kernel.submitInstruction(
+            new GainShieldInstruction({ target: sctx.player, amount: 9 }), instr);
+        }
+      },
+    }],
+  },
+  describe: () => '若你正在燃烧，获得9护盾',
+  battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
 });
 
 // 绝炎 A｜1AP，任何燃烧层数免疫消耗和下降。

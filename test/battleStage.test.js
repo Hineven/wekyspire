@@ -167,7 +167,7 @@ describe('BattleStage 无头联调', () => {
     expect(stage._views.get(guard.uniqueID).position.y).toBeGreaterThan(-5); // 已离开手牌扇区（≈0，z=30 平面反投影略有透视偏移）
 
     stage.handlePointerUp(b.x, b.y); // 过线松手 → 打出
-    expect(player.shield).toBe(4);
+    expect(player.shield).toBe(5);
     expect(stage.model.getZone(guard.uniqueID)).toBe('deck'); // 停车回牌库底（对象留存）
     expect(stage._views.get(guard.uniqueID).visible).toBe(false);
     const handZoned = [...stage.model.cards.values()].filter(e => e.zone === 'hand');
@@ -637,7 +637,7 @@ describe('BattleStage 无头联调', () => {
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
     bridge.intents.playCard(guard.uniqueID); // 格挡 → 玩家 5 盾
-    expect(bridge.getProjection().player.shield).toBe(4);
+    expect(bridge.getProjection().player.shield).toBe(5);
     const unit = stage._units.get(bridge.getProjection().player.uniqueID);
     let flashed = 0;
     const origFlash = unit.flash.bind(unit);
@@ -663,7 +663,7 @@ describe('BattleStage 无头联调', () => {
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const guard = bridge.getProjection().hand.find(c => c.defId === 'guard');
     bridge.intents.playCard(guard.uniqueID); // 玩家 5 盾
-    expect(bridge.getProjection().player.shield).toBe(4);
+    expect(bridge.getProjection().player.shield).toBe(5);
     const unit = stage._units.get(bridge.getProjection().player.uniqueID);
 
     // 部分吸收（5 盾吸 2）：有吸收火花，无破碎碎粒（粒子具体数量属视觉调参，只断言语义）

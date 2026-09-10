@@ -1,7 +1,7 @@
 // 体修·刀组合（BODY_CULTIVATION_CARDS §2：卡序体系）。
 // 体系哲学：全游戏最高单发伤害，代价是手牌与牌库都是棋盘。
-//   斩系列 —— 局内进阶链（打出即转化升阶；只在牌库中冷却；不可被焚毁）；
-//   花刀   —— 弃牌换伤害（选牌弃 / 弃掉所有无法打出的手牌）；
+//   斩系列 —— 局内进阶链（打出即转化升阶；只在牌库中冷却；不可被焚毁；链首慢热）；
+//   花刀   —— 弃牌换护盾（选牌弃 / 弃掉所有无法打出的手牌，2026-09 稿改防御）；
 //   回旋斩 —— 牌库末抽牌（与牌库顶抽牌形成规划语言）；
 //   飞刀   —— 邻牌献祭（两侧语义统一读「打出那一刻」，helpers.handNeighborsAtPlay）；
 //   藏锋   —— 高伤换滞气（stall：无法抽牌）；
@@ -34,7 +34,7 @@ import {
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { ChantTriggerInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import {
-  attackDamage, resolvedDamageText, gainBlock, addEffect,
+  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   returnToDeckAtTurnEnd, requestHandSelection, requestDeckSelection, selected, isBladeCard,
 } from './cardKit.js';
@@ -109,8 +109,10 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
 
 // 斩链（局内进阶链，全链同一张卡经转化逐阶生长）：等阶按设计稿标注——分海斩/断神斩
 // 未标注，分别取 A（摧山斩与开天斩之间的阶梯顶）与 S（开天斩之上的特级，Z 是诅咒不作攻击阶）。
+// slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却，2026-09 设计稿）；
+// 进阶卡只经局内转化获得，转化继承充能状态，无需重复慢热。
 const SLASH_CHAIN = [
-  { id: 'slash', name: '斩', tier: 'D', damage: 16, cd: 2 },
+  { id: 'slash', name: '斩', tier: 'D', damage: 16, cd: 2, slow: true },
   { id: 'rockCleave', name: '裂石斩', tier: 'C', damage: 30, cd: 3 },
   { id: 'goldCleave', name: '削金斩', tier: 'B', damage: 57, cd: 4 },
   { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 5 },
@@ -139,8 +141,10 @@ function findSlashCard(sctx) {
 // 位置/power 延续）。充能延续修正：battle.md 转化只承诺身份/区域/位置/威力延续
 // （充能按新 def 重置），而斩链的冷却节奏是核心机制——转化前已耗尽的卡，转化后
 // 必须仍是「耗尽、按新阶冷却」，否则打出进阶/出鞘进阶都会白送一轮满充能，cd 递增
-// 的链条设计完全失效。修正在转化的 POST（once 订阅）里做：充能标量是 runtime 数据
-// 而非 zone/资源指令域（与 deckCraft 开刃原型的直改同范式）。已是链尾返回 false。
+// 的链条设计完全失效；反之链首「斩」带慢热（enterBattle 起手 0 充能），出鞘进阶一张
+// **满充能**的斩时不能把慢热重新吃一遍——满充能必须保持满充能。两类修正在转化的
+// POST（once 订阅）里做：充能标量是 runtime 数据而非 zone/资源指令域（与 deckCraft
+// 开刃原型的直改同范式）。已是链尾返回 false。
 function transformSlashCard(sctx, card, parentInstr = null) {
   const def = getSkillDefinition(card.defId);
   if (!def.battlePromotesTo) return false;   // 链尾（断神斩）：已无可进之阶
@@ -150,9 +154,14 @@ function transformSlashCard(sctx, card, parentInstr = null) {
     when: TransformCardInstruction, phase: 'post', window: 'once',
     filter: (instr) => instr.uniqueID === card.uniqueID && instr.result?.toDefId === nextId,
     react: () => {
+      const nextDef = getSkillDefinition(card.defId);
+      const max = nextDef.charges?.max ?? Infinity;
       if (wasExhausted) {
         card.remainingUses = 0;
-        card.currentCooldown = getSkillDefinition(card.defId).charges.cooldownTurns;
+        card.currentCooldown = nextDef.charges.cooldownTurns;
+      } else {
+        card.remainingUses = max;
+        card.currentCooldown = 0;
       }
     },
   });
@@ -178,9 +187,9 @@ function advanceSlashChain(sctx, parentInstr = null) {
 // 只在牌库中冷却充能（cooldownZones: ['deck']——手中攥着不回充，砺刀/花刀是唯二
 // 的手中处理手段）；发动后进阶（转化到链上下一阶，keepPower 延续强化）。
 // 洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改伤害/冷却/等阶）。
-const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
+const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
-  keywords: ['blade'],
+  keywords: ['blade', ...(slow ? ['slowStart'] : [])],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: cd },
   cooldownZones: ['deck'],
@@ -219,8 +228,8 @@ const slashCard = ({ id, name, tier, damage, cd }, nextId) => registerSkill({
       ]);
     },
   }],
-  describe: () => `${damage}伤害，/named{洗入3}/card{ironShard}，/named{斩}`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}，/named{斩}`,
+  describe: () => `${damage}伤害，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
 });
 for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
@@ -243,19 +252,20 @@ registerSkill({
   battleDescribe: (sctx) => resolvedDamageText(sctx, 3),
 });
 
-// ==== 花刀系列（弃牌换伤害）====================================================
+// ==== 花刀系列（弃牌换护盾，2026-09 设计稿由伤害改防御）======================
 
-// 选牌弃：N 段伤害 + 选 K 张手牌丢弃（结算期选牌：段0请求，段1读应答弃牌）。
+// 选牌弃：N 段护盾 + 选 K 张手牌丢弃（结算期选牌：段0请求，段1读应答弃牌）。
 // 自身已离手（pending），选牌候选即其余手牌；空手则跳过请求。
-const cleaveCard = (id, name, tier, damage, hits, picks) => registerSkill({
+// 仍是刀法牌（blade 关键词）——练刀/培植/砺刀系的作用域不变。
+const cleaveCard = (id, name, tier, shield, hits, picks) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
+  cardMode: 'normal', targetMode: 'none',
   use(sctx, stage) {
     if (stage === 0) {
-      for (let i = 0; i < hits; i++) attackDamage(sctx, damage);
+      for (let i = 0; i < hits; i++) gainShield(sctx, shield);
       const hand = sctx.battleState.zones.hand;
       if (hand.length === 0) return true;   // 无牌可选：直接收尾
       sctx.self._pick = requestHandSelection(sctx, {
@@ -269,32 +279,32 @@ const cleaveCard = (id, name, tier, damage, hits, picks) => registerSkill({
     for (const uniqueID of ids) discardCard(sctx, uniqueID);
     return true;
   },
-  describe: () => `${damage}伤害${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
+  describe: () => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
+  battleDescribe: (sctx) => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
 });
 cleaveCard('handCleave', '花刀', 'C', 8, 1, 1);
 cleaveCard('doubleCleave', '二重花刀', 'C', 8, 2, 2);
 cleaveCard('perfectCleave', '完美花刀', 'B', 14, 1, 1);
 
-// 乱舞（银刀/风暴）：丢弃所有无法打出的手牌，每张 N 伤害。快照打出那一刻的卡手牌
+// 乱舞（银刀/风暴）：丢弃所有无法打出的手牌，每张 N 护盾。快照打出那一刻的卡手牌
 // （弃牌触发的呼吸抽牌不会中途扩大范围）。
 const danceCard = (id, name, tier, per) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
+  cardMode: 'normal', targetMode: 'none',
   use(sctx) {
     for (const card of stuckHandCards(sctx)) {
       discardCard(sctx, card.uniqueID);
-      attackDamage(sctx, per);
+      gainShield(sctx, per);
     }
     return true;
   },
-  describe: () => `丢弃所有无法打出的手牌，每张${per}伤害`,
+  describe: () => `丢弃所有无法打出的手牌，每张${per}护盾`,
   battleDescribe: (sctx) => {
     const n = stuckHandCards(sctx).length;
-    return `丢弃所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}伤害`;
+    return `丢弃所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
   },
 });
 danceCard('silverDance', '银刀乱舞', 'B', 8);
@@ -591,12 +601,12 @@ registerSkill({
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
 // （battle.md §12 留白），待设计确认后补回。
 
-// 出鞘（C，设计稿未写费用 → 0费，消耗）：斩进阶，/named{抽出}斩（进阶后的斩链卡若在
-// 牌库，直接移入手牌——满手按 §7.3 落牌库；斩已因耗尽在冷却时，抽出的是一张
-// 「按新阶冷却中」的刀——它只在牌库冷却，手中只能靠砺刀/花刀处理，这是出鞘的
-// 时机博弈）。无斩可进则无事发生（抽出亦落空）。
+// 出鞘（B，2026-09 设计稿 C→B，设计稿未写费用 → 0费，消耗）：斩进阶，
+// /named{抽出}斩（进阶后的斩链卡若在牌库，直接移入手牌——满手按 §7.3 落牌库；
+// 斩已因耗尽在冷却时，抽出的是一张「按新阶冷却中」的刀——它只在牌库冷却，手中只能
+// 靠砺刀/花刀处理，这是出鞘的时机博弈）。无斩可进则无事发生（抽出亦落空）。
 registerSkill({
-  id: 'unsheathe', name: '出鞘', type: 'normal', tier: 'C', series: 'blade',
+  id: 'unsheathe', name: '出鞘', type: 'normal', tier: 'B', series: 'blade',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -756,3 +766,78 @@ const bladeArtCard = (id, name, tier, n) => registerSkill({
 });
 bladeArtCard('bladeArt', '刀法', 'B', 1);
 bladeArtCard('bladeHeart', '刃心', 'A', 2);
+
+// ==== 散卡（2026-09 设计稿新增）================================================
+
+// 快速花刀 C/B（1AP/0AP）：6护盾，/named{换牌}所有无法打出的手牌。
+// 换牌 = 弃牌（手→牌库底）+ 抽 1 补位（走指令，呼吸等弃牌联动照常触发）；
+// 「原地」按原手位把抽到的牌插回（升序插回精确复原原次序）。满手/空库时
+// 抽牌按 DrawCards 管线自然截断，换几张补几张。无卡手牌时护盾照发、换牌空转。
+const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
+  id, name, type: 'normal', tier, series: 'blade',
+  keywords: ['blade'],
+  cost: { mana: 0, actionPoint: ap },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'none',
+  promotesTo,
+  use(sctx, stage) {
+    if (stage === 0) {
+      gainShield(sctx, 6);
+      const hand = sctx.battleState.zones.hand;
+      const stuck = stuckHandCards(sctx);
+      if (stuck.length === 0) return true;
+      sctx.self._swapSlots = stuck.map(c => ({
+        uniqueID: c.uniqueID,
+        index: hand.findIndex(h => h.uniqueID === c.uniqueID),
+      }));
+      for (const slot of sctx.self._swapSlots) {
+        sctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID: slot.uniqueID }));
+      }
+      sctx.self._swapDraw = new DrawCardsInstruction({ count: sctx.self._swapSlots.length, reason: 'swap' });
+      sctx.kernel.submitInstruction(sctx.self._swapDraw);
+      return false;
+    }
+    // 抽牌落地：把抽到的牌按原手位升序插回（精确复原换牌前的手牌次序）
+    const drawn = sctx.self._swapDraw.result.drawn;
+    const slots = sctx.self._swapSlots;
+    sctx.self._swapDraw = null;
+    sctx.self._swapSlots = null;
+    drawn.forEach((card, k) => {
+      if (slots[k] != null) {
+        moveCardTo(sctx, card.uniqueID, 'hand', Math.min(slots[k].index, sctx.battleState.zones.hand.length));
+      }
+    });
+    return true;
+  },
+  describe: () => `6护盾，/named{换牌}所有无法打出的手牌`,
+  battleDescribe: (sctx) => {
+    const n = stuckHandCards(sctx).length;
+    return `6护盾，/named{换牌}所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}`;
+  },
+});
+swapCleaveCard('quickCleave', '快速花刀', 'C', 1, 'quickCleavePlus');
+swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0);
+
+// 快速横刀 C/B（消耗，设计稿未写费用 → 0费）：4/11护盾，/named{抽出}斩。
+// 斩系列的前排防御位搭档：护盾的同时把牌库里的斩链卡拽上手（无斩则抽不出，
+// 护盾照发——与出鞘的「无斩无事发生」同口径）。
+const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkill({
+  id, name, type: 'normal', tier, series: 'blade',
+  keywords: ['exhaust'],
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  promotesTo,
+  use(sctx) {
+    gainShield(sctx, shield);
+    const card = findSlashCard(sctx);
+    if (card && zoneOf(sctx.battleState, card.uniqueID) === 'deck') {
+      moveCardTo(sctx, card.uniqueID, 'hand');
+    }
+    return true;
+  },
+  describe: () => `${shield}护盾，/named{抽出}/card{slash}`,
+  battleDescribe: (sctx) => `${shield}护盾，/named{抽出}/card{slash}（牌库中${findSlashCard(sctx) ? '有' : '无'}）`,
+});
+quickDrawShieldCard('quickDrawShield', '快速横刀', 'C', 4, 'quickDrawShieldPlus');
+quickDrawShieldCard('quickDrawShieldPlus', '快速横刀', 'B', 11);

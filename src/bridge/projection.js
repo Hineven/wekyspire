@@ -53,7 +53,7 @@ export const KEYWORD_LABELS = Object.freeze({
   exhaust: '消耗',
   innate: '固有',
   transient: '短暂',
-  slowStart: '缓启',
+  slowStart: '慢热',
   anchored: '锁定',
 });
 

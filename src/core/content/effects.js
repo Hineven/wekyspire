@@ -4,6 +4,7 @@ import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/com
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
+import AIActInstruction from '../instructions/aiAct.js';
 
 // 燃烧：自己阵营回合开始时受到等于层数的伤害（穿透），然后层数 -1。
 // 行为完全由订阅表达，结算指令里无任何"燃烧"特判。
@@ -296,3 +297,51 @@ function registerBreathEffect({ id, name, enhanced }) {
 registerBreathEffect({ id: 'breath', name: '呼吸', enhanced: false });
 registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', enhanced: true });
 registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', enhanced: true });
+
+// 治疗（EFFECTS.md 2026-09 新增）：回合开始时恢复层数点生命，失去所有层数——
+// 与再生的区别是整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。
+registerEffect({
+  id: 'mend',
+  type: 'buff',
+  stacking: 'count',
+  name: '治疗',
+  description: '回合开始时恢复层数点生命，然后失去所有层数。',
+  icon: '💉',
+  color: 'green',
+  subscriptions: (unit) => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead() && unit.getEffectStacks('mend') > 0,
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('mend');
+      ctx.kernel.submitInstruction(new ApplyHealInstruction({
+        target: unit, amount: stacks,
+      }), instr);
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'mend', stacks: -stacks,
+      }), instr);
+    },
+  }],
+});
+
+// 晕眩（EFFECTS.md 2026-09 新增）：回合行动时跳过行动，层数 -1。
+// AI 单位（敌人/盟友）经 AIActInstruction PRE veto 实现（被取消的结算无联动，A4；
+// 层数 -1 作为 veto 替代指令插入）；玩家的「行动」是回合阶段机的 P4 操作段，
+// 订阅无法 veto 一个 WAIT，由 PlayerTurnInstruction 内按层数跳过（见 turn.js）。
+registerEffect({
+  id: 'stun',
+  type: 'debuff',
+  stacking: 'count',
+  name: '晕眩',
+  description: '回合行动时跳过行动，然后层数减少 1。',
+  icon: '💫',
+  color: 'gray',
+  subscriptions: (unit) => [{
+    when: AIActInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.unit === unit,
+    react: (instr, ctx) => ctx.kernel.veto(instr, 'stun', [
+      new AddEffectInstruction({ target: unit, effectId: 'stun', stacks: -1 }),
+    ]),
+  }],
+});

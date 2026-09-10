@@ -546,3 +546,24 @@ describe('描述双轨与投放', () => {
     for (const id of ['winWithout', 'haveWithout', 'rallyPlus']) expect(bPool).toContain(id);
   });
 });
+
+describe('血拳（2026-09 稿散卡）：打出后本回合打卡回血', () => {
+  it('B/A：本回合每打1卡回1/2血；回合结束失效', () => {
+    for (const [id, heal] of [['bloodFist', 1], ['bloodFistA', 2]]) {
+      const d = new BattleDriver({ deck: [id, 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+      d.start();
+      placeAt(d, id, 0);
+      d.player.hp = 10;
+      d.play(id);                                    // 消耗焚毁，挂 turn 窗口治疗
+      d.play(cardInHand(d, 'punch').uniqueID);
+      expect(d.player.hp, id).toBe(10 + heal);
+      d.play(cardInHand(d, 'punch').uniqueID);
+      expect(d.player.hp, id).toBe(10 + heal * 2);
+      d.endTurn();                                   // turn 窗口随回合结束清扫
+      const p3 = cardInHand(d, 'punch');             // 回合抽牌补回的 punch
+      const hp0 = d.player.hp;
+      d.play(p3.uniqueID);
+      expect(d.player.hp, id).toBe(hp0);             // 下回合打牌不再回血
+    }
+  });
+});

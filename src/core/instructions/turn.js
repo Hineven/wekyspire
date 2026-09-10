@@ -2,6 +2,7 @@ import BattleInstruction, { WAIT } from '../kernel/BattleInstruction.js';
 import { resetTurnHistory, aliveAllies, aliveEnemies } from '../state/battleState.js';
 import { DrawCardsInstruction } from './cards.js';
 import { SweepSkillCooldownInstruction } from './skill.js';
+import { AddEffectInstruction } from './effects.js';
 import { GainManaInstruction } from './resources.js';
 import AIActInstruction from './aiAct.js';
 import { getAllyDefinition } from '../allies/registry.js';
@@ -74,6 +75,17 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.kernel.submitInstruction(new PlayerTurnStartInstruction(), this);
         return false;
       case 1:
+        // 晕眩（效果 'stun'）：本回合跳过行动段（P4）。判定固定在回合开始的这一拍
+        // （回合开始效果 tick 之后读层数 + 记旗标 + 层数 -1）——不能放在 case 3：
+        // WAIT 续跑（每次出牌后 kernel.resume）会反复重入 case 3，当回合内新获得的
+        // 晕眩（如打出午休）会立刻掐断当前回合。AI 单位的晕眩由效果订阅 veto
+        // AIActInstruction 实现（content/effects.js）；玩家的「行动」是 WAIT 段，
+        // 订阅无法 veto，只能由阶段机按旗标短路。
+        this._stunned = ctx.player.getEffectStacks('stun') > 0;
+        if (this._stunned) {
+          ctx.kernel.submitInstruction(
+            new AddEffectInstruction({ target: ctx.player, effectId: 'stun', stacks: -1 }), this);
+        }
         ctx.kernel.submitInstruction(new SweepSkillCooldownInstruction(), this);
         return false;
       case 2:
@@ -86,6 +98,7 @@ export class PlayerTurnInstruction extends BattleInstruction {
         }
         return false;
       case 3:
+        if (this._stunned) return false;   // 晕眩：跳过行动段（P5 咏唱/P7 盟友/P8 照常）
         if (this.endRequested) return false;
         return WAIT;
       case 4:

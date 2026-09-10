@@ -55,6 +55,13 @@ function toHand(d, defId) {
   return card;
 }
 
+// 直接充满充能（慢热/冷却中的卡，测试需要立刻打出时用）
+function charge(rt) {
+  rt.remainingUses = getSkillDefinition(rt.defId).charges?.max ?? 1;
+  rt.currentCooldown = 0;
+  return rt;
+}
+
 // 卡牌 sctx（battleDescribe 断言用）
 function sctxOf(d, rt) {
   return makeSkillCtx(d.ctx, rt);
@@ -65,6 +72,7 @@ describe('斩系列：局内进阶链', () => {
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const slash = toHand(d, 'slash');
+    charge(slash);                                            // 慢热开局 0 充能，测试直接充满
     const hp0 = enemyHp(d);
     d.play('slash');
     expect(hp0 - enemyHp(d)).toBe(16);
@@ -74,6 +82,24 @@ describe('斩系列：局内进阶链', () => {
     expect(d.state.zones.deck.filter(c => c.defId === 'ironShard')).toHaveLength(3); // 洗入3碎铁
     expect(slash.remainingUses).toBe(0);                          // 进阶不白送充能：仍是「刚打出」态
     expect(slash.currentCooldown).toBe(3);                        // 按新阶冷却计时
+  });
+
+  it('慢热：开局 0 充能（起手在手也卡着），牌库中推进 2 回合后回充（2026-09 稿）', () => {
+    const d = new BattleDriver({
+      deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5,
+      config: { drawPerTurn: 0 },                     // 关掉回合抽牌：斩留在牌库冷却
+    });
+    d.start();
+    const slash = findCard(d, 'slash');
+    expect(slash.remainingUses).toBe(0);                      // slowStart：起手无充能
+    expect(canUseSkill(d.ctx, slash)).toBe(false);            // 卡着不可打出
+    moveCard(d.state, slash.uniqueID, 'deck');                // 洗回牌库（换牌/乱舞的实际路径）
+    d.endTurn();                                              // 回合 2 P2：牌库冷却 2→1
+    expect(slash.currentCooldown).toBe(1);
+    expect(slash.remainingUses).toBe(0);
+    d.endTurn();                                              // 回合 3 P2：冷却 1→0，回充
+    expect(slash.remainingUses).toBe(1);
+    expect(slash.currentCooldown).toBe(0);
   });
 
   it('链上各阶：数值/冷却逐阶 +1，打出持续进阶到下一阶', () => {
@@ -154,6 +180,7 @@ describe('斩系列：局内进阶链', () => {
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const slash = toHand(d, 'slash');
+    charge(slash);
     slash.power = 3;
     const hp0 = enemyHp(d);
     d.play('slash');
@@ -162,13 +189,14 @@ describe('斩系列：局内进阶链', () => {
     expect(slash.power).toBe(3);                       // 强化随转化延续
   });
 
-  it('描述双轨：应用前纯文本，应用后带 /named{斩} 热区', () => {
+  it('描述双轨：应用前纯文本，应用后带 /named{斩} 热区（含慢热）', () => {
     const def = getSkillDefinition('slash');
-    expect(def.describe()).toBe('16伤害，/named{洗入3}/card{ironShard}，/named{斩}');
+    const text = '16伤害，/named{洗入3}/card{ironShard}，/named{慢热}，/named{斩}';
+    expect(def.describe()).toBe(text);
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const rt = toHand(d, 'slash');
-    expect(def.battleDescribe(sctxOf(d, rt))).toBe('16伤害，/named{洗入3}/card{ironShard}，/named{斩}');
+    expect(def.battleDescribe(sctxOf(d, rt))).toBe(text);
   });
 });
 
@@ -176,6 +204,7 @@ describe('碎铁（斩衍生牌）', () => {
   it('3伤害，打出即消耗焚毁；不入奖励池', () => {
     const d = new BattleDriver({ deck: ['slash', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
+    charge(toHand(d, 'slash'));
     d.play('slash');
     const shard = d.state.zones.deck.find(c => c.defId === 'ironShard');
     moveCard(d.state, shard.uniqueID, 'hand');
@@ -187,15 +216,16 @@ describe('碎铁（斩衍生牌）', () => {
   });
 });
 
-describe('花刀系列：弃牌换伤害', () => {
-  it('花刀：8伤害 + 结算期选1张手牌丢弃', () => {
+describe('花刀系列：弃牌换护盾（2026-09 稿改防御）', () => {
+  it('花刀：8护盾 + 结算期选1张手牌丢弃', () => {
     const d = new BattleDriver({ deck: ['handCleave', 'punch', 'guard', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'handCleave');
     const victim = d.state.zones.hand.find(c => c.defId !== 'handCleave');
     const hp0 = enemyHp(d);
     d.play('handCleave');
-    expect(hp0 - enemyHp(d)).toBe(8);
+    expect(d.player.shield).toBe(8);                   // 8 护盾，不再造成伤害
+    expect(hp0 - enemyHp(d)).toBe(0);
     expect(d.pendingInput?.request.kind).toBe('selectHandCard');
     d.respond([victim.uniqueID]);
     expect(zoneOf(d.state, victim.uniqueID)).toBe('deck');   // 弃牌 = 落牌库底
@@ -203,26 +233,24 @@ describe('花刀系列：弃牌换伤害', () => {
     expect(d.isWaiting()).toBe(true);
   });
 
-  it('二重花刀：8伤害×2 + 选2张丢弃', () => {
+  it('二重花刀：8护盾×2 + 选2张丢弃', () => {
     const d = new BattleDriver({ deck: ['doubleCleave', 'punch', 'guard', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'doubleCleave');
     const victims = d.state.zones.hand.filter(c => c.defId !== 'doubleCleave').slice(0, 2);
-    const hp0 = enemyHp(d);
     d.play('doubleCleave');
-    expect(hp0 - enemyHp(d)).toBe(16);
+    expect(d.player.shield).toBe(16);
     d.respond(victims.map(c => c.uniqueID));
     for (const v of victims) expect(zoneOf(d.state, v.uniqueID)).toBe('deck');
   });
 
-  it('完美花刀：14伤害 + 选1张丢弃', () => {
+  it('完美花刀：14护盾 + 选1张丢弃', () => {
     const d = new BattleDriver({ deck: ['perfectCleave', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'perfectCleave');
     const victim = d.state.zones.hand.find(c => c.defId !== 'perfectCleave');
-    const hp0 = enemyHp(d);
     d.play('perfectCleave');
-    expect(hp0 - enemyHp(d)).toBe(14);
+    expect(d.player.shield).toBe(14);
     d.respond([victim.uniqueID]);
     expect(zoneOf(d.state, victim.uniqueID)).toBe('deck');
   });
@@ -234,13 +262,12 @@ describe('花刀系列：弃牌换伤害', () => {
     for (const other of [...d.state.zones.hand.filter(c => c.defId !== 'handCleave')]) {
       moveCard(d.state, other.uniqueID, 'deck');
     }
-    const hp0 = enemyHp(d);
     d.play('handCleave');
-    expect(hp0 - enemyHp(d)).toBe(8);
+    expect(d.player.shield).toBe(8);
     expect(d.calls('requestInput')).toHaveLength(0);
   });
 
-  it('银刀乱舞：丢弃所有无法打出的手牌，每张8伤害；可打出的不动', () => {
+  it('银刀乱舞：丢弃所有无法打出的手牌，每张8护盾；可打出的不动', () => {
     const d = new BattleDriver({ deck: ['silverDance', 'cycloneSlash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     const blade = toHand(d, 'cycloneSlash');
@@ -249,13 +276,14 @@ describe('花刀系列：弃牌换伤害', () => {
     toHand(d, 'silverDance');
     const hp0 = enemyHp(d);
     d.play('silverDance');
-    expect(hp0 - enemyHp(d)).toBe(8);              // 弃1张卡手刀 → 8伤害
+    expect(d.player.shield).toBe(8);               // 弃1张卡手刀 → 8护盾
+    expect(hp0 - enemyHp(d)).toBe(0);
     expect(zoneOf(d.state, blade.uniqueID)).toBe('deck');   // 卡手刀回牌库（去那冷却）
     expect(d.state.zones.hand.some(c => c.defId === 'punch')).toBe(true);
     expect(d.calls('requestInput')).toHaveLength(0);
   });
 
-  it('风暴刀舞：每张13伤害', () => {
+  it('风暴刀舞：每张13护盾', () => {
     const d = new BattleDriver({ deck: ['stormDance', 'cycloneSlash', 'fineDagger', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     for (const defId of ['cycloneSlash', 'fineDagger']) {
@@ -264,12 +292,11 @@ describe('花刀系列：弃牌换伤害', () => {
       blade.currentCooldown = 1;
     }
     toHand(d, 'stormDance');
-    const hp0 = enemyHp(d);
     d.play('stormDance');
-    expect(hp0 - enemyHp(d)).toBe(26);             // 2 张卡手牌 × 13
+    expect(d.player.shield).toBe(26);              // 2 张卡手牌 × 13
   });
 
-  it('优雅刀舞：丢弃所有无法打出的手牌，每张格挡1，不造成伤害', () => {
+  it('优雅刀舞：丢弃所有无法打出的手牌，每张格挡1，不获得护盾', () => {
     const d = new BattleDriver({ deck: ['graceDance', 'cycloneSlash', 'fineDagger', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     for (const defId of ['cycloneSlash', 'fineDagger']) {
@@ -278,9 +305,8 @@ describe('花刀系列：弃牌换伤害', () => {
       blade.currentCooldown = 1;
     }
     toHand(d, 'graceDance');
-    const hp0 = enemyHp(d);
     d.play('graceDance');
-    expect(hp0 - enemyHp(d)).toBe(0);
+    expect(d.player.shield).toBe(0);
     expect(d.player.getEffectStacks('block')).toBe(2);
   });
 
@@ -288,10 +314,60 @@ describe('花刀系列：弃牌换伤害', () => {
     const d = new BattleDriver({ deck: ['silverDance', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'silverDance');
-    const hp0 = enemyHp(d);
     d.play('silverDance');
-    expect(hp0 - enemyHp(d)).toBe(0);
+    expect(d.player.shield).toBe(0);
     expect(d.state.zones.hand.filter(c => c.defId === 'punch')).toHaveLength(3);   // 只少了自己
+  });
+});
+
+describe('快速花刀/快速横刀（2026-09 稿散卡）', () => {
+  it('快速花刀：6护盾 + 换掉所有无法打出的手牌（抽新牌原地补位）', () => {
+    const d = new BattleDriver({
+      deck: ['quickCleave', 'cycloneSlash', 'fineDagger', 'punch', 'guard', 'guard'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 3 },
+    });
+    d.start();
+    const stuck1 = toHand(d, 'cycloneSlash');
+    stuck1.remainingUses = 0; stuck1.currentCooldown = 1;   // 卡手刀
+    const stuck2 = toHand(d, 'fineDagger');
+    stuck2.remainingUses = 0; stuck2.currentCooldown = 1;   // 顽固不满足也是卡手
+    toHand(d, 'quickCleave');
+    const handSnapshot = [...d.state.zones.hand];
+    const stuckIdx = [0, 1].map(i => handSnapshot.findIndex(c => c === (i === 0 ? stuck1 : stuck2)));
+    d.play('quickCleave');
+    expect(d.player.shield).toBe(6);
+    expect(zoneOf(d.state, stuck1.uniqueID)).toBe('deck');  // 换掉 = 弃入牌库
+    expect(zoneOf(d.state, stuck2.uniqueID)).toBe('deck');
+    expect(d.calls('requestInput')).toHaveLength(0);        // 换牌是自动的，无需选牌
+    // 补位的新牌落在原手位（升序插回复原次序）
+    expect(d.state.zones.hand).toHaveLength(handSnapshot.length - 1); // 少了自身（回牌库）
+    for (const idx of stuckIdx) {
+      expect(zoneOf(d.state, d.state.zones.hand[Math.min(idx, d.state.zones.hand.length - 1)].uniqueID)).toBe('hand');
+    }
+  });
+
+  it('快速花刀：无卡手牌时只发护盾，换牌空转', () => {
+    const d = new BattleDriver({ deck: ['quickCleave', 'punch', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+    d.start();
+    toHand(d, 'quickCleave');
+    const before = [...d.state.zones.hand];
+    d.play('quickCleave');
+    expect(d.player.shield).toBe(6);
+    expect(d.state.zones.hand.filter(c => before.includes(c))).toHaveLength(before.length - 1); // 只少自身
+  });
+
+  it('快速横刀：4/11护盾，抽出牌库中的斩', () => {
+    for (const [id, shield] of [['quickDrawShield', 4], ['quickDrawShieldPlus', 11]]) {
+      const d = new BattleDriver({ deck: [id, 'slash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+      d.start();
+      const slash = findCard(d, 'slash');
+      if (zoneOf(d.state, slash.uniqueID) === 'hand') moveCard(d.state, slash.uniqueID, 'deck');
+      toHand(d, id);
+      d.play(id);
+      expect(d.player.shield, id).toBe(shield);
+      expect(zoneOf(d.state, slash.uniqueID), id).toBe('hand');   // 抽出斩
+      expect(zoneOf(d.state, findCard(d, id).uniqueID), id).toBe('burnt');   // 消耗
+    }
   });
 });
 
@@ -605,6 +681,21 @@ describe('开刃系列：斩进阶', () => {
     expect(d.state.zones.burnt.some(c => c.defId === 'unsheathe')).toBe(true);   // 消耗
   });
 
+  it('出鞘进阶满充能的斩：进阶后仍满充能（不重吃慢热，2026-09 稿）', () => {
+    const d = new BattleDriver({ deck: ['unsheathe', 'slash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+    d.start();
+    const slash = toHand(d, 'slash');
+    charge(slash);                                        // 满充能的斩
+    moveCard(d.state, slash.uniqueID, 'deck');
+    toHand(d, 'unsheathe');
+    d.play('unsheathe');
+    expect(slash.defId).toBe('rockCleave');
+    expect(zoneOf(d.state, slash.uniqueID)).toBe('hand');
+    expect(slash.remainingUses).toBe(1);                  // 满充能保持
+    expect(slash.currentCooldown).toBe(0);
+    expect(canUseSkill(d.ctx, slash)).toBe(true);         // 抽到即可打出
+  });
+
   it('含刃术：咏唱3，触发时手牌少于2 → 斩进阶 + 此卡焚毁', () => {
     const d = new BattleDriver({ deck: ['edgeBreath', 'slash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
@@ -758,12 +849,20 @@ describe('刀法咏唱：抽弃循环', () => {
 describe('刀卡投放', () => {
   it('奖励池：斩（D）入池作链条起点；进阶卡（D 以上）只经局内转化，不入池', () => {
     const pool = spawnableCardPool().map(def => def.id);
-    for (const id of ['slash', 'handCleave', 'doubleCleave', 'cycloneSlash', 'flyingDagger', 'storeEdge', 'whetstone', 'unsheathe']) {
+    for (const id of ['slash', 'handCleave', 'doubleCleave', 'cycloneSlash', 'flyingDagger', 'storeEdge', 'whetstone', 'quickCleave', 'quickDrawShield']) {
       expect(pool).toContain(id);
     }
     expect(pool).not.toContain('ironShard');              // 衍生牌
     for (const id of ['rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave']) {
       expect(pool).not.toContain(id);                     // 斩链进阶卡：仅局内进阶
     }
+  });
+
+  it('奖励池等阶门禁：出鞘 2026-09 稿 C→B——体修 0 级不可见，1 级起入池', () => {
+    expect(spawnableCardPool().map(def => def.id)).not.toContain('unsheathe');
+    const leveled = spawnableCardPool({ player: { bodyLevel: 1 } }).map(def => def.id);
+    expect(leveled).toContain('unsheathe');
+    expect(leveled).toContain('quickCleavePlus');         // 快速花刀 B
+    expect(leveled).toContain('quickDrawShieldPlus');     // 快速横刀 B
   });
 });

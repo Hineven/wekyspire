@@ -4,6 +4,7 @@ import { BattleDriver } from '../src/core/sdk/driver.js';
 import { getEnemyDefinition } from '../src/core/enemies/registry.js';
 import { zoneOf, moveCard } from '../src/core/state/battleState.js';
 import { canUseSkill } from '../src/core/skills/helpers.js';
+import { AddEffectInstruction } from '../src/core/instructions/effects.js';
 
 // 新内容结算验证：虚形拳系列（唯一手牌条件）与 COMMON 通用单卡（汲取/激发/魏启罐）。
 
@@ -103,5 +104,86 @@ describe('COMMON：汲取/激发/魏启罐', () => {
     expect(d.player.mana).toBe(0); // 支付 2MP
     expect(d.player.actionPoints).toBe(ap0 + 1); // (ap0-1) + 2
     expect(zoneOf(d.state, stim.uniqueID)).toBe('burnt'); // 消耗
+  });
+});
+
+// 龟缩木桩（rockshell：首个敌方回合只上盾，第二个敌方回合攻击 10）——
+// 跨回合类用例需要确定的敌方伤害节奏
+function turtle() {
+  const e = getEnemyDefinition('rockshell').createUnit();
+  e.maxHp = 300;
+  e.hp = 300;
+  return e;
+}
+
+describe('灵能护盾系列（2026-09 稿：MP 换纯护盾）', () => {
+  it('灵力护盾 C / 灵能护盾 B：2MP，冷却1：12/18 护盾', () => {
+    for (const [id, shield] of [['psiShield', 12], ['greaterPsiShield', 18]]) {
+      const d = new BattleDriver({
+        deck: [id, 'punch', 'punch'], enemies: [tank()], seed: 5, player: { maxMana: 4 },
+      });
+      d.start(); // 魏启 = floor(4/2) = 2，回合开始 +1 = 3
+      toHand(d, id);
+      d.play(id);
+      expect(d.player.shield, id).toBe(shield);
+      expect(d.player.mana, id).toBe(1); // 3 - 2MP
+    }
+  });
+});
+
+describe('新散卡（2026-09 稿）：早有防备 / 盼盼小面包 / 午休', () => {
+  it('早有防备：固有——不占抽牌位起手在手；1MP 9护盾，消耗', () => {
+    const d = new BattleDriver({
+      deck: ['prePrepared', 'punch', 'punch'], enemies: [tank()], seed: 5,
+      player: { maxMana: 2 }, config: { initialDraw: 0 },
+    });
+    d.start();
+    expect(d.state.zones.hand.map(c => c.defId)).toEqual(['prePrepared']); // 固有起手在手
+    d.play('prePrepared');
+    expect(d.player.shield).toBe(9);
+    expect(d.player.mana).toBe(1); // (1 + 回合恢复1) - 1MP
+    expect(d.state.zones.burnt.some(c => c.defId === 'prePrepared')).toBe(true);
+  });
+
+  it('盼盼小面包：1AP 恢复3生命', () => {
+    const d = new BattleDriver({ deck: ['panpanBread', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+    d.start();
+    toHand(d, 'panpanBread');
+    d.player.hp = 10;
+    d.play('panpanBread');
+    expect(d.player.hp).toBe(13);
+    expect(d.state.zones.burnt.some(c => c.defId === 'panpanBread')).toBe(true);
+  });
+
+  it('午休：晕眩1 + 治疗8——下回合开始回血清层，且行动段被跳过', () => {
+    const d = new BattleDriver({
+      deck: ['noonNap', 'punch', 'punch'], enemies: [turtle()], seed: 5,
+      config: { drawPerTurn: 0 },
+    });
+    d.start();
+    toHand(d, 'noonNap');
+    d.play('noonNap');
+    expect(d.player.getEffectStacks('stun')).toBe(1);
+    expect(d.player.getEffectStacks('mend')).toBe(8);
+    d.player.hp = 10;
+    // 敌方回合1（上盾）→ 回合2开始：治疗+8 整取清零 + 晕眩跳过行动段（无 WAIT）
+    // → 敌方回合2（攻击10）→ 回合3 等待玩家输入
+    d.endTurn();
+    expect(d.player.hp).toBe(10 + 8 - 10);
+    expect(d.state.turn.count).toBe(3);
+    expect(d.player.getEffectStacks('stun')).toBe(0);
+    expect(d.player.getEffect('mend')).toBeNull();
+  });
+
+  it('晕眩（敌方单位）：被晕眩的敌人跳过行动，层数-1', () => {
+    const d = new BattleDriver({ deck: ['punch', 'punch', 'punch'], enemies: [turtle()], seed: 5 });
+    d.start();
+    const enemy = d.state.enemies[0];
+    d.dispatch(new AddEffectInstruction({ target: enemy, effectId: 'stun', stacks: 1 }));
+    const hp0 = d.player.hp;
+    d.endTurn();
+    expect(d.player.hp).toBe(hp0);                    // 被晕住：本回合没打过来
+    expect(enemy.shield).toBe(0);                     // 也没上盾（行动整个跳过）
+    expect(enemy.getEffectStacks('stun')).toBe(0);    // 跳过行动消耗 1 层
   });
 });

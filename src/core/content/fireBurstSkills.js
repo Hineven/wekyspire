@@ -1,5 +1,5 @@
 // 火灵脉·爆炎组合 + 通用散卡（FIRE_VEIN_CARDS §1、§3）。
-// 火球术 / 爆裂术 / 凝焰 / 高热 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·放手一搏
+// 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·放手一搏
 // + 通用（火源归一/火墙/含焰术/膨胀/火焰精通/火焰亲和）。
 //
 // 数值口径备注（全文件通用）：
@@ -133,9 +133,9 @@ function burstChantCard({ id, name, tier, base, perMana }) {
     battleDescribe: () => `每消耗1魏启，/named{终止}伤害+${perMana}；/named{终止}：${base}群伤`,
   });
 }
-burstChantCard({ id: 'smallBurst', name: '小爆裂术', tier: 'B', base: 30, perMana: 5 });
-burstChantCard({ id: 'karadiaBurst', name: '卡拉狄亚爆裂术', tier: 'A', base: 40, perMana: 7 });
-burstChantCard({ id: 'qimingBlaze', name: '齐明天炎', tier: 'S', base: 50, perMana: 9 });
+burstChantCard({ id: 'smallBurst', name: '小爆裂术', tier: 'B', base: 25, perMana: 5 });
+burstChantCard({ id: 'karadiaBurst', name: '卡拉狄亚爆裂术', tier: 'A', base: 35, perMana: 7 });
+burstChantCard({ id: 'qimingBlaze', name: '齐明天炎', tier: 'S', base: 45, perMana: 9 });
 
 // ====================================================================
 // §1.1 凝焰系列（X魏启 = 消耗所有现有魏启，NAMED「消耗为X」）
@@ -197,6 +197,36 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
 }
 feverChantCard({ id: 'fever', name: '发烧', tier: 'C', naqi: 1, promotesTo: 'highFever' });
 feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
+
+// ====================================================================
+// §1.1 可燃系列（防御：护盾 + 自施燃烧，2026-09 设计稿新增）
+// ====================================================================
+
+// 可燃血液工厂。与高热系列同构：激活时一次性 护盾 + 自施燃烧（副作用语言），
+// 解除再打出免费、回牌库（非消耗）——每轮重新点亮各结算一次，循环防御泵。
+// 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
+// 设计稿 A 阶未写费用 → 0 费；咏唱值未写 → 按默认咏唱2计手牌压力。
+function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
+  registerSkill({
+    id, name, type: 'fire', tier, series: 'kindling',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'chant', chantWeight: 2,
+    promotesTo,
+    use() { return true; },
+    activated: {
+      onEnable: (sctx) => {
+        gainShield(sctx, shield);
+        addEffect(sctx, 'burn', 3);
+      },
+    },
+    describe: () => `护盾${shield}，自身/effect{燃烧}3`,
+    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
+  });
+}
+kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 8, ap: 1, promotesTo: 'kindlingBloodPlus' });
+kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 12, ap: 1, promotesTo: 'kindlingBloodMaster' });
+kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 12, ap: 0 });
 
 // ====================================================================
 // §1.1 火雨系列（低耗群伤）
@@ -344,8 +374,8 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
   });
 }
 firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 8, promotesTo: 'firstArrow' });
-firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 14, promotesTo: 'firstFireBall' });
-firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 22 });
+firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 12, promotesTo: 'firstFireBall' });
+firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 17 });
 
 // ====================================================================
 // §1.1 散卡·忍耐（燃烧受伤转魏启）

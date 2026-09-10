@@ -5,6 +5,7 @@ import { zoneOf } from '../src/core/state/battleState.js';
 import Enemy from '../src/core/state/enemy.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
+import { ChantTriggerInstruction } from '../src/core/instructions/turn.js';
 
 // ---- 火灵脉·叠炎（续）：自焚 / 焰愈 / 焚原 / 镜燃 / 咏唱（燃心决/取暖/绝炎）----
 // 全程 BattleDriver 驱动真实结算（不 mock Core）。
@@ -221,5 +222,41 @@ describe('咏唱（§2.2）', () => {
     expect(slime.getEffectStacks('burn')).toBe(5);
     expect(slime.hp).toBe(20 - 5 * 2);
     expect(d.player.hp).toBe(30 - 6 - 5 * 2);
+  });
+});
+
+describe('取暖系列三阶（2026-09 稿：取暖/灼目/灼身）', () => {
+  // 层数 = 敌方回合开始跳伤后 -1：P5 施加 N → 敌方 E1 跳 N 伤、层数归 N-1
+  for (const [id, n] of [['warmUp', 1], ['dazzleEye', 2], ['scorchBody', 3]]) {
+    it(`${id}：P5 对所有敌人施加燃烧${n}`, () => {
+      const d = new BattleDriver({
+        deck: [id], enemies: ['slime', 'slime'], seed: 5, config: { initialDraw: 1 },
+      });
+      const [s1, s2] = d.state.enemies;
+      d.start();
+      d.play(id);
+      d.endTurn(); // P5 施加 → 敌方 E1 各跳 N 伤、层数 -1
+      expect(s1.hp, id).toBe(20 - n);
+      expect(s2.hp, id).toBe(20 - n);
+      expect(s1.getEffectStacks('burn'), id).toBe(n - 1);
+      expect(s2.getEffectStacks('burn'), id).toBe(n - 1);
+    });
+  }
+});
+
+describe('火焰披风（2026-09 稿：燃烧换护盾咏唱）', () => {
+  it('每回合 P5：正在燃烧则获 9 护盾，未燃烧则无护盾', () => {
+    const d = new BattleDriver({
+      deck: ['flameCloak'], enemies: ['slime'], seed: 5, config: { initialDraw: 1, drawPerTurn: 0 },
+      player: { maxMana: 8 },
+    });
+    d.start();
+    d.play('flameCloak'); // 3魏启点亮
+    expect(d.state.zones.hand[0].isActivated).toBe(true);
+    d.dispatch(new ChantTriggerInstruction()); // P5 等价：未燃烧 → 无护盾
+    expect(d.player.shield).toBe(0);
+    d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'burn', stacks: 2 }));
+    d.dispatch(new ChantTriggerInstruction()); // P5 等价：正在燃烧 → +9 护盾
+    expect(d.player.shield).toBe(9);
   });
 });
