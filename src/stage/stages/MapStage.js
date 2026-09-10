@@ -3,8 +3,17 @@ import gsap from 'gsap';
 import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
+import { PanelObject } from '../objects/PanelObject.js';
+import { buildPrepPanel } from '../panels/prepPanel.js';
+import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
+
+// 快照 kind → widget builder（一个面板一个；未登记 = 该阶段还没有 Three 面板，
+// 对应 Vue 面板仍在渲染——迁移是逐面板推进的）
+const PANEL_BUILDERS = {
+  prep: buildPrepPanel,
+};
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
 // 夜空背景 + 点星 + 右侧塔楼侧视图（只看当前层附近一截——看不到顶底）+ 高亮当前层。
@@ -50,11 +59,87 @@ export class MapStage {
     this._applyAvatar();
 
     this._unsubTick = null;
+    this._picker = null;   // 输入通道（attachInput 注入：stageManager + 总线）
+    this._panel = null;    // 当前休息阶段面板对象（setPanel 装配；null = 无面板）
+    this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
+    this._downHit = null;  // 按压命中（抬起时配对，防"按下 A 抬起 B"误触发）
     this.setFloor(1, totalFloors);
   }
 
   get statusBar() { return this._statusBar; }
   get topBar() { return this._topBar; }
+  get panel() { return this._panel; }
+
+  // ---- 休息阶段面板 ----
+  /** 意图上行出口（runController 注入：Stage 只上报「谁被点了」，不解释语义）。 */
+  setPanelIntentHandler(fn) { this._onIntent = fn; }
+
+  /**
+   * 装配/更新/清除当前阶段面板。
+   * 数据是**纯快照**（core/run/panelSnapshot.js 产出）：本舞台不读任何 run 状态。
+   * 未登记的 kind → 不装配（该面板还在 Vue 侧）。
+   */
+  setPanel(snap) {
+    const builder = snap && PANEL_BUILDERS[snap.kind];
+    if (!builder) { this._removePanel(); return; }
+    if (!this._panel || this._panel.kind !== snap.kind) {
+      this._removePanel();
+      this._panel = new PanelObject({ onIntent: (a) => this._onIntent?.(a) });
+      this.uiScene.add(this._panel);
+    }
+    this._panel.attachPicker(this._picker);
+    this._panel.setWidgets(snap.kind, builder(snap));
+  }
+
+  _removePanel() {
+    if (!this._panel) return;
+    this.uiScene.remove(this._panel);
+    this._panel.dispose();
+    this._panel = null;
+  }
+
+  // ---- 输入通道 ----
+  // 与 BattleStage 同构：Picker 用 uiCamera 射线拾取 uiScene 内的 UI 对象。
+  // 装配点是 Shell（App.vue，它同时持有 stageManager 与 runController 的 animBus）；
+  // 舞台自身不关心总线来源。
+  attachInput({ stageManager, bus } = {}) {
+    this._picker = stageManager ? new Picker({ stageManager, bus }) : null;
+    this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
+  }
+
+  detachInput() {
+    this._panel?.attachPicker?.(null);
+    this._picker = null;
+    this._downHit = null;
+  }
+
+  get picker() { return this._picker; }
+
+  /** 指针移动：hover 拾取（Picker 内部发 tooltip:*）+ 面板悬浮态。 */
+  handlePointerMove(x, y) {
+    if (!this._picker) return;
+    this.uiScene.updateMatrixWorld(true);
+    const hit = this._picker.hover(x, y);
+    this._panel?.onHover?.(hit);
+  }
+
+  /** 按压：只记录命中，交互一律在抬起时判定（与 BattleStage 的查看器同律）。 */
+  handlePointerDown(x, y) {
+    if (!this._picker) return;
+    this.uiScene.updateMatrixWorld(true);
+    this._downHit = this._picker.pick(x, y);
+  }
+
+  /** 抬起：按压与抬起命中一致才算一次点击（防拖出/误触）。 */
+  handlePointerUp(x, y) {
+    if (!this._picker) return;
+    this.uiScene.updateMatrixWorld(true);
+    const hit = this._picker.pick(x, y);
+    const down = this._downHit;
+    this._downHit = null;
+    if (!down || !hit || down.kind !== hit.kind || down.id !== hit.id) return;
+    this._panel?.onClick?.(hit);
+  }
 
   /**
    * 同步状态栏数值（run 层每次阶段迁移后由编排器调用）。
@@ -96,6 +181,8 @@ export class MapStage {
   dispose() {
     this.onExit();
     this._unsubArt?.(); // 共享缓存订阅摘除（防幽灵舞台补挂头像）
+    this._removePanel();
+    this.detachInput();
     for (const child of [...this._tower.children]) { // 塔身层块（与 setFloor 重建同律）
       child.geometry.dispose();
       child.material.dispose();

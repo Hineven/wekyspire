@@ -1,0 +1,121 @@
+// 休息阶段面板的浏览器视觉门（uiGallery.html）。
+// 与 propGallery / roomGallery 同范式：独立页面 + 查询参数调参，用于在浏览器里
+// 验收面板视觉与交互，不必真的玩到那一层。
+//
+// knobs：
+//   ?panel=prep        面板种类（当前只有 prep；后续随迁移增加）
+//   ?seed=123          样本 run 的种子
+//   ?relics=warHorn,springFlask   预置遗物（逗号分隔）
+//   ?equip=warHorn     预置装备
+//   ?floor=7           楼层（影响距 Boss 提示）
+//
+// 交互真的通：点击面板按钮 → 走 MapStage 的意图出口 → 落到 core 的 prep 函数 →
+// 重推快照。页面左上角显示最后一次意图，可据此确认路由链路。
+
+import '../core/content/index.js';
+import { StageManager } from '../stage/StageManager.js';
+import { MapStage } from '../stage/stages/MapStage.js';
+import { createRun } from '../core/run/runFlow.js';
+import { prepSnapshot } from '../core/run/panelSnapshot.js';
+import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
+import { attachTooltipForwarding } from '../shell/tooltipForward.js';
+import { tooltipState } from '../shell/tooltipHub.js';
+import mitt from 'mitt';
+
+const q = new URLSearchParams(location.search);
+const opt = (k, d) => q.get(k) ?? d;
+
+const canvas = document.createElement('canvas');
+canvas.id = 'gallery-canvas';
+canvas.style.cssText = 'display:block;position:absolute;inset:0';
+document.body.appendChild(canvas);
+
+const overlay = document.createElement('div');
+overlay.id = 'gallery-overlay';
+overlay.style.cssText = 'position:fixed;top:10px;right:12px;pointer-events:none;'
+  + 'font:13px/1.7 monospace;color:#cfd8e3;text-shadow:0 1px 3px rgba(0,0,0,.9);text-align:right';
+overlay.innerHTML = '<h1 style="margin:0 0 2px;font:600 15px/1.4 monospace;color:#e8eef8">'
+  + '休息阶段面板 · uiGallery</h1><div id="ug-info"></div><div id="ug-intent"></div>'
+  + '<div style="color:#8a93b2">面板内按钮可点；面板外为地图舞台（塔楼）</div>';
+document.body.appendChild(overlay);
+const info = overlay.querySelector('#ug-info');
+const intentLine = overlay.querySelector('#ug-intent');
+
+// ---- 样本 run ----
+const run = createRun({ seed: Number(opt('seed', '123')) });
+run.floor = Number(opt('floor', '1'));
+for (const id of opt('relics', 'warHorn,springFlask').split(',').filter(Boolean)) {
+  grantRelic(run, id);
+  if (opt('equip', '').split(',').includes(id)) equipRelic(run, id);
+}
+for (const id of opt('equip', '').split(',').filter(Boolean)) {
+  if (run.player.relics.includes(id) && !run.player.equippedRelics.includes(id)) equipRelic(run, id);
+}
+info.textContent = `层 ${run.floor}/${run.totalFloors} ｜ 种子 ${run.seed}`;
+
+// ---- 舞台 ----
+const stageManager = new StageManager();
+stageManager.attach(canvas);
+const mapStage = new MapStage({});
+mapStage.setFloor(run.floor, run.totalFloors);
+stageManager.setStage(mapStage);
+stageManager.start();
+
+const bus = mitt();
+attachTooltipForwarding(bus);
+mapStage.setPanelIntentHandler((intent) => {
+  intentLine.textContent = `意图：${JSON.stringify(intent)}`;
+  const a = intent?.action;
+  try {
+    if (a === 'equip') equipRelic(run, intent.relicId);
+    else if (a === 'unequip') unequipRelic(run, intent.relicId);
+    else if (a === 'useRelic') prepUseRelic(run, intent.relicId);
+    else if (a === 'startBattle') intentLine.textContent += '  （陈列页不进入战斗）';
+  } catch (e) {
+    intentLine.textContent += `  ✗ ${e.message}`;
+  }
+  push();
+});
+mapStage.attachInput({ stageManager, bus });
+
+const push = () => {
+  const panel = opt('panel', 'prep');
+  mapStage.setPanel(panel === 'prep' ? prepSnapshot(run) : null);
+  // 顶端资源行/状态栏也给上（面板与之同屏，便于检查遮挡关系）
+  mapStage.setStatus({
+    ap: run.player.maxActionPoints, apMax: run.player.maxActionPoints,
+    mana: run.player.mana, manaMax: run.player.maxMana,
+    money: run.player.money, hp: run.player.hp, maxHp: run.player.maxHp,
+    relics: run.player.equippedRelics.map(id => ({ id, name: id, icon: null, usesLeft: null })),
+    remi: { present: true, hp: 15 },
+  });
+};
+push();
+
+// ---- 指针接线（与 App.vue 同一套调用） ----
+const local = (e) => {
+  const r = canvas.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+};
+canvas.addEventListener('pointermove', (e) => { mapStage.handlePointerMove(...local(e)); });
+canvas.addEventListener('pointerdown', (e) => { mapStage.handlePointerDown(...local(e)); });
+canvas.addEventListener('pointerup', (e) => { mapStage.handlePointerUp(...local(e)); });
+
+// tooltip 是 DOM 浮层（本页不引入 TooltipOverlay 组件，只把状态机结果画成一行，便于确认链路）
+const tt = document.createElement('div');
+tt.style.cssText = 'position:fixed;left:12px;bottom:12px;pointer-events:none;'
+  + 'font:12px/1.6 monospace;color:#9aa3b8;text-shadow:0 1px 3px rgba(0,0,0,.9)';
+document.body.appendChild(tt);
+setInterval(() => {
+  tt.textContent = tooltipState.visible
+    ? `tooltip: ${tooltipState.model?.title ?? ''} @${Math.round(tooltipState.x)},${Math.round(tooltipState.y)}`
+    : 'tooltip: —';
+}, 150);
+
+const resize = () => {
+  const w = innerWidth; const h = Math.round(w * 9 / 16);
+  canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+  stageManager.resize(w, h);
+};
+addEventListener('resize', resize);
+resize();

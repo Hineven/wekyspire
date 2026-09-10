@@ -26,6 +26,7 @@ import {
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
 } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
+import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
@@ -131,9 +132,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage?.statusBar.setRemi(remiView());
   };
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
+  mapStage?.setPanel?.(panelSnapshot(run)); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
   const notify = () => {
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
+    mapStage?.setPanel?.(panelSnapshot(run)); // 面板内容跟随阶段迁移（同一快照推导）
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
@@ -357,6 +360,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function equip(relicId) { equipRelic(run, relicId); notify(); }
   function unequip(relicId) { unequipRelic(run, relicId); notify(); }
   function useRelic(relicId) { prepUseRelic(run, relicId); notify(); }
+
+  // ---- 休息阶段面板：意图上行 ----
+  // 意图表 = Stage 上报的 { action, ... }。Stage 侧不判断可用性（enabled 由快照下发），
+  // 这里只把语义落到既有入口（与 bridge/intents「UI 操作 → flow API 的唯一入口」同律）。
+  // 面板逐个迁移：迁移一个在此加一条 action。
+  function dispatchPanelIntent(intent) {
+    const action = intent?.action;
+    if (action === 'equip') equip(intent.relicId);
+    else if (action === 'unequip') unequip(intent.relicId);
+    else if (action === 'useRelic') useRelic(intent.relicId);
+    else if (action === 'startBattle') startBattle();
+  }
+  mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
 
   // 离局清理（App.toTitle/newGame 调用）：战斗舞台释放 + 挂起演出瞬落
   // （动画不可序列化——重进/读档由检查点重建稳态）
