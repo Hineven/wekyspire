@@ -6,6 +6,7 @@ import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
+import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
 import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -76,6 +77,8 @@ export class MapStage {
     this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
     this._snap = null;     // 当前面板快照（本地重绘用）
     this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
+    this._cardPicker = null; // 全屏选卡界面（营地/训练场升级用；惰性创建）
+    this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
     this._downHit = null;  // 按压命中（抬起时配对，防"按下 A 抬起 B"误触发）
@@ -121,6 +124,7 @@ export class MapStage {
   _onPanelAction(action) {
     if (!action) return;
     if (action.local) {
+      if (action.action === 'openUpgradePicker') { this._openUpgradePicker(action.source); return; }
       if (action.action === 'toggleSeed') {
         const sel = this._panelUi.selected;
         const id = action.defId;
@@ -144,6 +148,52 @@ export class MapStage {
     this._panel.attachPicker(this._picker);
     this._panel.setWidgets(snap.kind, entry.build(snap, { selected: this._panelUi?.selected }));
     this._syncSlotRoll();
+  }
+
+  // ---- 全屏选卡界面（营地/训练场「升级一张卡」）----
+  // 按下升级按钮进入：界面渲染**牌组全部卡**（不可升级的置灰），hover 预览升级后的卡面，
+  // 可返回/确认。选卡与开关都是舞台本地交互态（不惊动 core），确认时才上报意图。
+  _openUpgradePicker(source) {
+    const cards = source === 'camp'
+      ? (this._snap?.camp?.upgradeCards ?? [])
+      : (this._snap?.training?.upgradeCards ?? []);
+    if (!cards.length) return;
+    if (!this._cardPicker) {
+      this._cardPicker = new CardScrollPickerObject({
+        bakeFace: this._bakeFace,
+        bakeText: this._bakeLabel,
+        bus: this._bus,
+        onCancel: () => this._pickerFocus = null,
+        onConfirm: (ids) => {
+          const uniqueID = ids[0];
+          this._pickerFocus = null;
+          // 升级意图：营地与训练场各有各的入口（语义在 runController 落地）
+          this._onIntent?.(source === 'camp'
+            ? { action: 'campChoose', option: 'upgrade', uniqueID }
+            : { action: 'trainingUpgrade', uniqueID });
+        },
+      });
+      this.uiScene.add(this._cardPicker);
+    }
+    this._cardPicker.attachPicker(this._picker);
+    this._cardPicker.open({
+      title: '选择要升级的卡',
+      hint: '悬停查看升级后的卡面 ｜ 只有可升级的卡能被选中，滚轮翻页',
+      cards: cards.map(c => ({
+        uniqueID: c.uniqueID, defId: c.defId, view: c.view,
+        enabled: c.enabled, tipDefId: c.tipDefId,
+      })),
+      confirmLabel: '确认升级',
+    });
+    this._pickerFocus = 'upgrade';
+  }
+
+  get cardPicker() { return this._cardPicker; }
+
+  /** 滚轮：选卡界面优先消费（全屏界面，滚轮只作用于它）。 */
+  handleWheel(deltaY) {
+    if (this._cardPicker?.opened) return this._cardPicker.scrollBy(deltaY / 100);
+    return false;
   }
 
   // ---- 老虎机转轮（演出即闸门）----
@@ -180,6 +230,7 @@ export class MapStage {
     // 面板本地交互态随之清空：同一面板种类稍后重入时不得带出上次的勾选
     this._panelUi = null;
     this._snap = null;
+    this._cardPicker?.close(); // 面板换了/卸了，选卡界面不该留在屏幕上
     if (!this._panel) { this._syncCardArtSub(); return; }
     this.uiScene.remove(this._panel);
     this._panel.dispose();
@@ -193,7 +244,9 @@ export class MapStage {
   // 舞台自身不关心总线来源。
   attachInput({ stageManager, bus } = {}) {
     this._picker = stageManager ? new Picker({ stageManager, bus }) : null;
+    this._bus = bus ?? null; // 选卡界面的 tooltip 出口（card 整卡预览走同一条浮层）
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
+    this._cardPicker?.attachPicker(this._picker);
   }
 
   detachInput() {
@@ -204,9 +257,14 @@ export class MapStage {
 
   get picker() { return this._picker; }
 
-  /** 当前面板上某个按钮的动作记录（{ action, enabled }）；面板未装配时返回空记录。供契约测试断言。 */
+  /**
+   * 某个按钮的动作记录（{ action, enabled }）。先查休息面板、再查选卡界面
+   * （两者各有自己的按钮表）；都没有则返回空记录。供契约测试断言。
+   */
   _buttonActionsOf(pickId) {
-    return this._panel?._buttonActions?.get(pickId) ?? { action: null, enabled: false };
+    return this._panel?._buttonActions?.get(pickId)
+      ?? this._cardPicker?._buttonActions?.get(pickId)
+      ?? { action: null, enabled: false };
   }
 
   /** 指针移动：hover 拾取（Picker 内部发 tooltip:*）+ 面板悬浮态。 */
@@ -214,6 +272,7 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     this._panel?.onHover?.(hit);
   }
 
@@ -232,6 +291,7 @@ export class MapStage {
     const down = this._downHit;
     this._downHit = null;
     if (!down || !hit || down.kind !== hit.kind || down.id !== hit.id) return;
+    if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
     this._panel?.onClick?.(hit);
   }
 
@@ -279,6 +339,11 @@ export class MapStage {
     this._unsubCardArt?.();
     this._unsubCardArt = null;
     this._removePanel();
+    if (this._cardPicker) {
+      this.uiScene.remove(this._cardPicker);
+      this._cardPicker.dispose();
+      this._cardPicker = null;
+    }
     if (this._slotRoll) {
       this.uiScene.remove(this._slotRoll);
       this._slotRoll.dispose();

@@ -117,6 +117,7 @@ function onPointer(type) {
 
 // 预生成指针 handler：模板里直接写 onPointer('x') 只会调工厂丢弃闭包，$event 传不进去
 const onPointerMove = onPointer('handlePointerMove');
+const onPointerWheel = onPointer('handleWheel');
 const onPointerDown = onPointer('handlePointerDown');
 const onPointerUp = onPointer('handlePointerUp');
 
@@ -155,6 +156,7 @@ onBeforeUnmount(() => {
       @pointermove="onPointerMove"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
+      @wheel.prevent="onPointerWheel"
     ></canvas>
     <!-- 菜单层顶层加载门：全量美术预载完成前挡住一切（最高 z-index），完成才放行开始界面 -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />

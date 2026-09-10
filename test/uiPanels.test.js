@@ -10,6 +10,7 @@ import { panelSnapshot, prepSnapshot, rewardSnapshot, ascensionSnapshot } from '
 import { SlotRollObject } from '../src/stage/objects/SlotRollObject.js';
 import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../src/stage/panels/index.js';
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
+import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
 import { createRunController, awaitFloorArrive } from '../src/shell/runController.js';
@@ -635,14 +636,17 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     expect(snap.kind).toBe('room');
     expect(snap.room).toBe('training');
     expect(['upgrade', 'draw']).toContain(snap.training.mode);
-    if (snap.training.mode === 'upgrade') {
-      expect(snap.training.upgradable.length).toBeGreaterThan(0);
-      expect(snap.training.upgradable[0].uniqueID).toBeTruthy();
-      expect(snap.training.upgradable[0].name).toBeTruthy();
+    // 快照给的是**牌组全部卡** + 各自升级目标（选卡界面渲染全部卡、不可升级的置灰）
+    expect(snap.training.upgradeCards.length).toBe(run.player.deck.length);
+    for (const c of snap.training.upgradeCards) {
+      expect(c.uniqueID).toBeTruthy();
+      expect(c.view).toBeTruthy();
+      expect(typeof c.enabled).toBe('boolean');
+      expect(c.tipDefId).toBeTruthy();               // hover 预览的目标（无升级目标时回退自身）
+      if (c.enabled) expect(c.toView).toBeTruthy();  // 可升级者带升级后的卡面视图
     }
 
     // 候选态（模拟升级后的强制尾款）
-    run.roomData = { drawChoices: snap.training.upgradable.length ? [] : null, forced: true };
     run.roomData = { drawChoices: ['punch'], forced: true };
     snap = panelSnapshot(run);
     expect(snap.training.choices).toEqual(['punch']);
@@ -803,6 +807,157 @@ describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）'
     map.dispose();
   });
 });
+describe('全屏选卡界面（营地/训练场升级）：滚动 + hover 预览升级版本 + 返回/确认', () => {
+  // 造一个营地房（并把牌组撑大以触发滚动）
+  function campRun(deckSize = 24, seed = 101) {
+    const run = createRun({ seed });
+    run.gameStage = 'room';
+    run.currentRoom = 'camp';
+    while (run.player.deck.length < deckSize) {
+      run.player.deck.push(createSkillRuntime('punch'));
+    }
+    return run;
+  }
+
+  function openPicker(source, run, deckSize) {
+    const sm = fakeManager();
+    const bus = mitt();
+    const shown = [];
+    bus.on(EventNames.TOOLTIP_SHOW, (p) => shown.push(p));
+    bus.on(EventNames.TOOLTIP_HIDE, () => shown.push({ hidden: true }));
+    const stage = new MapStage({});
+    const intents = [];
+    stage.setPanelIntentHandler((a) => intents.push(a));
+    stage.attachInput({ stageManager: sm, bus });
+    stage.setPanel(panelSnapshot(run, {}));
+    stage._onPanelAction({ action: 'openUpgradePicker', source, local: true });
+    return { stage, intents, shown, bus };
+  }
+
+  it('入口是「升级一张卡」按钮，且是本地动作（不惊动 core）', () => {
+    const run = campRun();
+    const intents = [];
+    const stage = new MapStage({});
+    stage.attachInput({ stageManager: fakeManager(), bus: mitt() });
+    stage.setPanelIntentHandler((a) => intents.push(a));
+    stage.setPanel(panelSnapshot(run, {}));
+    const btn = stage._buttonActionsOf('camp:upgrade');
+    expect(btn.action).toEqual({ action: 'openUpgradePicker', source: 'camp', local: true });
+    stage._panel.onClick({ kind: 'button', id: 'camp:upgrade' });
+    expect(intents).toHaveLength(0);          // 本地动作不上报
+    expect(stage.cardPicker.opened).toBe(true);
+    stage.dispose();
+  });
+
+  it('界面渲染牌组全部卡；不可升级的置灰且点不动', () => {
+    const run = campRun();
+    const { stage, intents } = openPicker('camp', run);
+    const picker = stage.cardPicker;
+    expect(picker.cardCount).toBe(run.player.deck.length);
+
+    const cards = panelSnapshot(run, {}).camp.upgradeCards;
+    const locked = cards.find(c => !c.enabled);
+    if (locked) {
+      const obj = picker._entries.find(e => e.uniqueID === locked.uniqueID).obj;
+      expect(obj.visualState).toBe('disabled');
+      expect(picker.onClick({ kind: 'button', id: `picker:card:${locked.uniqueID}` })).toBe(false);
+      expect(picker.selectedIds).toHaveLength(0);
+    }
+    stage.dispose();
+  });
+
+  it('hover 卡牌时发出的 tooltip 是**升级后**的卡（tipDefId），离开即隐藏', () => {
+    const run = campRun();
+    const { stage, shown } = openPicker('camp', run);
+    const cards = panelSnapshot(run, {}).camp.upgradeCards;
+    const up = cards.find(c => c.enabled && c.tipDefId !== c.defId);
+    expect(up).toBeTruthy(); // 需要一张真能升级的卡
+
+    stage.cardPicker.onHover({ kind: 'button', id: `picker:card:${up.uniqueID}` }, 120, 240);
+    const ev = shown.at(-1);
+    expect(ev.kind).toBe('card');
+    expect(ev.payload.cardId).toBe(up.tipDefId);      // 预览的是升级版本
+    expect(ev.payload.cardId).not.toBe(up.defId);
+    expect(ev.x).toBe(120); expect(ev.y).toBe(240);   // 跟随指针坐标
+    expect(stage.cardPicker._entries.find(e => e.uniqueID === up.uniqueID).obj.visualState)
+      .toBe('highlighted');
+
+    stage.cardPicker.onHover({ kind: 'background' }, 0, 0);
+    expect(shown.at(-1)).toEqual({ hidden: true });
+    stage.dispose();
+  });
+
+  it('滚动：牌组够大时可滚，滚出可视带的卡被隐藏（因此不可命中）', () => {
+    const run = campRun(40); // 7 行，滚到底时首行才真正滚出可视带
+    const { stage } = openPicker('camp', run);
+    const picker = stage.cardPicker;
+    expect(picker.maxScroll).toBeGreaterThan(0);       // 一屏放不下 → 需要滚动
+
+    const firstRow = picker._entries.slice(0, 6);
+    const lastRow = picker._entries.slice(-6);
+    expect(firstRow.every(e => e.obj.visible)).toBe(true);  // 首行在可视带内
+    expect(lastRow.every(e => !e.obj.visible)).toBe(true);  // 末行初始在带外（滚下来才出现）
+    const thumbYTop = picker._bar.thumb.position.y;
+    expect(picker._bar.thumb.visible).toBe(true);
+
+    expect(stage.handleWheel(600)).toBe(true);              // 滚轮向下
+    expect(picker.scrollY).toBeGreaterThan(0);
+    expect(picker._bar.thumb.position.y).toBeLessThan(thumbYTop); // 滑块下移
+
+    // 滚到底：首行被推出带外 → 隐藏（Picker 的 visibleUp 守卫据此使其不可命中）
+    expect(stage.handleWheel(100000)).toBe(true);
+    expect(picker.scrollY).toBe(picker.maxScroll);
+    expect(firstRow.every(e => !e.obj.visible)).toBe(true);
+    expect(lastRow.every(e => e.obj.visible)).toBe(true);
+    expect(stage.handleWheel(1000)).toBe(false);            // 到底不再移动
+
+    // 滚回顶：首行回到带内、滑块回到起点
+    expect(stage.handleWheel(-100000)).toBe(true);
+    expect(picker.scrollY).toBe(0);
+    expect(firstRow.every(e => e.obj.visible)).toBe(true);
+    expect(picker._bar.thumb.position.y).toBeCloseTo(thumbYTop, 5);
+    stage.dispose();
+  });
+
+  it('确认：选中一张可升级的卡 → 按钮可用 → 上报 core；返回：不上报', () => {
+    const run = campRun();
+    // 营地路径
+    const a = openPicker('camp', run);
+    const up = panelSnapshot(run, {}).camp.upgradeCards.find(c => c.enabled);
+    a.stage.cardPicker.onClick({ kind: 'button', id: `picker:card:${up.uniqueID}` });
+    expect(a.stage.cardPicker.selectedIds).toEqual([up.uniqueID]);
+    expect(a.stage._buttonActionsOf('picker:confirm').enabled).toBe(true);
+    a.stage.cardPicker.onClick({ kind: 'button', id: 'picker:confirm' });
+    expect(a.intents).toEqual([{ action: 'campChoose', option: 'upgrade', uniqueID: up.uniqueID }]);
+    expect(a.stage.cardPicker.opened).toBe(false);       // 确认后关闭
+
+    // 训练场路径复用同一界面，但确认走 trainingUpgrade
+    const run2 = campRun(12, 102);
+    run2.currentRoom = 'training';
+    const b = openPicker('training', run2);
+    const up2 = panelSnapshot(run2, {}).training.upgradeCards.find(c => c.enabled);
+    b.stage.cardPicker.onClick({ kind: 'button', id: `picker:card:${up2.uniqueID}` });
+    b.stage.cardPicker.onClick({ kind: 'button', id: 'picker:confirm' });
+    expect(b.intents).toEqual([{ action: 'trainingUpgrade', uniqueID: up2.uniqueID }]);
+
+    // 返回：关闭且不上报
+    const c = openPicker('camp', run);
+    c.stage.cardPicker.onClick({ kind: 'button', id: 'picker:back' });
+    expect(c.stage.cardPicker.opened).toBe(false);
+    expect(c.intents).toHaveLength(0);
+  });
+
+  it('卸面板时选卡界面一并关闭（不留残影）', () => {
+    const run = campRun();
+    const { stage } = openPicker('camp', run);
+    expect(stage.cardPicker.opened).toBe(true);
+    stage.setPanel(null);
+    expect(stage.cardPicker.opened).toBe(false);
+    expect(stage.cardPicker.visible).toBe(false);
+    stage.dispose();
+  });
+});
+
 describe('塔楼抵达节拍：等待必须能结束（回归：曾漏 resolve 卡死战后链条）', () => {
   // 回归背景：endBattle 等待抵达动画的 Promise 漏了 resolve，网页端每次战后
   // notify 都不执行——奖励面板不出现、金币停在旧值；Vue 版面板靠 reactive 掩盖了它。

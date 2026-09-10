@@ -156,6 +156,10 @@ mapStage.setPanelIntentHandler((intent) => {
 });
 mapStage.attachInput({ stageManager, bus });
 push();
+// ?picker=1 直接打开全屏选卡界面（营地/训练场的「升级一张卡」），省得玩到那一层
+if (opt('picker', '0') === '1' && (run.currentRoom === 'camp' || run.currentRoom === 'training')) {
+  mapStage._onPanelAction({ action: 'openUpgradePicker', source: run.currentRoom, local: true });
+}
 
 // ---- 指针接线（与 App.vue 同一套调用） ----
 const local = (e) => {

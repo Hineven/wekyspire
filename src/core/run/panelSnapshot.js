@@ -23,7 +23,8 @@ import {
   LEINO_DIMENSIONS, SEED_OFFERING, ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from './ascension.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
-import { trainingMode, upgradableCards } from './rooms/training.js';
+import { trainingMode } from './rooms/training.js';
+import { canPromoteRuntime } from './promotion.js';
 import { campOptions } from './rooms/camp.js';
 import { SLOT_PLACEHOLDER } from './rooms/slotMachine.js';
 import { gatedPromotionTargets } from './promotion.js';
@@ -166,12 +167,21 @@ export function roomSnapshot(run, extra = {}) {
   const room = run.currentRoom;
   const p = run.player;
   const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
-  const upgradable = upgradableCards(run).map(rt => {
-    const target = gatedPromotionTargets(run, getSkillDefinition(rt.defId))[0] ?? null;
+  // 选卡界面用：**牌组全部卡** + 各自的升级目标（不可升级的 enabled=false，界面置灰不可选）。
+  // tipDefId = 升级后的卡 id——界面 hover 时预览的就是它（用户定的交互）。
+  const upgradeCards = p.deck.map((rt) => {
+    const def = getSkillDefinition(rt.defId);
+    // 注意：gatedPromotionTargets 返回的是**目标 defId 字符串**（不是定义对象）
+    const targetId = canPromoteRuntime(rt, run) ? (gatedPromotionTargets(run, def)[0] ?? null) : null;
+    const targetDef = targetId ? getSkillDefinition(targetId) : null;
     return {
       uniqueID: rt.uniqueID,
-      name: getSkillDefinition(rt.defId)?.name ?? rt.defId,
-      toName: target?.name ?? null,
+      defId: rt.defId,
+      view: cardViewFromDef(def, { player: p }),
+      enabled: !!targetId,
+      tipDefId: targetId ?? rt.defId,          // hover 预览的目标（无升级目标时回退自身）
+      toName: targetDef?.name ?? null,
+      toView: targetDef ? cardViewFromDef(targetDef, { player: p }) : null,
     };
   });
 
@@ -185,13 +195,13 @@ export function roomSnapshot(run, extra = {}) {
         defId: id,
         view: cardViewFromDef(getSkillDefinition(id), { player: p }),
       })),
-      upgradable,
+      upgradeCards,
     };
     return snap;
   }
 
   if (room === 'camp') {
-    snap.camp = { options: campOptions(run), upgradable };
+    snap.camp = { options: campOptions(run), upgradeCards };
     return snap;
   }
 

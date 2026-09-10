@@ -29,8 +29,8 @@
 
 | # | 任务 | 阻塞于 | 现状 / 入口 |
 |---|---|---|---|
-| 2.1 | **`ScrollListObject`**：全屏竖向滚动列表 + 滚动条 | **牌库级选卡界面尚未实现** | 用户已裁决「自实现全屏竖向滚动条」（只在全屏 overlay、只竖向、边界即屏幕）——见迁移文档 §5.2。**注意**：不可再用「分页替代滚动」的旧结论 |
-| 2.2 | **删卡界面** | 同上（它就是 2.1 的第一个消费者） | `run.pendingCardRemoval` **目前在整个 shell 没有任何 UI**（Boss 奖励只累加计数：`runFlow.js:96`、存档 `saves.js:42`）。卡组 20+ 张 → 长列表 → 正是 2.1 的场景 |
+| 2.1 | ~~`ScrollListObject`~~ **已落地**（实现为 `objects/CardScrollPickerObject.js`：全屏选卡界面 = 背板 + 标题 + 竖向滚动卡阵 + 滚动条 + 返回/确认；滚出可视带的卡置 invisible，靠 Picker 的 visibleUp 守卫天然不可命中，因此**不需要裁剪遮罩**） | — | 首个消费者是营地/训练场的「升级一张卡」（2026-09-10 完成） |
+| 2.2 | **删卡界面** | 需要一个「多选 + 确认」的入口 | `run.pendingCardRemoval` **目前在整个 shell 没有任何 UI**（Boss 奖励只累加计数：`runFlow.js:96`、存档 `saves.js:42`）。`CardScrollPickerObject` 已支持 `multi/picks`（多选 + 目标张数），可直接复用 |
 | 2.3 | **商店面板** | 商店功能本身（近期与 relic 一起做） | 原语已按裁决**预留**商店形态（瓦片 + 列表 + 按钮可拼）；房间调度目前只有 `slot\|camp\|event\|training`（`runFlow.js`） |
 | 2.4 | **面板文本的富文本热区** | 出现第一个需要它的面板文案 | `TextBlockObject` 目前**只做纯文本**（不带 `hitRegions`）；卡面内的 `/named` `/effect` `/card` 热区已自动打通（走 CardObject + Picker），但**面板行文本里**的术语暂不可悬浮。补法：复用 `richtext/texture.js` 的 `renderRichTextBlock`（它已产 hitRegions）+ Picker 的 token 通道 |
 | 2.5 | **观战端渲染真实房间画面** | 有需求时 | 观战页只加载 BattleStage，非战斗阶段用自研 moment 卡汇总（迁移前就如此，**不是回归**）。若要看到真实房间：中继需传「面板状态 + MapStage」，并复用 `core/run/panelSnapshot.js`（放 core 已为此留好同源入口） |

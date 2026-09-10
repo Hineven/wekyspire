@@ -201,12 +201,14 @@ const eventText = (r) => ({
   spring: `治愈泉：回复 ${r.heal} 点生命`,
 }[r.eventId] ?? '迷雾散去，什么也没留下。');
 
-/** 升级行（训练场/营地共用）：卡名 →（晋升目标名）。 */
-const upgradeRows = (items, actionOf, idPrefix) => items.map(u => ({
-  kind: 'button', id: `${idPrefix}:${u.uniqueID}`, width: 420, size: 'sub',
-  label: u.toName ? `${u.name} → ${u.toName}` : u.name,
-  action: actionOf(u),
-}));
+/**
+ * 「升级一张卡」入口（训练场/营地共用）：按一下进入**全屏选卡界面**
+ * （本动作由舞台本地消化——界面里的卡来自快照的 upgradeCards；确认时才把选中的卡上报 core）。
+ */
+const upgradeButton = (source) => ({
+  kind: 'button', id: `${source}:upgrade`, width: 300, size: 'main',
+  label: '升级一张卡', action: { action: 'openUpgradePicker', source, local: true },
+});
 
 /** 奖励房（模态）：训练场 / 营地 / 老虎机 / 事件房。 */
 export function buildRoomPanel(snap) {
@@ -236,7 +238,7 @@ export function buildRoomPanel(snap) {
     }
     if (t.mode === 'upgrade') {
       w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '免费升级一张卡（完成后须再择一张加入牌组）：' });
-      w.push(...upgradeRows(t.upgradable ?? [], u => ({ action: 'trainingUpgrade', uniqueID: u.uniqueID }), 'trainUp'));
+      w.push(upgradeButton('training'));
       w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
       return w;
     }
@@ -258,7 +260,7 @@ export function buildRoomPanel(snap) {
     if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
     if (c.options.includes('upgrade')) {
       w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '或免费升级一张卡：' });
-      w.push(...upgradeRows(c.upgradable ?? [], u => ({ action: 'campChoose', option: 'upgrade', uniqueID: u.uniqueID }), 'campUp'));
+      w.push(upgradeButton('camp'));
     }
     return w;
   }
