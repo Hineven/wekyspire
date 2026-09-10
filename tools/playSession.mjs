@@ -31,6 +31,7 @@ import { getEnemyDefinition } from '../src/core/enemies/registry.js';
 import { gatedPromotionTargets } from '../src/core/run/promotion.js';
 import { getAbilityDefinition } from '../src/core/abilities/registry.js';
 import { getRelicDefinition } from '../src/core/relics/registry.js';
+import { prepUseRelic, equipRelic, unequipRelic } from '../src/core/run/prep.js';
 import { swapCostOf } from '../src/core/state/battleState.js';
 import {
   startBattle, playerUseSkill, playerEndTurn, playerSwapCard, isBattleFinished, respondInput,
@@ -546,6 +547,30 @@ export function exec(S, raw) {
       }
       L.push('  确认升级：营地 act upgrade <#> <卡名> / 训练场 act up <#> <卡名>');
       S.lastOutcome = L.join('\n');
+      return;
+    }
+
+    // ---- 遗物：装卸与主动使用（仅战前准备阶段；核心 API 见 run/prep.js）----
+    case 'relic': {
+      if (stage !== 'prep') throw new Error('遗物操作仅能在战前准备阶段');
+      const sub = a, id = b;
+      if (!sub || !id) {
+        throw new Error(`用法：relic equip|use|unequip <遗物id>（背包：${(run.player.relics ?? []).join(' ') || '空'}）`);
+      }
+      const nameOf = (rid) => getRelicDefinition(rid)?.name ?? rid;
+      if (sub === 'equip') {
+        equipRelic(run, id);
+        S.lastOutcome = `装备遗物 ${nameOf(id)}`;
+      } else if (sub === 'unequip') {
+        unequipRelic(run, id);
+        S.lastOutcome = `卸下遗物 ${nameOf(id)}`;
+      } else if (sub === 'use') {
+        const before = run.player.hp;
+        prepUseRelic(run, id);
+        S.lastOutcome = `使用遗物 ${nameOf(id)}（HP ${before}→${run.player.hp}）`;
+      } else {
+        throw new Error(`未知遗物子命令：${sub}（equip|use|unequip）`);
+      }
       return;
     }
 
