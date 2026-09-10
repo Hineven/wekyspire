@@ -805,6 +805,8 @@ describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）'
     ctrl.run.gameStage = 'room';
     ctrl.run.currentRoom = 'slot';
     ctrl.run.player.money = 200;
+    // 保底拉满且大奖概率压到 0 → 本次必中**小奖**（未中奖无产出；小奖不挂"指定升级"）
+    ctrl.run.slot = { floor: ctrl.run.floor, rolls: 0, sinceMinor: 20, sinceMajor: -1 };
     const moneyBefore = ctrl.run.player.money;
 
     ctrl.spin();
@@ -831,7 +833,9 @@ describe('老虎机完整链路（回归：点拉杆后卡在「转动中」）'
     // 真实 runController 的意图入口由 mapStage.setPanelIntentHandler 挂到舞台的 _onIntent 上。
     const pd = ctrl.run.slotPending;
     const choice = pd.choices?.[0]?.id ?? pd.relicChoices?.[0]?.id ?? null;
-    expect(map._buttonActionsOf('slot:take').enabled).toBe(true);
+    // 需要"选一个"的产出（卡多选一/遗物三选一）不发领取键：点候选即领取，两条路径同一意图
+    const needsPick = (pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0;
+    if (!needsPick) expect(map._buttonActionsOf('slot:take').enabled).toBe(true);
     map._onIntent({ action: 'slotTake', choice });
     expect(ctrl.run.slotPending).toBeNull();
     expect(map._snap.slot.pending).toBeNull();

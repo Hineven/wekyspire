@@ -99,6 +99,8 @@ describe('房间瞬态清理', () => {
     ctrl.run.gameStage = 'room';
     ctrl.run.currentRoom = 'slot';
     ctrl.run.player.money = 400;
+    // 保底拉满 → 本次必中：这两个用例的语义依赖"有产出待处理"（未中奖不产生产出）
+    ctrl.run.slot = { floor: ctrl.run.floor, rolls: 0, sinceMinor: 20, sinceMajor: 0 };
 
     ctrl.spin(); // 第一次拉杆：队列空闲 → 立即起 roll
     const firstId = ctrl.slot.anim.id;
@@ -118,6 +120,7 @@ describe('房间瞬态清理', () => {
     // 领取后才允许再抽
     const pd = ctrl.run.slotPending;
     takeSlotPrize(ctrl.run, pd.choices?.[0]?.id ?? pd.relicChoices?.[0]?.id ?? null);
+    ctrl.run.slot = { ...ctrl.run.slot, sinceMinor: 20, sinceMajor: 0 }; // 同上：保证有产出
     ctrl.spin();
     expect(ctrl.slot.anim).toBeTruthy();
     expect(ctrl.slot.anim.id).not.toBe(firstId);

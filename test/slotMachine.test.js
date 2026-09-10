@@ -27,6 +27,7 @@ function slotRun({ seed = 1, money = 1000, story = false, fruits = 0 } = {}) {
 
 /** 领取本次产出（多选一取第一个；大奖的「免费指定升级」挂起时顺手选一张卡收尾）。 */
 function settle(run, p) {
+  if (!run.slotPending) return p; // 未中奖没有产出可结算（report-r1-A 缺陷#5）
   const choice = p.choices?.[0]?.id ?? p.relicChoices?.[0]?.id ?? null;
   const out = takeSlotPrize(run, choice);
   if (out.needsCardPick) {
@@ -37,10 +38,13 @@ function settle(run, p) {
   return out;
 }
 
+/** 放弃当前产出；**未中奖时不存在 pending**，直接跳过（headless 试玩 report-r1-A 缺陷#5）。 */
+function dropPending(run) { if (run.slotPending) declineSlotPrize(run); }
+
 /** 拉一次杆并结算（默认放弃），返回本次产出。 */
 function roll(run, { decline = true } = {}) {
   const p = spinSlot(run);
-  if (decline) declineSlotPrize(run);
+  if (decline) dropPending(run);
   else settle(run, p);
   return p;
 }
@@ -58,7 +62,7 @@ describe('老虎机：涨价与保底', () => {
   it('扣费按当次单价；钱不够拒绝且不改状态', () => {
     const run = slotRun({ money: SLOT.baseCost });
     const before = run.player.money;
-    spinSlot(run); declineSlotPrize(run);
+    spinSlot(run); dropPending(run);
     expect(run.player.money).toBe(before - SLOT.baseCost);
 
     const poor = slotRun({ money: SLOT.baseCost - 1 });
@@ -105,8 +109,9 @@ describe('老虎机：涨价与保底', () => {
       tiers.add(p.tier);
       kinds.add(p.kind);
       if (p.choices?.length) expect(p.choices.length).toBeGreaterThan(1); // 多选一给了候选
-      expect(() => spinSlot(run)).toThrow(/还没处理/); // 产出未结算不能再抽
-      declineSlotPrize(run);
+      // 未中奖不挂 pending：可以直接再抽（report-r1-A 缺陷#5）；有产出才拦第二抽
+      if (run.slotPending) expect(() => spinSlot(run)).toThrow(/还没处理/);
+      dropPending(run);
     }
     expect(tiers.has('minor')).toBe(true);
     expect(tiers.has('major')).toBe(true);
@@ -126,7 +131,7 @@ describe('老虎机：产出结算', () => {
       before = run.player.money;
       const r = spinSlot(run);
       if (r.money != null) { settle(run, r); q = r; break; }
-      declineSlotPrize(run);
+      dropPending(run);
     }
     expect(q).toBeTruthy();
     expect(run.player.money).toBe(before - q.cost + q.money); // 领取才入账
@@ -137,7 +142,7 @@ describe('老虎机：产出结算', () => {
     let p = null;
     for (let i = 0; i < 300 && !p; i++) {
       const r = spinSlot(run);
-      if (r.choices?.length) p = r; else declineSlotPrize(run);
+      if (r.choices?.length) p = r; else dropPending(run);
     }
     expect(p).toBeTruthy();
     const deck0 = run.player.deck.length;
@@ -153,7 +158,7 @@ describe('老虎机：产出结算', () => {
     let p = null;
     for (let i = 0; i < 400 && !p; i++) {
       const r = spinSlot(run);
-      if (r.relicChoices?.length) p = r; else declineSlotPrize(run);
+      if (r.relicChoices?.length) p = r; else dropPending(run);
     }
     expect(p).toBeTruthy();
     const pick = p.relicChoices[0];
@@ -166,7 +171,7 @@ describe('老虎机：产出结算', () => {
     let p = null;
     for (let i = 0; i < 400 && !p; i++) {
       const r = spinSlot(run);
-      if (r.upgrade?.kind === 'free') p = r; else declineSlotPrize(run);
+      if (r.upgrade?.kind === 'free') p = r; else dropPending(run);
     }
     expect(p).toBeTruthy();
     const out = takeSlotPrize(run);
@@ -191,7 +196,7 @@ describe('老虎机：产出结算', () => {
     let p = null;
     for (let i = 0; i < 400 && !p; i++) {
       const r = spinSlot(run);
-      if (r.fullRestore) p = r; else declineSlotPrize(run);
+      if (r.fullRestore) p = r; else dropPending(run);
     }
     expect(p).toBeTruthy();
     takeSlotPrize(run);
@@ -262,7 +267,7 @@ describe('老虎机：吞噬（粉碎换金币）', () => {
 
     const money = run.player.money;
     const costBefore = spinCost(run);
-    spinSlot(run); declineSlotPrize(run);
+    spinSlot(run); dropPending(run);
     expect(run.player.money).toBe(money);        // 免费：不扣钱
     expect(spinCost(run)).toBe(costBefore);      // 免费 roll 不涨价
     expect(run.slotFreeRolls).toBe(0);
@@ -301,7 +306,7 @@ describe('老虎机：故事模式节拍', () => {
     for (let i = 0; i < 600 && minors.length < 6; i++) {
       const p = spinSlot(run);
       if (p.tier === 'minor') minors.push(p.special ?? null);
-      declineSlotPrize(run);
+      dropPending(run);
     }
     expect(minors[4]).not.toBe('apple');
     expect(run.slotApples).toBe(0);

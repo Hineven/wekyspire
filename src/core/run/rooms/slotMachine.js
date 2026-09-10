@@ -274,8 +274,8 @@ export function spinSlot(run) {
   if (!tier) {
     st.sinceMinor += 1;
     st.sinceMajor += 1;
-    run.slotPending = { tier: 'none', kind: 'nothing', cost };
-    return run.slotPending;
+    // 未中奖不是"产出"：不挂 pending，玩家可以立刻再拉杆（headless 试玩 report-r1-A 缺陷#5）
+    return { tier: 'none', kind: 'nothing', cost };
   }
   if (tier === 'major') { st.sinceMajor = 0; st.sinceMinor += 1; }
   else { st.sinceMinor = 0; st.sinceMajor += 1; }

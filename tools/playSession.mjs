@@ -61,17 +61,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
 
 export const HELP = `动作表（按当前阶段）：
-  战斗: play <手牌#> <卡名> [敌#] | swap <手牌#> <卡名>（弃1抽1，首次免费之后逐次+1） | end | auto
+  战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | swap <手牌#> <卡名> | swap <卡名>
+        （弃1抽1，首次免费之后逐次+1） | end | auto
         in <候选#> <卡名>（应答输入请求） | lib（查牌库——抽牌严格按顺序，可预知未来抽到什么）
-  奖励: pack <#|体修|火|通用> | take <候选#> <卡名> | skip | next
+  奖励: pack <#|体修|火|通用> | take <候选#> <卡名> | take <卡名> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw
-        | act take <候选#> <卡名> | act skipdraw | act skip | act spin | act play | next
+        | act take <候选#> <卡名> | act skipdraw | act skip | act play | next
+        | act spin | act claim <#|id> [卡名] | act drop | act devour relic <id> | act devour card <构筑#>
+        | act shop buy <#> | act shop claim <#|defId> [卡名]（售货机与房间并存，不消耗房间行动）
   预览: preview up <构筑#>（升阶前后对比，只读）
   进阶: dim 火|跳过（首次点亮火系：获赠点火+火弹术+体系能力「火灵脉」，再开种子九选三；
         跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
         | seed <#> <卡名>,<#> <卡名>,<#> <卡名>（选3张入组）
-  通用: state | deck | lib | terms（词条/效果释义） | note <文本> | help
-※ 打牌/选牌一律「编号+卡名」双重确认：编号定位、卡名校验，两者不匹配会报错并提示实际卡名。`;
+  通用: state | deck | lib | relics（遗物效果一览） | terms（词条/效果释义） | note <文本> | help
+※ 打牌/选牌推荐「编号+卡名」双重确认（编号定位、卡名校验，不匹配会报错并提示实际卡名）；
+  **也可以只给卡名**：卡名在手牌/候选里唯一时自动定位（打出带抽牌的卡会让编号瞬移，此时用卡名最稳）。
+※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。`;
 
 // ---------- 小工具 ----------
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
@@ -207,7 +212,8 @@ export function battleLogText(S, tail = 10) {
 // 手牌/候选双重确认寻址（子代理防呆）：`<编号> <卡名>` 两个参数都要对上。
 // 编号定位 + 卡名校验（def.name 全等或前缀；咏唱卡可省略「咏唱N·」前缀写正名），
 // 不匹配时报错并给出该编号的实际卡名，杜绝「打错牌」。
-const stripChantTag = (s) => String(s ?? '').replace(/^咏唱\d+·/, '');
+const stripChantTag = (s) => String(s ?? '').replace(/^咏唱[0-9]+·/, '');
+const isIdxArg = (v) => /^[0-9]+$/.test(String(v ?? ''));
 function nameMatches(given, actual) {
   const g = stripChantTag(given);
   return g === actual || actual.startsWith(g);
@@ -223,6 +229,38 @@ function resolveHandStrict(list, idxArg, nameArg, what = '手牌') {
   }
   return i;
 }
+// 手牌定位（两种写法）：**「编号 + 卡名」双重确认**（推荐），或**只给卡名**（卡名唯一时自动定位）。
+// 后者是为修「打出带抽牌的卡后手牌编号瞬移」这一高频摩擦（report-r1-A 缺陷#2）：
+// 一次批处理里连打抽牌卡时编号会变，靠卡名定位就不会错位。
+function resolveHandArg(list, idxOrName, nameArg, what = '手牌') {
+  if (isIdxArg(idxOrName)) return resolveHandStrict(list, idxOrName, nameArg, what);
+  if (idxOrName == null) {
+    throw new Error(`缺少卡名：${what}支持「编号+卡名」或「卡名」（卡名唯一时自动定位）`);
+  }
+  const hits = list.map((c, i) => ({ i, name: defOf(c).name })).filter(h => nameMatches(idxOrName, h.name));
+  if (!hits.length) {
+    throw new Error(`${what}里没有「${idxOrName}」。当前：${list.map(c => defOf(c).name).join(' / ') || '（空）'}`);
+  }
+  if (hits.length > 1) {
+    throw new Error(`${what}里有 ${hits.length} 张「${idxOrName}」（编号 ${hits.map(h => h.i).join('/')}）`
+      + `——请用「编号+卡名」指定，如 play ${hits[0].i + 1} ${hits[0].name}`);
+  }
+  return hits[0].i;
+}
+
+// 候选列表（元素数组）同款两种写法；只给名字时返回命中的**元素本身**
+function resolveChoiceArg(choices, idxOrName, nameArg, what = '候选', nameOf = (x) => x) {
+  if (isIdxArg(idxOrName)) return resolveChoiceStrict(choices, idxOrName, nameArg, what, nameOf);
+  const hits = choices.map((c, i) => ({ c, name: nameOf(c) })).filter(h => nameMatches(idxOrName, h.name));
+  if (!hits.length) {
+    throw new Error(`${what}里没有「${idxOrName}」。当前：${choices.map(c => nameOf(c)).join(' / ')}`);
+  }
+  if (hits.length > 1) {
+    throw new Error(`${what}里有 ${hits.length} 个「${idxOrName}」——请用「编号+名称」指定`);
+  }
+  return hits[0].c;
+}
+
 // 候选表（defId 数组）同款双重确认；返回校验通过的 defId
 function resolveChoiceStrict(choices, idxArg, nameArg, what = '候选', nameOf) {
   const i = idxOk(num(idxArg), choices.length, what);
@@ -238,6 +276,16 @@ function resolveChoiceStrict(choices, idxArg, nameArg, what = '候选', nameOf) 
 
 export function settleBattle(S) {
   const verdict = S.battle.ctx.kernel.verdict;
+  // 终局复盘快照（report-r1-A 缺陷#9）：死时手牌 + 敌人剩余。必须在 S.battle 置空前取。
+  {
+    const bs = S.battle.battleState;
+    S.lastBattleTail = {
+      hand: bs.zones.hand.map((c) => defOf(c).name),
+      enemies: bs.enemies.map((e) => ({
+        name: e.name, hp: Math.max(0, e.hp), maxHp: e.maxHp, dead: e.isDead(),
+      })),
+    };
+  }
   finishBattle(S.run, verdict, S.battle);
   S.battle = null;
   if (verdict === 'victory') {
@@ -262,6 +310,18 @@ function upgradeGateError(run, card) {
   return defOf(card).promotesTo
     ? `「${defOf(card).name}」的晋升目标等阶未解锁（卡包等级门禁），暂不可升级`
     : `「${defOf(card).name}」已是链尾，无可升级目标`;
+}
+
+// 老虎机产出候选定位：编号 → 候选 id；名字 → 候选 id（唯一时）；已是 id 则原样返回
+function resolveSlotClaimArg(pending, raw) {
+  if (raw == null) return null;
+  const list = pending.choices?.length ? pending.choices
+    : pending.relicChoices?.length ? pending.relicChoices : null;
+  if (!list) return raw;
+  if (isIdxArg(raw)) return list[idxOk(num(raw), list.length, '产出候选')].id;
+  const byId = list.find(e => e.id === raw);
+  if (byId) return byId.id;
+  return resolveChoiceArg(list, raw, undefined, '产出候选', e => e.name).id;
 }
 
 // 老虎机/事件结果的中文呈现（内部 id → 名称）
@@ -306,10 +366,12 @@ export function exec(S, raw) {
       const battle = ensureBattle(S);
       if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#> <卡名>）');
       const hand = battle.battleState.zones.hand;
-      const skill = hand[resolveHandStrict(hand, a, b)];
+      const byIndex = isIdxArg(a);
+      const skill = hand[resolveHandArg(hand, a, byIndex ? b : undefined)];
       const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
-      const target = t[3] != null
-        ? battle.battleState.enemies[idxOk(num(t[3]), battle.battleState.enemies.length, '敌人')] : null;
+      const targetArg = byIndex ? t[3] : b; // 只给卡名的写法里，第二个参数就是目标
+      const target = targetArg != null
+        ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
       if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) throw new Error('无法打出（费用/条件不满足）');
       S.lastOutcome = `打出 ${name}`;
       if (isBattleFinished(battle)) settleBattle(S);
@@ -319,7 +381,7 @@ export function exec(S, raw) {
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
       if (!hand.length) throw new Error('手牌为空，无法换牌');
-      const skill = hand[resolveHandStrict(hand, a, b)];
+      const skill = hand[resolveHandArg(hand, a, isIdxArg(a) ? b : undefined)];
       if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
       S.lastOutcome = `换牌 ${defOf(skill).name}`;
       return;
@@ -381,7 +443,14 @@ export function exec(S, raw) {
         if (pick) playerUseSkill(battle, pick.uniqueID);
         else playerEndTurn(battle);
       }
+      // 摘要：auto 之前只打印整屏新状态，看不出打了多久、打成什么样（report-r1-A 缺陷#4）
+      const rounds = battle.battleState.turn.count;
+      const foeLeft = battle.battleState.enemies.filter(e => !e.isDead());
+      const hp0 = S.run.player.hp;
+      const hpMax = S.run.player.maxHp;
       settleBattle(S);
+      S.lastOutcome = (S.lastOutcome ?? '') + ` ｜ auto：${rounds} 回合，结束 HP ${hp0}/${hpMax}`
+        + (foeLeft.length ? `，残留敌人 ${foeLeft.map(e => `${e.name}(${e.hp}血)`).join(' ')}` : '，已清场');
       return;
     }
 
@@ -401,7 +470,7 @@ export function exec(S, raw) {
     case 'take': {
       if (stage !== 'reward') throw new Error('当前不在奖励阶段');
       const choices = run.rewards.skillChoices;
-      const defId = resolveChoiceStrict(choices, a, b, '候选',
+      const defId = resolveChoiceArg(choices, a, b, '候选',
         id => getSkillDefinition(id)?.name ?? id);
       chooseSkillReward(run, defId);
       S.lastOutcome = `获得卡牌：${getSkillDefinition(defId).name}`;
@@ -425,15 +494,23 @@ export function exec(S, raw) {
           const it = run.shop.items[idx];
           const res = buyShopItem(run, idx);
           S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
-            + (res.kind === 'pack' ? '（用 act shop claim <defId> 选卡）' : '');
+            + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '');
           return;
         }
         if (b === 'claim') {
-          takeShopCard(run, t[3]);
-          S.lastOutcome = `卡包开封：${t[3]} 已入组`;
+          if (!run.shopPending) throw new Error('当前没有待选的卡包');
+          // 候选表刚生成、期间不会漂移：给编号即选；也可用卡名（唯一时）定位
+          const raw = t[3];
+          const defId = run.shopPending.choices.includes(raw) ? raw // 兼容历史 defId 记法（可全量重放）
+            : isIdxArg(raw)
+              ? run.shopPending.choices[idxOk(num(raw), run.shopPending.choices.length, '卡包候选')]
+              : resolveChoiceArg(run.shopPending.choices, raw, t[4], '卡包候选',
+                id => getSkillDefinition(id)?.name ?? id);
+          takeShopCard(run, defId);
+          S.lastOutcome = `卡包开封：${getSkillDefinition(defId)?.name ?? defId} 已入组`;
           return;
         }
-        throw new Error('售货机动作：act shop buy <#> / act shop claim <defId>（离开用 next）');
+        throw new Error('售货机动作：act shop buy <#> / act shop claim <#|defId> [卡名]（离开用 next）');
       }
       if (S.roomDone) throw new Error('本房间动作已完成，用 next 离开');
       const room = run.currentRoom;
@@ -487,18 +564,22 @@ export function exec(S, raw) {
         if (a === 'spin') {
           const view = slotView(run);
           const p = spinSlot(run);
-          S.lastOutcome = `老虎机(-${p.cost}金币)：${slotResultText(p)}`
-            + (p.tier === 'none' ? '' : '（用 act claim [id] 领取 / act drop 放弃）');
+          S.lastOutcome = `老虎机(-${p.cost}金币)：${p.tier === 'none' ? '未中奖（无产出，可直接再 act spin）' : slotResultText(p)}`
+            + (p.tier === 'none' ? '' : '（用 act claim <#|id> 领取 / act drop 放弃）');
           void view;
           return;
         }
         if (a === 'claim') {
-          const out = takeSlotPrize(run, b ?? null);
+          if (!run.slotPending) { S.lastOutcome = '本次未中奖，没有待领取的产出（无需处理）'; return; }
+          const out = takeSlotPrize(run, resolveSlotClaimArg(run.slotPending ?? {}, b ?? null));
           S.lastOutcome = `领取产出：${JSON.stringify(out)}`
             + (out.needsCardPick ? '（用 act upgrade <构筑#> <卡名> 指定要升级的卡）' : '');
           return;
         }
-        if (a === 'drop') { declineSlotPrize(run); S.lastOutcome = '放弃产出'; return; }
+        if (a === 'drop') {
+          if (!run.slotPending) { S.lastOutcome = '本次未中奖，没有待放弃的产出（无需处理）'; return; }
+          declineSlotPrize(run); S.lastOutcome = '放弃产出'; return;
+        }
         if (a === 'upgrade') {
           // 大奖「免费指定升级」的落地（与营地/训练场同一套 <构筑#> <卡名> 记法）
           const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
@@ -657,7 +738,9 @@ export function render(S) {
   const head = `【魏启尖塔 · headless】第 ${run.floor}/${run.totalFloors} 层 · ${stageCn(run.gameStage)}`
     + (run.result ? `（${run.result === 'victory' ? '登顶成功' : '战败'}）` : '');
   L.push(`═══ ${head} ═══`);
-  L.push(`玩家: HP ${p.hp}/${p.maxHp} 护盾${p.shield} 魏启 ${p.mana}/${p.maxMana} AP ${p.actionPoints}/${p.maxActionPoints} 金币 ${p.money} | 灵脉 火${p.leino.fire} 体修${p.bodyLevel ?? 0} | 训练 ${p.trainingCount} 进阶 ${p.ascensionCount}/${ASCENSION_PLACEHOLDER.maxAscensions}`);
+  const apNote = p.actionPoints > p.maxActionPoints
+    ? `（+${p.actionPoints - p.maxActionPoints} 来自本回合临时加成，非上限）` : '';
+  L.push(`玩家: HP ${p.hp}/${p.maxHp} 护盾${p.shield} 魏启 ${p.mana}/${p.maxMana} AP ${p.actionPoints}/${p.maxActionPoints}${apNote} 金币 ${p.money} | 灵脉 火${p.leino.fire} 体修${p.bodyLevel ?? 0} | 训练 ${p.trainingCount} 进阶 ${p.ascensionCount}/${ASCENSION_PLACEHOLDER.maxAscensions}`);
   if (p.effects?.length) L.push(`玩家效果: ${effectsText(p)}`);
   if (p.abilities.length) L.push(`能力: ${p.abilities.join(' ')}`);
   // 遗物：背包全量 + 槽位占用（槽位是**权重和**口径 Σcost ≤ relicSlots；非槽位式恒生效、不需装备）
@@ -671,7 +754,7 @@ export function render(S) {
         if ((p.equippedRelics ?? []).includes(id)) tags.push('已装备');
         return `${d?.name ?? id}(${tags.join('·')})`;
       }).join(' / '));
-    L.push('  → relic equip|unequip <遗物id>（仅 prep；非槽位式不用装备）');
+    L.push('  → relic equip|unequip <遗物id>（仅 prep；非槽位式不用装备）｜ relics 查看全部遗物效果说明');
   }
 
   const stage = run.gameStage;
@@ -724,20 +807,29 @@ export function render(S) {
     }
   } else if (stage === 'room') {
     const room = run.currentRoom;
+    L.push(S.roomDone
+      ? '状态：本房间动作已完成 → next 离开（售货机不受限，仍可 act shop buy）'
+      : '状态：房间动作未完成（可选动作见下）');
     // 售货机与房间**并存**（不占房间名额）：任何房间都可能同层有货架
     if (run.shop) {
       const disc = run.shop.discount < 1 ? `（${Math.round(run.shop.discount * 10)} 折）` : '';
       L.push(`自动售货机${disc}｜持有 ${p.money} 金币：`);
       if (run.shop.broken) L.push('  瑞米：“上次逃得太狼狈了……忘记补货了……”');
-      run.shop.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金${it.sold ? '（已售出）' : ''}`));
+      run.shop.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金`
+        + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')));
       if (run.shopPending) {
-        L.push(`  → 卡包待选（act shop claim <defId>）：${run.shopPending.choices.join(' / ')}`);
+        L.push('  卡包待选:');
+        run.shopPending.choices.forEach((id, i) => {
+          const def = getSkillDefinition(id);
+          L.push(`    [${i + 1}] ${def?.tier ?? '?'}阶 ${def?.name ?? id}「${plain(def?.describe?.() ?? '')}」`);
+        });
+        L.push('  → act shop claim <#|defId> [卡名]');
       } else {
         L.push('  → act shop buy <#> 购买（离开房间不清货架，买光不补）');
       }
     }
     if (S.roomDone) {
-      L.push(`（房间动作已完成 → next 离开）`);
+      // 状态行已在段首统一给出（report-r1-A 缺陷#8：避免有的房间给提示、有的不给）
     } else if (room === 'camp') {
       const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
       L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比，之后 next）`);
@@ -767,8 +859,20 @@ export function render(S) {
       if (run.slotPending) {
         L.push(`待处理产出：${slotResultText(run.slotPending)}`);
         const pd = run.slotPending;
-        if (pd.choices?.length) L.push(`  → act claim <defId>（候选：${pd.choices.map(c => c.id).join(' / ')}）`);
-        else if (pd.relicChoices?.length) L.push(`  → act claim <relicId>（候选：${pd.relicChoices.map(r => r.id).join(' / ')}）`);
+        if (pd.choices?.length) {
+          L.push('  候选卡:');
+          pd.choices.forEach((c, i) => {
+            const def = getSkillDefinition(c.id);
+            L.push(`    [${i + 1}] ${def?.tier ?? '?'}阶 ${c.name}「${plain(def?.describe?.() ?? '')}」`);
+          });
+          L.push('  → act claim <#>（编号或卡名）');
+        } else if (pd.relicChoices?.length) {
+          L.push('  候选遗物:');
+          pd.relicChoices.forEach((r, i) => {
+            L.push(`    [${i + 1}] ${r.name}：${plain(getRelicDefinition(r.id)?.description ?? '')}`);
+          });
+          L.push('  → act claim <#>（编号或遗物名）');
+        }
         else if (pd.upgrade?.kind === 'free' || run.slotUpgradePending) L.push('  → act upgrade <构筑#> <卡名>（指定要升级的卡）');
         else L.push('  → act claim 领取 / act drop 放弃');
       } else {
@@ -812,6 +916,11 @@ export function render(S) {
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {
     L.push(`本局结束：${run.result === 'victory' ? '登顶成功' : '战败'}。感谢游玩！`);
+    const tail = S.lastBattleTail;
+    if (tail) {
+      L.push(`终局快照 · 死时手牌: ${tail.hand.length ? tail.hand.join(' / ') : '（空）'}`);
+      L.push(`终局快照 · 敌人: ${tail.enemies.map((e) => `${e.name} ${e.dead ? '已死' : `${e.hp}/${e.maxHp}血`}`).join(' | ') || '（无）'}`);
+    }
   }
   if ((stage === 'reward' || stage === 'end') && S.presenter?.calls?.length) {
     const log = battleLogText(S);
@@ -855,7 +964,8 @@ export function renderDeck(S) {
 // 注：本场无弃牌堆，弃牌/换牌直接回牌库底（可在下表尾部看到）。
 export function renderLib(S) {
   if (!S.battle || S.run.gameStage !== 'battle') {
-    return '【牌库】lib 在战斗中查看抽牌顺序（平时用 deck 看构筑）。';
+    return '【牌库】lib 只在战斗内有意义（战斗中才能预知下一张抽到什么）。'
+      + '当前非战斗阶段——你看到的是静态构筑，抽牌顺序要等开战才有；用 deck 查构筑。';
   }
   const z = S.battle.battleState.zones;
   const L = ['【牌库】抽牌严格按下列顺序（[1] 就是下一张抽到的）——可预知未来抽卡；弃牌/换牌回牌库底：'];
@@ -863,6 +973,29 @@ export function renderLib(S) {
     L.push('  （牌库已空——本场无弃牌堆；抽牌等效果会因无牌可抽而落空，注意卡牌循环）');
   } else {
     z.deck.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, null)));
+  }
+  return L.join('\n');
+}
+
+// 遗物一览（只读）：拥有的全部遗物 + 效果文本 + 槽位占用（report-r1-A 缺陷#7）
+export function renderRelics(S) {
+  const run = S.run;
+  const p = run.player;
+  const cost = (id) => { const d = getRelicDefinition(id); return d?.nonSlot ? 0 : (d?.cost ?? 1); };
+  const owned = p.relics ?? [];
+  const L = ['【遗物】槽位是**权重和**口径：已装备遗物的槽位值之和 ≤ 槽位上限；非槽位式（0 槽）恒生效、不用装备。'];
+  if (!owned.length) return L.concat('  （还没有遗物）').join('\n');
+  const used = (p.equippedRelics ?? []).reduce((n, id) => n + cost(id), 0);
+  L.push(`槽位 ${used}/${p.relicSlots}（战斗中生效 = 已装备 + 全部非槽位式）`);
+  for (const id of owned) {
+    const d = getRelicDefinition(id);
+    const tags = [d?.rarity ?? 'C', d?.nonSlot ? '非槽位式·恒生效' : `${cost(id)}槽`];
+    if ((p.equippedRelics ?? []).includes(id)) tags.push('已装备');
+    else if (!d?.nonSlot) tags.push('未装备·不生效');
+    L.push(`  ${d?.name ?? id}（${tags.join('·')}）：${plain(d?.description ?? '')}`);
+  }
+  if (run.gameStage === 'prep') {
+    L.push('  → relic equip <遗物id> / relic unequip <遗物id>（进战斗前定好；编号见上）');
   }
   return L.join('\n');
 }

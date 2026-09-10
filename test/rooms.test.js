@@ -83,12 +83,15 @@ describe('老虎机（§4.2，权重占位）', () => {
       const prize = spinSlot(run);
       expect(prize.cost).toBe(cost);
       expect(run.player.money).toBe(before - cost);   // 扣费（产出另算，等领取）
-      expect(run.slotPending).toBeTruthy();           // 产出挂起待处理
+      // 未中奖不产生 pending（可直接再拉杆，见 headless 试玩 report-r1-A 缺陷#5）
+      expect(!!run.slotPending).toBe(prize.kind !== 'nothing');
       kinds.add(prize.kind);
 
-      const choice = prize.choices?.[0]?.id ?? prize.relicChoices?.[0]?.id ?? null;
-      takeSlotPrize(run, choice);
-      expect(run.slotPending).toBeNull();
+      if (run.slotPending) {
+        const choice = prize.choices?.[0]?.id ?? prize.relicChoices?.[0]?.id ?? null;
+        takeSlotPrize(run, choice);
+        expect(run.slotPending).toBeNull();
+      }
       if (prize.relicId) expect(run.player.relics).toContain(prize.relicId); // 遗物走抽选 SDK
     }
     expect(kinds.size).toBeGreaterThan(1); // 档内多项均有机会
@@ -101,7 +104,7 @@ describe('老虎机（§4.2，权重占位）', () => {
       for (let i = 0; i < 3; i++) {
         const p = spinSlot(run);
         out.push([p.cost, p.kind, p.money ?? null]);
-        takeSlotPrize(run, p.choices?.[0]?.id ?? p.relicChoices?.[0]?.id ?? null);
+        if (run.slotPending) takeSlotPrize(run, p.choices?.[0]?.id ?? p.relicChoices?.[0]?.id ?? null);
       }
       return out;
     };
