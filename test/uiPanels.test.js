@@ -552,6 +552,54 @@ describe('ascensionSnapshot + 种子包勾选（本地交互态）', () => {
     stage.dispose();
   });
 
+  it('勾选视觉：高亮不被 hover 抢走，且选中卡挂上「已选取」打勾徽标', async () => {
+    const { run, m } = await ascRun(75);
+    m.chooseAscension(run, 'fire');
+    const snap = ascensionSnapshot(run);
+    const stage = new MapStage({});
+    const sm = fakeManager();
+    stage.attachInput({ stageManager: sm, bus: mitt() });
+    stage.setPanel(snap);
+    const ids = snap.offering.cards.map(c => c.defId);
+
+    // 初始：无勾选 → 无徽标
+    expect(stage._panel._cards.every(c => c.badge === null)).toBe(true);
+
+    // 勾选第一张 → 该卡有徽标且高亮
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[0]}` });
+    const picked = stage._panel._cards.find(c => c.id === `seed:${ids[0]}`);
+    expect(picked.selected).toBe(true);
+    expect(picked.badge).toBeTruthy();
+    expect(picked.object.children).toContain(picked.badge); // 挂在卡面下（继承位置/缩放）
+    expect(picked.object.visualState).toBe('highlighted');
+
+    // hover 另一张卡：勾选卡的高亮必须**保持**（回归：早先被设回 normal）
+    stage._panel.onHover({ kind: 'card', id: `seed:${ids[1]}` });
+    expect(picked.object.visualState).toBe('highlighted');
+    const hovered = stage._panel._cards.find(c => c.id === `seed:${ids[1]}`);
+    expect(hovered.object.visualState).toBe('highlighted');
+    expect(hovered.badge).toBeNull(); // hover 不产生勾选记号
+
+    // 指针移出全部卡：勾选卡仍高亮
+    stage._panel.onHover({ kind: 'background' });
+    expect(picked.object.visualState).toBe('highlighted');
+    expect(stage._panel._cards.find(c => c.id === `seed:${ids[1]}`).object.visualState).toBe('normal');
+
+    // 取消勾选 → 徽标随之消失（重建）
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[0]}` });
+    expect(stage._panel._cards.find(c => c.id === `seed:${ids[0]}`).badge).toBeNull();
+
+    // 释放：徽标必须被显式摘除（CardObject.dispose 不管任意子对象，宿主负责）
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[0]}` });
+    const again = stage._panel._cards.find(c => c.id === `seed:${ids[0]}`);
+    const badge = again.badge;
+    const cardObj = again.object;
+    expect(cardObj.children).toContain(badge);
+    stage.setPanel(null);
+    expect(cardObj.children).not.toContain(badge); // 已摘除，不留幽灵子对象
+    stage.dispose();
+  });
+
   it('勾选不超上限（picks 张之后不再接受新勾选）', async () => {
     const { run, m } = await ascRun(74);
     m.chooseAscension(run, 'fire');

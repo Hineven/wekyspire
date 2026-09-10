@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { TextBlockObject } from './TextBlockObject.js';
 import { ButtonObject } from './ButtonObject.js';
 import { CardObject } from './CardObject.js';
+import { CheckBadgeObject } from './CheckBadgeObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from './cardMetrics.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
@@ -35,6 +36,8 @@ const FORMS = {
   },
 };
 const CARD_SCALE = 0.8;      // 面板内卡面缩放（3 张一排：3×20.8 + 间隙 < 取景带 177.8）
+const BADGE_PX = 58;         // 「已选取」打勾徽标直径（逻辑像素）
+const BADGE_MARGIN = 18;     // 徽标中心距卡面右/下边的距离（逻辑像素）
 const TILE = { width: 170, gap: 12 };
 
 export class PanelObject extends THREE.Group {
@@ -44,7 +47,7 @@ export class PanelObject extends THREE.Group {
    *   onIntent: (action) => void  点击路由出口（宿主接 runController）
    *   bakeText / bakeButton / bakeFace: 注入烘焙（缺省浏览器实现，node 退化占位）
    */
-  constructor({ form = 'anchored', onIntent = null, bakeText = null, bakeButton = null, bakeFace = null } = {}) {
+  constructor({ form = 'anchored', onIntent = null, bakeText = null, bakeButton = null, bakeFace = null, bakeBadge = null } = {}) {
     super();
     this.form = form;
     this._g = FORMS[form] ?? FORMS.anchored;
@@ -52,6 +55,7 @@ export class PanelObject extends THREE.Group {
     this._bakeText = bakeText;
     this._bakeButton = bakeButton;
     this._bakeFace = bakeFace;
+    this._bakeBadge = bakeBadge; // 打勾徽标烘焙（注入：单测用假实现）
     this._picker = null;
     this._rows = [];          // { widget, object, top, h, contentH }
     this._buttons = new Map(); // pickId -> ButtonObject（含横向组瓦片）
@@ -160,8 +164,10 @@ export class PanelObject extends THREE.Group {
     if (id === this._hoveredId) return;
     this._hoveredId = id;
     for (const [bid, btn] of this._buttons) btn.setHovered(bid === id);
-    for (const { object, id: cid } of this._cards) {
-      object.setVisualState(cid === id ? 'highlighted' : 'normal');
+    // 高亮 = hover **或** 已勾选：早先这里把非 hover 的卡一律设回 normal，
+    // 于是指针一移开，勾选高亮就被抹掉（勾选状态还在、视觉提示没了）。
+    for (const entry of this._cards) {
+      entry.object.setVisualState(entry.id === id || entry.selected ? 'highlighted' : 'normal');
     }
   }
 
@@ -257,11 +263,20 @@ export class PanelObject extends THREE.Group {
         obj.position.set(x, cy, Z.CONTENT);
         obj.scale.set(cardScale, cardScale, 1);
         this.add(obj);
-        // 勾选态：卡面高亮（与 hover 同一通道，hover 会盖过它——两者都不影响命中语义）
-        if (item.active) obj.setVisualState('highlighted');
+        const selected = !!item.active;
+        if (selected) {
+          obj.setVisualState('highlighted');
+          // 「已选取」打勾徽标：挂成卡面子对象（自动继承位置/缩放）。
+          // 只靠材质变亮不够——hover 也是变亮，语义会被抢走；勾选需要独立记号。
+          const badge = new CheckBadgeObject({ size: BADGE_PX, bake: this._bakeBadge });
+          const m = BADGE_MARGIN / PX_PER_WU;
+          badge.position.set(CARD_WIDTH / 2 - m, -CARD_HEIGHT / 2 + m, 0.01); // 卡牌局部：右下角外沿向内
+          obj.add(badge);
+          obj.userData.selectionBadge = badge;
+        }
         this._cardActions.set(pickId, item.action ?? { action: 'claimReward', defId: item.defId });
         this._picker?.addPickable(pickId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
-        this._cards.push({ id: pickId, object: obj, data });
+        this._cards.push({ id: pickId, object: obj, data, selected, badge: obj.userData.selectionBadge ?? null });
       } else {
         const pickId = `${w.idPrefix}:${item.id}`;
         const btn = new ButtonObject({
@@ -296,8 +311,10 @@ export class PanelObject extends THREE.Group {
       this.remove(btn);
       btn.dispose();
     }
-    for (const { object, id } of this._cards) {
+    for (const { object, id, badge } of this._cards) {
       this._picker?.removePickable(id);
+      // 徽标是卡面子对象，CardObject.dispose 不会释放它 —— 必须显式摘除并释放
+      if (badge) { object.remove(badge); badge.dispose(); }
       this.remove(object);
       object.dispose();
     }
