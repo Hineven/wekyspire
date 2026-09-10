@@ -55,6 +55,7 @@ import {
   spinSlot, SLOT, slotView, takeSlotPrize, declineSlotPrize, slotUpgrade,
   devourSlot, devourableRelics, devourableCards,
 } from '../src/core/run/rooms/slotMachine.js';
+import { buyShopItem, takeShopCard } from '../src/core/run/rooms/shop.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
@@ -415,6 +416,25 @@ export function exec(S, raw) {
     // ---- 奖励房 ----
     case 'act': {
       if (stage !== 'room') throw new Error('当前不在奖励房');
+      // 售货机与房间**并存**：不消耗房间行动，也不受"房间动作已完成"限制
+      if (a === 'shop') {
+        // 售货机（与房间并存，不消耗房间行动）：buy <#> 购买 / claim <id> 卡包三选一
+        if (!run.shop) throw new Error('本层没有售货机（只在 4/8、15/19、25/29、36/40 层出现）');
+        if (b === 'buy') {
+          const idx = num(t[3]);
+          const it = run.shop.items[idx];
+          const res = buyShopItem(run, idx);
+          S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
+            + (res.kind === 'pack' ? '（用 act shop claim <defId> 选卡）' : '');
+          return;
+        }
+        if (b === 'claim') {
+          takeShopCard(run, t[3]);
+          S.lastOutcome = `卡包开封：${t[3]} 已入组`;
+          return;
+        }
+        throw new Error('售货机动作：act shop buy <#> / act shop claim <defId>（离开用 next）');
+      }
       if (S.roomDone) throw new Error('本房间动作已完成，用 next 离开');
       const room = run.currentRoom;
       if (room === 'camp') {
@@ -640,7 +660,19 @@ export function render(S) {
   L.push(`玩家: HP ${p.hp}/${p.maxHp} 护盾${p.shield} 魏启 ${p.mana}/${p.maxMana} AP ${p.actionPoints}/${p.maxActionPoints} 金币 ${p.money} | 灵脉 火${p.leino.fire} 体修${p.bodyLevel ?? 0} | 训练 ${p.trainingCount} 进阶 ${p.ascensionCount}/${ASCENSION_PLACEHOLDER.maxAscensions}`);
   if (p.effects?.length) L.push(`玩家效果: ${effectsText(p)}`);
   if (p.abilities.length) L.push(`能力: ${p.abilities.join(' ')}`);
-  if (p.equippedRelics?.length) L.push(`装备遗物: ${p.equippedRelics.map(id => getRelicDefinition(id)?.name ?? id).join(' ')}`);
+  // 遗物：背包全量 + 槽位占用（槽位是**权重和**口径 Σcost ≤ relicSlots；非槽位式恒生效、不需装备）
+  if (p.relics?.length) {
+    const cost = (id) => { const d = getRelicDefinition(id); return d?.nonSlot ? 0 : (d?.cost ?? 1); };
+    const used = (p.equippedRelics ?? []).reduce((n, id) => n + cost(id), 0);
+    L.push(`遗物槽位 ${used}/${p.relicSlots}：`
+      + p.relics.map((id) => {
+        const d = getRelicDefinition(id);
+        const tags = [d?.rarity ?? 'C', d?.nonSlot ? '非槽位式' : `${cost(id)}槽`];
+        if ((p.equippedRelics ?? []).includes(id)) tags.push('已装备');
+        return `${d?.name ?? id}(${tags.join('·')})`;
+      }).join(' / '));
+    L.push('  → relic equip|unequip <遗物id>（仅 prep；非槽位式不用装备）');
+  }
 
   const stage = run.gameStage;
   if (stage === 'battle' && S.battle) {
@@ -692,6 +724,18 @@ export function render(S) {
     }
   } else if (stage === 'room') {
     const room = run.currentRoom;
+    // 售货机与房间**并存**（不占房间名额）：任何房间都可能同层有货架
+    if (run.shop) {
+      const disc = run.shop.discount < 1 ? `（${Math.round(run.shop.discount * 10)} 折）` : '';
+      L.push(`自动售货机${disc}｜持有 ${p.money} 金币：`);
+      if (run.shop.broken) L.push('  瑞米：“上次逃得太狼狈了……忘记补货了……”');
+      run.shop.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金${it.sold ? '（已售出）' : ''}`));
+      if (run.shopPending) {
+        L.push(`  → 卡包待选（act shop claim <defId>）：${run.shopPending.choices.join(' / ')}`);
+      } else {
+        L.push('  → act shop buy <#> 购买（离开房间不清货架，买光不补）');
+      }
+    }
     if (S.roomDone) {
       L.push(`（房间动作已完成 → next 离开）`);
     } else if (room === 'camp') {
