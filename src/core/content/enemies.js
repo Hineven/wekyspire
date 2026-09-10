@@ -148,25 +148,30 @@ registerEnemy({
   },
 });
 
-// ⑤ 怨灵：攻 → 咒（虚弱2：玩家攻击-2）循环——削弱玩家的输出轴，长线磨损
+// ⑤ 怨灵：攻6 → 咒（虚弱2：玩家攻击-2）→ 攻8 三拍循环——削弱玩家的输出轴，
+// 长线磨损。2026-09 稿改三拍（旧两拍版每两回合一虚，玩家直接萎了——超模）。
 registerEnemy({
   difficulty: { base: 3, min: 2, max: 4, floorMin: 2, floorMax: 18 },
   id: 'wraith', name: '怨灵',
   createUnit: () => new Enemy({ defId: 'wraith', name: '怨灵', maxHp: 22 }),
   act(actx) {
-    if (actx.unit.actionIndex % 2 === 1) {
+    const phase = actx.unit.actionIndex % 3;
+    if (phase === 1) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.player, effectId: 'weaken', stacks: 2,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 8 + actx.unit.getStat('attack'),
+        source: actx.unit, target: actx.player,
+        amount: (phase === 0 ? 6 : 8) + actx.unit.getStat('attack'),
       }));
     }
   },
-  getIntention: (unit) => (unit.actionIndex % 2 === 1
-    ? { kinds: ['debuff'], note: '赋予玩家虚弱2（攻击-2）' }
-    : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
+  getIntention: (unit) => {
+    const phase = unit.actionIndex % 3;
+    if (phase === 1) return { kinds: ['debuff'], note: '赋予玩家虚弱2（攻击-2）' };
+    return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 8) + unit.getStat('attack') };
+  },
 });
 
 // ⑥ 石像卫士：高防厚血 + 再生续航——再生3 → 攻 → 盾 循环，考验破防与斩杀线

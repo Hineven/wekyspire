@@ -538,7 +538,7 @@ describe('深入卡：万变拳与假动作', () => {
     expect(d.player.actionPoints).toBe(0);
   });
 
-  it('假动作：1AP 消耗，抽 2 牌洗入 2 虚无；虚无 0 费打出无效果且焚毁', () => {
+  it('假动作：0费消耗，抽 2 牌洗入 2 虚无；虚无 0 费打出无效果且焚毁', () => {
     const d = new BattleDriver({
       deck: ['feint', ...Array(5).fill('punch')],
       enemies: [tank()], seed: 5,
@@ -548,7 +548,7 @@ describe('深入卡：万变拳与假动作', () => {
     const handBefore = d.state.zones.hand.length;
 
     d.play('feint');
-    expect(d.player.actionPoints).toBe(2);
+    expect(d.player.actionPoints).toBe(3);   // 2026-09 稿：0费（未写费用 → 缺省 0）
     expect(d.state.zones.hand).toHaveLength(handBefore + 1); // 抽 2、自身离手
     expect(d.state.zones.deck.filter(c => c.defId === 'voidCard')).toHaveLength(2);
     expect(d.state.zones.burnt.some(c => c.defId === 'feint')).toBe(true);

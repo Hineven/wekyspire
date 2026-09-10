@@ -95,8 +95,9 @@ describe('新敌人：行为循环与意图一致', () => {
       id: 'wraith',
       name: '怨灵',
       turns: [
-        { intent: { kinds: ['attack'], damage: 8 }, expect: (d, s) => expect(s.playerHpDelta).toBe(8) },
+        { intent: { kinds: ['attack'], damage: 6 }, expect: (d, s) => expect(s.playerHpDelta).toBe(6) },
         { intent: { kinds: ['debuff'] }, expect: (d) => expect(d.player.getEffectStacks('weaken')).toBe(2) },
+        { intent: { kinds: ['attack'], damage: 8 }, expect: (d, s) => expect(s.playerHpDelta).toBe(8) },
       ],
     },
     {

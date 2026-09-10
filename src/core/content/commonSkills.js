@@ -61,7 +61,7 @@ registerSkill({
   describe: () => '/effect{纳气}4，12护盾',
 });
 
-// 深度萃取（汲取 B）：3MP，冷却1：纳气5，17护盾。
+// 深度萃取（汲取 B）：3MP，冷却1：纳气5，12护盾。
 registerSkill({
   id: 'deepExtract', name: '深度萃取', type: 'normal', pack: 'common', tier: 'B',
   cost: { mana: 3, actionPoint: 0 },
@@ -69,10 +69,10 @@ registerSkill({
   cardMode: 'normal',
   use(sctx) {
     sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'naqi', stacks: 5 }));
-    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 17 }));
+    sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 12 }));
     return true;
   },
-  describe: () => '/effect{纳气}5，17护盾',
+  describe: () => '/effect{纳气}5，12护盾',
 });
 
 // ---- 汲取·汲取线（AP 换纳气，长冷却）----

@@ -794,19 +794,24 @@ describe('开刃系列：斩进阶', () => {
     expect(hpB - enemyHp(d)).toBe(20);                    // 固定伤害：无视防御
   });
 
-  it('练刀：选1张手中刀法牌 +4 power 并丢弃之', () => {
-    const d = new BattleDriver({ deck: ['practiceBlade', 'cycloneSlash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
+  it('练刀：抽1 + 选1张手中刀法牌 +4 power 并丢弃之（2026-09 稿：无消耗）', () => {
+    const d = new BattleDriver({
+      deck: ['practiceBlade', 'cycloneSlash', 'punch', 'punch', 'guard'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 4 },   // guard 留牌库供抽1验证
+    });
     d.start();
     toHand(d, 'practiceBlade');
     toHand(d, 'cycloneSlash');
     const blade = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
     d.play('practiceBlade');
+    expect(d.state.zones.hand.some(c => c.defId === 'guard')).toBe(true);   // 先抽1落地
     expect(d.pendingInput?.request.kind).toBe('selectHandCard');
     expect(d.pendingInput.request.candidates).toEqual([blade.uniqueID]);   // 只可选刀法牌
     d.respond([blade.uniqueID]);
     expect(blade.power).toBe(4);
     expect(zoneOf(d.state, blade.uniqueID)).toBe('deck'); // 丢弃 = 落牌库底
-    expect(d.state.zones.burnt.some(c => c.defId === 'practiceBlade')).toBe(true);
+    expect(d.state.zones.burnt.some(c => c.defId === 'practiceBlade')).toBe(false);  // 去消耗
+    expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');     // 回牌库
   });
 });
 

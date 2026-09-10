@@ -423,21 +423,26 @@ registerSkill({
   describe: () => '下张打出的牌AP费用为0',
 });
 
-// 假动作（D，深入）：1AP 消耗——抽 2 牌，洗入 2 「虚无」。
+// 假动作系列（D→C→B，2026-09 稿：消耗，未写费用 → 0费）——抽 2/3/4 牌，
+// 洗入 2 「虚无」（升阶只涨抽牌数，噪音量不变）。
 // 过牌换稀释：短期手牌质量提升，牌库被虚无污染（虚无 0 费打出即焚，白吃一手节奏）。
-registerSkill({
-  id: 'feint', name: '假动作', type: 'normal', tier: 'D', series: 'fist',
-  cost: { mana: 0, actionPoint: 1 },
+const feintCard = ({ id, tier, draw, promotesTo }) => registerSkill({
+  id, name: '假动作', type: 'normal', tier, series: 'fist',
+  cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   keywords: ['exhaust'],
+  promotesTo,
   use(sctx) {
-    drawCards(sctx, 2);
+    drawCards(sctx, draw);
     for (let i = 0; i < 2; i++) addCard(sctx, 'voidCard', { index: 'random' });
     return true;
   },
-  describe: () => '抽2牌，/named{洗入}2/card{voidCard}',
+  describe: () => `抽${draw}牌，/named{洗入}2/card{voidCard}`,
 });
+feintCard({ id: 'feint', tier: 'D', draw: 2, promotesTo: 'feintPlus' });
+feintCard({ id: 'feintPlus', tier: 'C', draw: 3, promotesTo: 'feintMaster' });
+feintCard({ id: 'feintMaster', tier: 'B', draw: 4 });
 
 // 虚无（假动作衍生牌）：0 费无效果消耗牌——纯粹的牌库噪音，只经造牌入场。
 registerSkill({

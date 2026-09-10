@@ -710,12 +710,12 @@ registerSkill({
   battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
 });
 
-// 练刀（D，1AP，消耗）：选1张手中刀法牌令其伤害+4，丢弃之（deckCraft 锻刀原型同构；
-// power 漂移口径同培植系列）。canUse 闸门：手中无刀法牌不可打出（试玩反馈——
-// 静默白烧 1AP 零反馈，比落空更糟）。
+// 练刀（D，1AP，2026-09 稿：去消耗、先抽1）：抽1，选1张手中刀法牌令其伤害+4，
+// 并将其弃入牌库（deckCraft 锻刀原型同构；power 漂移口径同培植系列）。
+// canUse 闸门：手中无刀法牌不可打出（试玩反馈——静默白烧 1AP 零反馈，比落空更糟；
+// 抽1可能抽来新刀，但闸门按打出时点已有刀判，稳定可预期）。
 registerSkill({
   id: 'practiceBlade', name: '练刀', type: 'normal', tier: 'D', series: 'blade',
-  keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -723,8 +723,12 @@ registerSkill({
     c => c.uniqueID !== sctx.self.uniqueID && isBladeCard(c)),
   use(sctx, stage) {
     if (stage === 0) {
+      drawCards(sctx, 1);                                  // 先抽1（无消耗，回牌库循环用）
+      return false;                                        // 抽牌落地后再选刀
+    }
+    if (stage === 1) {
       const blades = sctx.battleState.zones.hand.filter(isBladeCard);   // 自身已离手
-      if (blades.length === 0) return true;   // 无刀可练：直接收尾
+      if (blades.length === 0) return true;   // 抽1后仍无刀可练：直接收尾
       sctx.self._pick = requestHandSelection(sctx, {
         count: 1, filter: isBladeCard, reason: '练刀：选1张刀法牌',
       });
@@ -740,8 +744,8 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
-  battleDescribe: () => '选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
+  describe: () => '抽1，选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
+  battleDescribe: () => '抽1，选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
 });
 
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
