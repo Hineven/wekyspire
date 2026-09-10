@@ -103,6 +103,8 @@ const effectsText = (unit) => unit.effects?.length
 const intentText = (u) => {
   const it = u.intention;
   if (!it) return '未知';
+  // 语义性意图（只有 unknown 一种 kind 且有说明）：直接显示说明，不套「未知（…）」
+  if (it.kinds?.length === 1 && it.kinds[0] === 'unknown' && it.note) return it.note;
   const kind = (it.kinds ?? []).map(k => ({
     attack: '攻击', defend: '防御', buff: '强化', debuff: '削弱',
     summon: '召唤', unknown: '未知', stun: '晕眩',

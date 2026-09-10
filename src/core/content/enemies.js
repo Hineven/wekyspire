@@ -547,7 +547,9 @@ registerEnemy({
     }));
   },
   getIntention: (unit) => (unit.actionIndex === 0
-    ? { kinds: ['unknown'], note: '沉眠·苏醒时攻击+2' }
+    // 沉睡期把「何时苏醒、苏醒后打多少」说清——两只同回合苏醒＝每回合 20+ 伤，
+    // 是第 1 章最容易低估的死因（第 3 轮试玩两个正常局皆死于此）。纯展示，不影响 AI。
+    ? { kinds: ['unknown'], note: '沉眠：下回合苏醒并获得力量2，此后每回合都攻击' }
     : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
 });
 
