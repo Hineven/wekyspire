@@ -30,8 +30,8 @@ import { getEffectDefinition, allEffects } from '../src/core/effects/registry.js
 import { getEnemyDefinition } from '../src/core/enemies/registry.js';
 import { gatedPromotionTargets } from '../src/core/run/promotion.js';
 import { getAbilityDefinition } from '../src/core/abilities/registry.js';
-import { getRelicDefinition } from '../src/core/relics/registry.js';
-import { prepUseRelic, equipRelic, unequipRelic } from '../src/core/run/prep.js';
+import { getRelicDefinition, allRelics } from '../src/core/relics/registry.js';
+import { prepUseRelic, equipRelic, unequipRelic, grantRelic } from '../src/core/run/prep.js';
 import { swapCostOf } from '../src/core/state/battleState.js';
 import {
   startBattle, playerUseSkill, playerEndTurn, playerSwapCard, isBattleFinished, respondInput,
@@ -76,7 +76,9 @@ export const HELP = `动作表（按当前阶段）：
   通用: state | deck | lib | relics（遗物效果一览） | terms（词条/效果释义） | note <文本> | help
 ※ 打牌/选牌推荐「编号+卡名」双重确认（编号定位、卡名校验，不匹配会报错并提示实际卡名）；
   **也可以只给卡名**：卡名在手牌/候选里唯一时自动定位（打出带抽牌的卡会让编号瞬移，此时用卡名最稳）。
-※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。`;
+※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。
+※ dev（**仅覆盖局用**，正常局不要用；用了必须在报告里标注）：dev relic <id> | dev relics <id,id,..>
+   | dev listed（全部遗物 id + 效果） | dev money <n> | dev heal`;
 
 // ---------- 小工具 ----------
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
@@ -702,6 +704,63 @@ export function exec(S, raw) {
       L.push('  确认升级：营地 act upgrade <#> <卡名> / 训练场 act up <#> <卡名>');
       S.lastOutcome = L.join('\n');
       return;
+    }
+
+    // ---- dev：覆盖局专用（受试内容在早期拿不到时的取样手段）----
+    // 这些动作**照常入档**，所以重放模型不受影响；但它们绕过正常的获取流程，
+    // 用它们打的对局必须在报告里标注为「覆盖局」，其平衡感受不可与正常局混同。
+    case 'dev': {
+      if (stage !== 'prep' && stage !== 'room') {
+        throw new Error(`dev 指令仅在战前准备/奖励房可用（当前：${stageCn(stage)}）`);
+      }
+      const what = a;
+      if (what === 'relic') {
+        const id = b;
+        if (!getRelicDefinition(id)) throw new Error(`没有这个遗物 id：${id}（dev listed 看全部 id）`);
+        if ((run.player.relics ?? []).includes(id)) { S.lastOutcome = `已经拥有 ${id}`; return; }
+        grantRelic(run, id);
+        const d = getRelicDefinition(id);
+        S.lastOutcome = `[dev] 获得遗物 ${d.name}（${d.rarity}${d.nonSlot ? '·非槽位式' : `·${d.cost ?? 1}槽`}）`
+          + (d.nonSlot ? '——拾起即生效' : '——需 relic equip 才生效');
+        return;
+      }
+      if (what === 'relics') {
+        const ids = String(b ?? '').split(',').map(x => x.trim()).filter(Boolean);
+        if (!ids.length) throw new Error('用法：dev relics <id1,id2,...>（dev listed 看全部 id）');
+        const bad = ids.filter(id => !getRelicDefinition(id));
+        if (bad.length) throw new Error(`不存在的遗物 id：${bad.join(' ')}（dev listed 看全部）`);
+        const added = [];
+        for (const id of ids) {
+          if ((run.player.relics ?? []).includes(id)) continue;
+          grantRelic(run, id);
+          added.push(getRelicDefinition(id).name);
+        }
+        S.lastOutcome = `[dev] 获得遗物 ${added.join('、') || '（都已拥有）'}`;
+        return;
+      }
+      if (what === 'listed') {          // dev listed：列出全部遗物 id 与效果（等价 relics 视图 + id）
+        const L = ['【dev 遗物 id 名单】按 id 发给自己：dev relic <id> 或 dev relics <id,id,...>'];
+        for (const d of allRelics()) {
+          const gate = d.requires ? `［需${d.requires.leino ? `灵脉${d.requires.leino}≥${d.requires.min}` : '任意灵脉≥1'}］` : '';
+          L.push(`  ${d.id} = ${d.name}（${d.rarity}${d.nonSlot ? '·非槽位式' : `·${d.cost ?? 1}槽`}）${gate} ${plain(d.description ?? '')}`);
+        }
+        S.lastOutcome = L.join('\n');
+        return;
+      }
+      if (what === 'money') {
+        const n = num(b);
+        if (!Number.isInteger(n) || n <= 0) throw new Error('用法：dev money <正整数>');
+        run.player.money += n;
+        S.lastOutcome = `[dev] 金币 +${n} → ${run.player.money}`;
+        return;
+      }
+      if (what === 'heal') {
+        run.player.hp = run.player.maxHp;
+        run.player.mana = run.player.maxMana;
+        S.lastOutcome = `[dev] 生命/魏启回满（HP ${run.player.hp}/${run.player.maxHp}）`;
+        return;
+      }
+      throw new Error('dev 子命令：relic <id> | relics <id,id,...> | listed | money <n> | heal');
     }
 
     // ---- 遗物：装卸与主动使用（核心 API 见 run/prep.js）----
