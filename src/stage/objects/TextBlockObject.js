@@ -55,6 +55,11 @@ export class TextBlockObject extends THREE.Mesh {
     this.position.set(x + this.scale.x / 2, y - this.scale.y / 2, this.position.z);
   }
 
+  /** 上边中点锚：把面片顶边中点放到 (x, y)（模态面板的居中行用）。 */
+  placeCenterTop(x, y) {
+    this.position.set(x, y - this.scale.y / 2, this.position.z);
+  }
+
   dispose() {
     this.geometry.dispose();
     this.material.map?.dispose?.();

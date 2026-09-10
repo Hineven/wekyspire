@@ -4,15 +4,18 @@ import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { PanelObject } from '../objects/PanelObject.js';
-import { buildPrepPanel } from '../panels/prepPanel.js';
+import { buildPrepPanel, buildRewardPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
+import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
+import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 
 // 快照 kind → widget builder（一个面板一个；未登记 = 该阶段还没有 Three 面板，
-// 对应 Vue 面板仍在渲染——迁移是逐面板推进的）
+// 对应 Vue 面板仍在渲染——迁移是逐面板推进的）。form = PanelObject 形态。
 const PANEL_BUILDERS = {
-  prep: buildPrepPanel,
+  prep: { build: buildPrepPanel, form: 'anchored' },
+  reward: { build: buildRewardPanel, form: 'modal' },
 };
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
@@ -46,6 +49,10 @@ export class MapStage {
     // 必须先取缓存再构造状态栏——构造时即按缓存现状挂水晶/金币美术并订阅 onLoad
     this._unitArt = unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null);
     this._bakeLabel = bakeLabel || defaultBakeLabel();
+    // 面板内卡面走与战场同一份烘焙（卡图/系列装饰/魏启水晶素材同源，所见即所得）
+    this._bakeFace = (typeof document !== 'undefined')
+      ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
+      : null;
     this._statusBar = new PlayerStatusObject({ bakeLabel: this._bakeLabel, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
@@ -59,6 +66,7 @@ export class MapStage {
     this._applyAvatar();
 
     this._unsubTick = null;
+    this._unsubCardArt = null; // 卡图到图 → 面板卡面重烘
     this._picker = null;   // 输入通道（attachInput 注入：stageManager + 总线）
     this._panel = null;    // 当前休息阶段面板对象（setPanel 装配；null = 无面板）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -80,15 +88,31 @@ export class MapStage {
    * 未登记的 kind → 不装配（该面板还在 Vue 侧）。
    */
   setPanel(snap) {
-    const builder = snap && PANEL_BUILDERS[snap.kind];
-    if (!builder) { this._removePanel(); return; }
+    const entry = snap && PANEL_BUILDERS[snap.kind];
+    if (!entry) { this._removePanel(); this._syncCardArtSub(); return; }
     if (!this._panel || this._panel.kind !== snap.kind) {
       this._removePanel();
-      this._panel = new PanelObject({ onIntent: (a) => this._onIntent?.(a) });
+      this._panel = new PanelObject({
+        form: entry.form,
+        onIntent: (a) => this._onIntent?.(a),
+        bakeFace: this._bakeFace,
+      });
       this.uiScene.add(this._panel);
     }
     this._panel.attachPicker(this._picker);
-    this._panel.setWidgets(snap.kind, builder(snap));
+    this._panel.setWidgets(snap.kind, entry.build(snap));
+    this._syncCardArtSub();
+  }
+
+  // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅
+  _syncCardArtSub() {
+    const need = !!this._panel?.ownsCardArtWait;
+    if (need && !this._unsubCardArt) {
+      this._unsubCardArt = sharedCardArtCache.addOnLoad(() => this._panel?.rebakeCards?.());
+    } else if (!need && this._unsubCardArt) {
+      this._unsubCardArt();
+      this._unsubCardArt = null;
+    }
   }
 
   _removePanel() {
@@ -96,6 +120,7 @@ export class MapStage {
     this.uiScene.remove(this._panel);
     this._panel.dispose();
     this._panel = null;
+    this._syncCardArtSub();
   }
 
   // ---- 输入通道 ----
@@ -181,6 +206,8 @@ export class MapStage {
   dispose() {
     this.onExit();
     this._unsubArt?.(); // 共享缓存订阅摘除（防幽灵舞台补挂头像）
+    this._unsubCardArt?.();
+    this._unsubCardArt = null;
     this._removePanel();
     this.detachInput();
     for (const child of [...this._tower.children]) { // 塔身层块（与 setFloor 重建同律）

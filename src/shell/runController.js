@@ -371,6 +371,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'unequip') unequip(intent.relicId);
     else if (action === 'useRelic') useRelic(intent.relicId);
     else if (action === 'startBattle') startBattle();
+    else if (action === 'chooseRewardPack') chooseRewardPack(intent.packId);
+    else if (action === 'claimReward') claimReward(intent.defId ?? null);
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
 

@@ -6,9 +6,9 @@ import { StageManager } from '../src/stage/StageManager.js';
 import { PanelObject } from '../src/stage/objects/PanelObject.js';
 import { ButtonObject } from '../src/stage/objects/ButtonObject.js';
 import { TextBlockObject } from '../src/stage/objects/TextBlockObject.js';
-import { panelSnapshot, prepSnapshot } from '../src/core/run/panelSnapshot.js';
-import { buildPrepPanel } from '../src/stage/panels/prepPanel.js';
-import { createRun } from '../src/core/run/runFlow.js';
+import { panelSnapshot, prepSnapshot, rewardSnapshot } from '../src/core/run/panelSnapshot.js';
+import { buildPrepPanel, buildRewardPanel } from '../src/stage/panels/index.js';
+import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
 import { createRunController } from '../src/shell/runController.js';
@@ -19,6 +19,19 @@ import { tooltipState } from '../src/shell/tooltipHub.js';
 // 休息阶段 UI 迁移的契约测试（用户 2026-09 对本次迁移显式豁免「测试维护暂停」）。
 // 只测基础设施契约：快照推导 / 布局确定性 / 拾取路由 / 释放 / 事件幂等；
 // 视觉样式与演出不写测试（浏览器由用户验收，uiGallery.html 为视觉门）。
+
+// 假舞台只记录推流；通道语义与 MapStage 的真实现一致（setPanel / setPanelIntentHandler）
+function fakeMapStage() {
+  const pushes = [];
+  const stage = {
+    pushes,
+    intentHandler: null,
+    setStatus() {},
+    setPanel(snap) { pushes.push(snap); },
+    setPanelIntentHandler(fn) { stage.intentHandler = fn; },
+  };
+  return stage;
+}
 
 // 无渲染器的舞台管理器（假 renderer，与既有舞台测试同法）
 function fakeManager() {
@@ -277,19 +290,6 @@ describe('MapStage 输入通道与面板装配', () => {
 });
 
 describe('端到端：runController 的快照下行 / 意图上行（真实编排器，非桩）', () => {
-  // 假舞台只记录推流；通道语义与 MapStage 的真实现一致（setPanel / setPanelIntentHandler）
-  function fakeMapStage() {
-    const pushes = [];
-    const stage = {
-      pushes,
-      intentHandler: null,
-      setStatus() {},
-      setPanel(snap) { pushes.push(snap); },
-      setPanelIntentHandler(fn) { stage.intentHandler = fn; },
-    };
-    return stage;
-  }
-
   it('创建即推 prep 快照；意图落回 core 后回推新快照（装备位随之变化）', () => {
     clearSave(false); clearSave(true);
     const map = fakeMapStage();
@@ -324,6 +324,122 @@ describe('端到端：runController 的快照下行 / 意图上行（真实编�
     expect(() => map.intentHandler(null)).not.toThrow();
     expect(() => map.intentHandler({ action: 'shopBuy' })).not.toThrow();
     expect(() => map.intentHandler({ action: 'equip', relicId: 'noSuchRelic' })).toThrow();
+  });
+});
+
+describe('rewardSnapshot + 模态面板（卡片三选一）', () => {
+  // 造一个处于 reward 阶段的 run（胜利 → 生成战后奖励；初始只有体修包 → 核心自动开包）
+  function rewardRun(seed = 51) {
+    const run = createRun({ seed });
+    enterBattle(run);
+    finishBattle(run, 'victory');
+    return run;
+  }
+
+  it('奖励快照：金币入账 + 卡包 + 卡面视图（describe 已在 core 侧解析）', () => {
+    const run = rewardRun();
+    const snap = rewardSnapshot(run);
+    expect(snap.kind).toBe('reward');
+    expect(snap.money).toBeGreaterThan(0);
+    expect(snap.packs.length).toBeGreaterThan(0);
+    // 初始只解锁体修包 → spawnRewards 已自动开包，直接进选卡态
+    expect(snap.packId).toBeTruthy();
+    expect(snap.skillChoices).toHaveLength(3);
+    for (const c of snap.skillChoices) {
+      expect(typeof c.defId).toBe('string');
+      expect(c.view).toBeTruthy();
+      expect(typeof c.view.text).toBe('string'); // 应用前口径的卡面正文
+      // keywords 是原始 id（中文标签的映射在 Stage 侧做，core 不依赖 bridge 的标签表）
+      expect(c.view.keywords.every(k => typeof k === 'string')).toBe(true);
+      expect(c.view.keywords.includes('消耗')).toBe(false);
+    }
+  });
+
+  it('未选卡包时快照给瓦片列表（多包可选）', () => {
+    const run = rewardRun(52);
+    run.rewards.packId = null;
+    run.rewards.skillChoices = [];
+    run.rewards.packs = ['body', 'fire'];
+    const snap = rewardSnapshot(run);
+    expect(snap.packId).toBeNull();
+    expect(snap.packs.map(p => p.id)).toEqual(['body', 'fire']);
+    expect(snap.packs.every(p => typeof p.name === 'string' && typeof p.desc === 'string')).toBe(true);
+  });
+
+  it('模态面板：卡包瓦片走 chooseRewardPack；卡面走 claimReward；重建不累积', () => {
+    const intents = [];
+    const pickables = [];
+    const panel = new PanelObject({ form: 'modal', onIntent: (a) => intents.push(a) });
+    panel.attachPicker({
+      addPickable: (id, obj, opts) => pickables.push({ id, opts }),
+      removePickable: (id) => { const i = pickables.findIndex(p => p.id === id); if (i >= 0) pickables.splice(i, 1); },
+    });
+
+    // ① 瓦片态（多包未选）
+    const run = rewardRun(53);
+    run.rewards.packId = null; run.rewards.skillChoices = []; run.rewards.packs = ['body', 'fire'];
+    panel.setWidgets('reward', buildRewardPanel(rewardSnapshot(run)));
+    expect(panel.buttons.find(b => b.pickId.startsWith('pack:'))).toBeTruthy();
+    panel.onClick({ kind: 'button', id: 'pack:fire' });
+    expect(intents.at(-1)).toEqual({ action: 'chooseRewardPack', packId: 'fire' });
+
+    // ② 卡面态：卡注册为 kind 'card'（Picker 做 UV 二级查询 → 卡面 token tooltip），
+    //    整卡命中走 claimReward
+    const run2 = rewardRun(54);
+    const snap2 = rewardSnapshot(run2);
+    panel.setWidgets('reward', buildRewardPanel(snap2));
+    const cardPickables = pickables.filter(p => p.opts.kind === 'card');
+    expect(cardPickables).toHaveLength(3);
+    expect(pickables.every(p => p.opts.space === 'ui')).toBe(true);
+    const first = snap2.skillChoices[0].defId;
+    panel.onClick({ kind: 'card', id: `reward:${first}` });
+    expect(intents.at(-1)).toEqual({ action: 'claimReward', defId: first });
+
+    // 跳过
+    panel.onClick({ kind: 'button', id: 'reward:skip' });
+    expect(intents.at(-1)).toEqual({ action: 'claimReward', defId: null });
+
+    // 换内容（卡面 → 卡面）不累积子对象
+    const before = panel.children.length;
+    panel.setWidgets('reward', buildRewardPanel(snap2));
+    expect(panel.children.length).toBe(before);
+    panel.dispose();
+    expect(pickables).toHaveLength(0);
+  });
+
+  it('模态形态：内容居中于取景带、落在带内、卡面横向对称', () => {
+    const run = rewardRun(55);
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('reward', buildRewardPanel(rewardSnapshot(run)));
+    expect(panel.position.x).toBe(0); // 局部原点 = 取景带中心
+    const UI_TOP = -15 + 100 / 2; const UI_BOTTOM = -15 - 100 / 2;
+    for (const { top, bottom } of panel.rows) {
+      expect(panel.position.y + top).toBeLessThanOrEqual(UI_TOP + 1e-6);
+      expect(panel.position.y + bottom).toBeGreaterThanOrEqual(UI_BOTTOM - 1e-6);
+    }
+    const xs = panel._cards.map(c => c.object.position.x);
+    expect(xs).toHaveLength(3);
+    expect(xs[0] + xs[2]).toBeCloseTo(0, 4); // 三张卡对称于中线
+    expect(xs[1]).toBeCloseTo(0, 4);
+    panel.dispose();
+  });
+
+  it('端到端：奖励意图落回 core（领取 → 卡进组 → 离房）', () => {
+    clearSave(false); clearSave(true);
+    const map = fakeMapStage();
+    const ctrl = createRunController({ seed: 56, mapStage: map });
+    enterBattle(ctrl.run);
+    finishBattle(ctrl.run, 'victory');
+    const snap = rewardSnapshot(ctrl.run);
+    expect(snap.skillChoices).toHaveLength(3);
+
+    const deckBefore = ctrl.run.player.deck.length;
+    const pick = snap.skillChoices[0].defId;
+    map.intentHandler({ action: 'claimReward', defId: pick });
+    expect(ctrl.run.player.deck.length).toBe(deckBefore + 1); // 卡真的进组了
+    expect(ctrl.run.gameStage).not.toBe('reward'); // 领取即离房
+    // notify 回推的是新阶段的面板（reward 已结束）
+    expect(map.pushes.at(-1)?.kind).not.toBe('reward');
   });
 });
 

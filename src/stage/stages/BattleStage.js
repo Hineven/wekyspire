@@ -42,15 +42,17 @@ import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
 import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
-import { bakeCardFace } from '../richtext/cardFace.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
+import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
+// 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
+// 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
+import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
+export { CARD_WIDTH, CARD_HEIGHT };
 
-export const CARD_WIDTH = 26;   // 20 × 1.3：2026-08 手牌观感迭代整体放大卡面
-export const CARD_HEIGHT = 35.1;
 export const PLAY_LINE_Y = -20;
 const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（静息 z≤15，悬浮抬升后 ≤36），viewer（z=80）打开时 aiming 不可达
 
@@ -97,12 +99,7 @@ export class BattleStage {
     this._unitArt = (typeof document !== 'undefined')
       ? sharedUnitArtCache
       : null;
-    this._bakeFace = bakeFace || ((card) => bakeCardFace(card, {
-      scale: 3, // 卡面烘焙超采样：卡牌 26×35.1wu 在 1080p 已近 380px 高，scale 2 会糊
-      art: this._artCache?.get(card) ?? null,
-      decor: this._artCache?.getDecor?.(card) ?? null, // 系列装饰图层（素材未就位为 null，走程序化占位）
-      manaCrystal: this._unitArt?.getFile('mana_crystal_full.png') ?? null, // 魏启开销徽章素材（未就位蓝色圆回落）
-    }));
+    this._bakeFace = bakeFace || makeCardFaceBaker({ cardArt: this._artCache, unitArt: this._unitArt });
     // 小字号文本（HP/效果行/资源点）：烘焙 scale 3 供更干净的 mipmap 链，
     // 并开各向异性过滤（效果行随 billboard 与俯视相机成斜角，aniso 防斜向模糊/闪烁）
     this._bakeLabel = bakeLabel || ((text) => {

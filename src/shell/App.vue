@@ -2,7 +2,7 @@
 // Vue 薄壳：三层场景的最外层编排（README「场景层级」总纲）。
 // 菜单层 = 纯 Vue（StartScreen / GameMenu / EndPanel）；
 // 大世界层（塔楼层）= MapStage（ThreeJS）+ Three 面板（prep 等，见 stage/panels/）；
-// 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud / RewardPanel 等叠加。
+// 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud 等叠加；休息阶段面板见 stage/panels/。
 // dialogue / cutscene overlay 由 Vue 渲染，跨后两层（CutsceneOverlay）。
 import { onMounted, onBeforeUnmount, ref, computed, provide } from 'vue';
 import '../core/content/index.js'; // 注册全部最小内容
@@ -14,7 +14,6 @@ import StartScreen from './components/StartScreen.vue';
 import AssetLoadingScreen from './components/AssetLoadingScreen.vue';
 import GameMenu from './components/GameMenu.vue';
 import BattleHud from './components/BattleHud.vue';
-import RewardPanel from './components/RewardPanel.vue';
 import RoomPanel from './components/RoomPanel.vue';
 import AscensionPanel from './components/AscensionPanel.vue';
 import EndPanel from './components/EndPanel.vue';
@@ -166,9 +165,8 @@ onBeforeUnmount(() => {
     <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />
     <template v-else-if="ctrl">
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
-      <!-- prep 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
+      <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
       <BattleHud v-if="stage === 'battle'" :ctrl="ctrl" />
-      <RewardPanel v-else-if="stage === 'reward'" :ctrl="ctrl" />
       <RoomPanel v-else-if="stage === 'room'" :ctrl="ctrl" />
       <AscensionPanel v-else-if="stage === 'ascension'" :ctrl="ctrl" />
       <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />

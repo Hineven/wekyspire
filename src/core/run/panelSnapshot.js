@@ -15,7 +15,10 @@
 
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
+import { getSkillDefinition } from '../skills/registry.js';
+import { cardViewFromDef } from '../skills/cardView.js';
 import { isBossFloor, FLOORS_PER_CHAPTER } from './runFlow.js';
+import { PACKS } from './rewards.js';
 
 /**
  * 当前阶段的面板快照；无可呈现面板时返回 null。
@@ -26,6 +29,7 @@ export function panelSnapshot(run) {
   if (!run) return null;
   switch (run.gameStage) {
     case 'prep': return prepSnapshot(run);
+    case 'reward': return rewardSnapshot(run);
     default: return null;
   }
 }
@@ -62,5 +66,32 @@ export function prepSnapshot(run) {
       };
     }),
     canStartBattle: true,
+  };
+}
+
+/**
+ * 战后奖励（房间层·模态面板）：金币入账 + 卡包选择 + 包内三选一。
+ * 卡面视图在 core 侧解析（`describe` 的 ctx 传当前 player，应用前口径），
+ * 使快照保持纯数据——Stage 只负责烘焙与摆位。
+ * 卡包已自动开好（单包时 spawnRewards 直接开包）→ packId 非空、skillChoices 已填。
+ */
+export function rewardSnapshot(run) {
+  const rw = run.rewards;
+  if (!rw) return null;
+  const packMeta = (id) => {
+    const p = PACKS[id] ?? { id, name: id, desc: '' };
+    return { id, name: p.name ?? id, desc: p.desc ?? '' };
+  };
+  return {
+    kind: 'reward',
+    title: '战后奖励',
+    money: rw.money ?? 0,
+    packs: (rw.packs ?? []).map(packMeta),
+    packId: rw.packId ?? null,
+    packName: rw.packId ? packMeta(rw.packId).name : null,
+    skillChoices: (rw.skillChoices ?? []).map(id => ({
+      defId: id,
+      view: cardViewFromDef(getSkillDefinition(id), { player: run.player }),
+    })),
   };
 }

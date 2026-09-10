@@ -1,10 +1,15 @@
 # THREE_UI_MIGRATION — 休息阶段 UI 全量 three.js 化
 
-> 状态：**v4（2026-09-10）**，已过两轮对抗性评审；§6 待定项已由所有者全部裁决；**P0 + PrepPanel 试点已执行**（见 §7）。
+> 状态：**v5（2026-09-10）**，已过两轮对抗性评审；§6 待定项已由所有者全部裁决；**P0 + P1 原语 + prep/reward 两个面板已执行**（见 §7）。
 > 本文档是本次迁移的**单一事实源**；与 `THREE_REFACTOR_PLAN.md` 冲突时以该计划为准，并回写本文档。
 >
 > **v3 → v4**：①§6 六项待定全部裁决（测试暂停对本次迁移**豁免**；**滚动改为自实现全屏竖向滚动条**——
 > 推翻 v1–v3 的「分页替代滚动」，见 §5.2）；②§4.3 契约门生效；③新增 §7 执行进度。
+>
+> **v4 → v5（执行进展）**：prep（锚定）+ reward（模态，含卡面三选一）已迁入 Three 并删除 Vue 组件；
+> 新增 `core/skills/cardView.js`、`richtext/cardFaceDefaults.js`、`objects/cardMetrics.js` 三处抽取，
+> 使卡面烘焙/尺寸在战斗与面板间**同源**（原本将出现第三份复制）。实施中由契约测试抓出并修掉两个真 bug：
+> ①烘焙文本高于行框导致行重叠（现等比收进行框）②瓦片（横向组）点击路由查不到 action（改为显式 action 表）。
 >
 > **v1 → v2 修订记录**（评审：kimi k3 `expert` 子代理，逐条核对代码后提出 3 阻断 / 4 重要 / 8 处事实错误）：
 > ①补 §2.3 tooltip 转发管道（v1 漏掉，P2 必爆）；②把老虎机演出改造并入 P2-RoomPanel（v1 分期自相矛盾）；
@@ -370,12 +375,14 @@ RoomPanel 最重（滚动 + 老虎机演出），放最后。
 | 期 | 状态 | 落地物 |
 |---|---|---|
 | **P0 管道** | ✅ 完成 | `MapStage.attachInput/handlePointer*`（Picker + 按下/抬起命中配对）；`App.vue` 指针路由泛化为「当前舞台」（battle → BattleStage，其余 → MapStage）；**常驻 tooltip 转发器** `shell/tooltipForward.js`（补上 rest 阶段 3D tooltip 的链路缺口）；`test/uiPanels.test.js` 覆盖前两项与转发的**幂等**契约 |
-| **P1 原语** | ✅ 主体完成 | `core/run/panelSnapshot.js`（纯函数，数据下行唯一通道）；`PanelObject`（锚定形态 + 固定行高行流 + 等比收敛 + 点击路由）；`ButtonObject`（三态 + 签名 diff）；`TextBlockObject`；`stage/panels/prepPanel.js`（快照 → widget 映射）。**待补**：模态形态（随 RewardPanel）、`ScrollListObject`（随牌库级选卡界面）、`TileGrid` |
-| **P2 面板** | 🟡 PrepPanel 完成 | PrepPanel 已迁入 Three 并经 `runController` 的 `panelSnapshot` 下行 + `dispatchPanelIntent` 上行；**`PrepPanel.vue` 已删除**（不留双实现）。余：RewardPanel → AscensionPanel → RoomPanel（含老虎机 sequencer 改造） |
+| **P1 原语** | ✅ 主体完成 | `core/run/panelSnapshot.js`（纯函数，数据下行唯一通道）；`PanelObject`（**锚定 + 模态两形态** + 固定行高行流 + 等比收敛 + 按钮/瓦片/卡面三类 widget + 点击路由）；`ButtonObject`（三态 + 签名 diff）；`TextBlockObject`；`core/skills/cardView.js`（卡面视图，与 CardFacePreview 共用，消除重复）；`richtext/cardFaceDefaults.js` + `objects/cardMetrics.js`（从 BattleStage 抽出的卡面烘焙/尺寸，战斗与面板同源）；`stage/panels/index.js`（快照 → widget 构建器注册表）。**待补**：`TileGrid`/`ListLayout` 独立化（当前瓦片行流已够用）、`ScrollListObject`（随牌库级选卡界面） |
+| **P2 面板** | 🟡 2/4 | **prep**（锚定）与 **reward**（模态 + 卡面三选一）已迁入 Three 并删除对应 Vue 组件（不留双实现）。余：AscensionPanel → RoomPanel（含老虎机 sequencer 改造） |
 | **P3 收尾** | ⬜ 未开始 | 渐进揭示 + 正式特效 |
 
-**验收门**：`test/uiPanels.test.js`（18 例）+ `uiGallery.html`（`?panel=prep&seed=&relics=&equip=&floor=`，
-面板内按钮可点、真实走 core 意图；右上角显示最后一次意图，左下角显示 tooltip 状态机）。
-浏览器视觉验收（面板观感、与塔楼/状态栏的遮挡关系）按项目惯例**由所有者验收**。
+**验收门**：`test/uiPanels.test.js`（25 例：快照推导 / 原语 headless 可构造 / 布局不重叠不越界 /
+按钮与卡面点击路由 / disabled 拦截 / 重建幂等 / 释放无残留 / tooltip 转发幂等 / runController 端到端通道）
++ `uiGallery.html`（`?panel=prep|reward&seed=&relics=&equip=&floor=`，面板内按钮与卡面可点、
+真实走 core 意图）。浏览器视觉验收按项目惯例**由所有者验收**（prep 观感与遮挡关系已验收通过）。
 
-**下一步**：RewardPanel（同时引入 `PanelObject` 的**模态形态**）→ AscensionPanel → RoomPanel。
+**下一步**：AscensionPanel（多选态 → 快照承载勾选、tiles 复用）→ RoomPanel（最重：老虎机演出改由
+sequencer 回执驱动，见 §2.4 的分期陷阱）。
