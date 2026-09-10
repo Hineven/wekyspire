@@ -615,7 +615,13 @@ export function exec(S, raw) {
           S.lastOutcome = `吞噬${b}：+${res.gold}金币${res.freeRoll ? '（下次 roll 免费）' : ''}`;
           return;
         }
-        throw new Error('老虎机动作：act spin / act claim [id] / act drop / act devour relic <遗物id> / act devour card <构筑#>（离开用 next）');
+        if (a === 'skip') { // 不拉杆直接走：老虎机期望为负时这是最高频操作，不该逼玩家换用 next
+          completeRoom(run); S.roomDone = false;
+          S.lastOutcome = '跳过老虎机（未拉杆）离开房间';
+          return;
+        }
+        throw new Error('老虎机动作：act spin / act claim <#|id> / act drop / act devour relic <遗物id>'
+          + ' / act devour card <构筑#>｜不拉杆离开用 act skip（或 next）');
       }
       if (room === 'event') {
         if (a === 'play') {
@@ -624,7 +630,12 @@ export function exec(S, raw) {
           S.lastOutcome = `事件：${eventResultText(r)}`;
           return;
         }
-        throw new Error('事件动作：act play');
+        if (a === 'skip') { // 不想触发事件时直接离开（与老虎机同口径）
+          completeRoom(run); S.roomDone = false;
+          S.lastOutcome = '跳过事件（未触发）离开房间';
+          return;
+        }
+        throw new Error('事件动作：act play 触发事件｜不想触发就用 act skip（或 next）离开');
       }
       throw new Error(`未知房间类型：${room}`);
     }
@@ -710,10 +721,13 @@ export function exec(S, raw) {
     // 这些动作**照常入档**，所以重放模型不受影响；但它们绕过正常的获取流程，
     // 用它们打的对局必须在报告里标注为「覆盖局」，其平衡感受不可与正常局混同。
     case 'dev': {
-      if (stage !== 'prep' && stage !== 'room') {
-        throw new Error(`dev 指令仅在战前准备/奖励房可用（当前：${stageCn(stage)}）`);
-      }
       const what = a;
+      const battleOk = what === 'money' || what === 'heal'; // 覆盖局保命用，战斗内也放行
+      if (!battleOk && stage !== 'prep' && stage !== 'room') {
+        throw new Error(`dev ${what ?? ''} 仅在战前准备/奖励房可用（当前：${stageCn(stage)}）；`
+          + '战斗内只放行 dev money / dev heal（取物要等下一场才生效）');
+      }
+      if (battleOk && stage === 'end') throw new Error('本局已终局，dev 无效');
       if (what === 'relic') {
         const id = b;
         if (!getRelicDefinition(id)) throw new Error(`没有这个遗物 id：${id}（dev listed 看全部 id）`);
