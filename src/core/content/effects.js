@@ -412,3 +412,15 @@ registerEffect({
     ]),
   }],
 });
+
+// 引线：纯标记层数——爆囊的亡语伤害 = 6 + 3×层数（无自身订阅，只被 def.onDeath 读）。
+// 用效果而不是私有字段，是为了走统一的层数显示/结算与「层数变更」订阅语言。
+registerEffect({
+  id: 'blastFuse',
+  type: 'buff',
+  stacking: 'count',
+  name: '引线',
+  description: '死亡时爆炸伤害 +3/层（爆囊亡语）。',
+  icon: '🧨',
+  color: 'red',
+});

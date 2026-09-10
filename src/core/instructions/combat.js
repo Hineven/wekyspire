@@ -1,4 +1,5 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
+import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
 
 // 伤害结算：防御减免 → 护盾吸收（pierce 跳过护盾与防御）→ 扣 HP（不低于 minHp 地板）。
 // payload 白名单 ['damage', 'pierce']：PRE 订阅可改伤害/穿透（斩灭翻倍、易伤加深等）。
@@ -65,7 +66,16 @@ export class DealDamageInstruction extends BattleInstruction {
       source: this.source, target, dealt: dmg,
       defenseBlocked, shieldAbsorbed, pierce,
     });
-    if (target.isDead()) ctx.presenter?.unitDeath?.({ unit: target });
+    if (target.isDead()) {
+      ctx.presenter?.unitDeath?.({ unit: target });
+      // 亡语（敌人定义的 onDeath 钩子）：与 def.act 同上下文（actx = {...ctx, unit, def}）；
+      // submitInstruction 的默认父节点 = 当前指令，故亡语作为「致死那一下」的子节点立即结算
+      // ——不额外占节拍、不改回合序，也不需要新增一种「死亡指令」。
+      if (target.defId && hasEnemy(target.defId)) {
+        const def = getEnemyDefinition(target.defId);
+        def?.onDeath?.({ ...ctx, unit: target, def });
+      }
+    }
     return true;
   }
 }

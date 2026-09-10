@@ -436,3 +436,106 @@ registerEnemy({
     return { kinds: ['stun'], note: '晕眩（不行动）' };
   },
 });
+
+// ============ 第一章补充敌人（2026-09，设计卡见 battle_gameplay/ENEMIES_1.md §6）============
+// 四只各填一个机制空位（支援 / 预告重击 / 亡语 / 蛰伏），互不重叠，都不引入新资源轴。
+
+// ⑬ 腐苔球：治疗自身或最低血友军 6 ↔ 攻 4 两拍循环。双敌房里是「先杀谁」的目标优先级
+// 考题，单只时是「你得比它回得快」的持久压力；不叠盾、不反伤——最坏只是把战斗拉长。
+registerEnemy({
+  difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
+  id: 'mossBall', name: '腐苔球',
+  createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 14 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      // 治疗血量最低的存活友军（含自己）：把「先杀谁」变成真问题
+      const pool = aliveEnemies(actx.battleState);
+      const target = pool.reduce((a, b) => (b.hp < a.hp ? b : a), pool[0]);
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target, amount: 6 }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 4 + actx.unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['buff'], note: '治疗友军6' }
+    : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }),
+});
+
+// ⑭ 鼓腹蟾：鼓腹蓄力 → 重锤 10+攻击 → 甩舌 4+攻击，三拍循环。三拍里有一拍是明确的
+// 重击预告，把「立盾」从反射动作变成决策；蓄力拍零输出，总量与史莱姆同级。
+registerEnemy({
+  difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
+  id: 'pufferToad', name: '鼓腹蟾',
+  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 20 }),
+  act(actx) {
+    const phase = actx.unit.actionIndex % 3;
+    if (phase === 0) return; // 鼓腹：不提交指令（意图已预告下一拍重击）
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player,
+      amount: (phase === 1 ? 10 : 4) + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => {
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['buff'], note: '鼓腹蓄力·下回合重击10' };
+    return { kinds: ['attack'], hits: 1, damage: (phase === 1 ? 10 : 4) + unit.getStat('attack') };
+  },
+});
+
+// ⑮ 爆囊：攻 3 ↔ 引线+1 两拍循环；**亡语**——死亡时对玩家造成 6 + 3×引线 伤害（可被盾挡）。
+// 低血高代价的「什么时候杀它」考题：早杀便宜、拖延变贵，但代价完全由玩家掌控。
+// 亡语经 combat.js 的 onDeath 钩子提交（作为致死伤害的子节点立即结算）。
+registerEnemy({
+  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  id: 'blastPod', name: '爆囊',
+  createUnit: () => new Enemy({ defId: 'blastPod', name: '爆囊', maxHp: 9 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 3 + actx.unit.getStat('attack'),
+      }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'blastFuse', stacks: 1,
+      }));
+    }
+  },
+  onDeath(actx) {
+    const fuse = actx.unit.getEffectStacks('blastFuse');
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 6 + 3 * fuse,
+    }));
+  },
+  getIntention: (unit) => {
+    if (unit.actionIndex % 2 === 0) {
+      return { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') };
+    }
+    const fuse = unit.getEffectStacks('blastFuse');
+    return { kinds: ['debuff'], note: `引线：死亡时对玩家造成 ${6 + 3 * (fuse + 1)} 伤害` };
+  },
+});
+
+// ⑯ 石茧：沉眠 1 拍（白给）+ 苏醒时攻击 +2，此后每拍 8+攻击。一道「打得掉吗」的 DPS
+// 检查：一拍内打不掉 26 血，就要开始面对 8/拍的持续压力（且它无减伤，随时可回头集火）。
+// 攻击 +2 落在沉眠拍末尾——苏醒拍的意图预告直接含 +2，所见即所算。
+registerEnemy({
+  difficulty: { base: 3, min: 2, max: 4, floorMin: 4, floorMax: 16 },
+  id: 'stoneCocoon', name: '石茧',
+  createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 26 }),
+  act(actx) {
+    if (actx.unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'strength', stacks: 2,
+      }));
+      return; // 沉眠：本拍不攻击
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 8 + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => (unit.actionIndex === 0
+    ? { kinds: ['unknown'], note: '沉眠·苏醒时攻击+2' }
+    : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
+});
