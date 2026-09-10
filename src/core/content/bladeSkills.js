@@ -32,11 +32,12 @@ import {
   TransformCardInstruction,
 } from '../instructions/cards.js';
 import { DealDamageInstruction } from '../instructions/combat.js';
-import { ChantTriggerInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
-  returnToDeckAtTurnEnd, requestHandSelection, requestDeckSelection, selected, isBladeCard,
+  returnToDeckAtTurnEnd, leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
+  selected, isBladeCard,
 } from './cardKit.js';
 
 // ==== 共享小工具 ===============================================================
@@ -47,19 +48,6 @@ import {
 function stuckHandCards(sctx) {
   return sctx.battleState.zones.hand.filter(
     c => c.uniqueID !== sctx.self.uniqueID && !canUseSkill(sctx, c));
-}
-
-// 【短暂】非消耗形态：回合结束时若仍滞留手牌，回到牌库（打出走 FIFO 回库底，
-// 抽到不打出也不许"攥着过夜"——砺刀/磨锋/展锐用）。消耗+短暂的「焚毁后回库」
-// 走 cardKit.returnToDeckAtTurnEnd（开刃/斩灭/呼吸用）。
-function leaveHandAtTurnEnd(sctx) {
-  const uniqueID = sctx.self.uniqueID;
-  return {
-    when: PlayerTurnEndInstruction, phase: 'post',
-    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'hand',
-    react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
-  };
 }
 
 // 咏唱触发段的「抽N → 选N弃」链（刀法/刃心）。订阅触发里无法走技能 use 多阶段

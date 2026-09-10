@@ -126,6 +126,21 @@ export function breakAllBlock(sctx, target = sctx.player) {
 }
 
 // 【短暂】：出牌时登记一次性回合结束回库（消耗卡焚毁后照常回牌库）
+/**
+ * 【短暂】非消耗形态：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，
+ * 抽到不打出也不许"攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态；
+ * **消耗**+短暂（打出即焚毁、回合末再回库）走 returnToDeckAtTurnEnd。
+ */
+export function leaveHandAtTurnEnd(sctx) {
+  const uniqueID = sctx.self.uniqueID;
+  return {
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
+  };
+}
+
 export function returnToDeckAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
   sctx.kernel.addSubscription({
