@@ -77,7 +77,7 @@ registerEnemy({
   },
   getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
     ? { kinds: ['summon'], note: '召唤史莱姆' }
-    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '并获护盾5' }),
+    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '自身护盾+5' }),
 });
 
 // ② 带效果联动的小 Boss：每第三次行动给玩家上 2 层燃烧，其余时间攻 10
@@ -128,7 +128,7 @@ registerEnemy({
     if (unit.actionIndex === 0) return { kinds: ['buff'], note: '自身荆棘3' };
     const phase = (unit.actionIndex - 1) % 2;
     return phase === 0
-      ? { kinds: ['attack', 'defend'], hits: 1, damage: 3 + unit.getStat('attack'), note: '并获护盾8' }
+      ? { kinds: ['attack', 'defend'], hits: 1, damage: 3 + unit.getStat('attack'), note: '自身护盾+8' }
       : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') };
   },
 });
@@ -325,7 +325,7 @@ registerEnemy({
       return { kinds: ['debuff', 'attack'], hits: 1, damage: 8 + atk, note: '赋予玩家虚弱2（攻击-2）' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 8 + atk, note: '并获护盾8' };
+    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 8 + atk, note: '自身护盾+8' };
     if (phase === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk };
     return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
   },

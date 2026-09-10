@@ -237,13 +237,29 @@ function resolveHandArg(list, idxOrName, nameArg, what = '手牌') {
   if (idxOrName == null) {
     throw new Error(`缺少卡名：${what}支持「编号+卡名」或「卡名」（卡名唯一时自动定位）`);
   }
-  const hits = list.map((c, i) => ({ i, name: defOf(c).name })).filter(h => nameMatches(idxOrName, h.name));
+  // 「卡名#序号」：显式指定第几张同名卡（如 拳#2）
+  const ordinal = /^(.+)#([0-9]+)$/.exec(String(idxOrName));
+  const want = ordinal ? ordinal[1] : idxOrName;
+  const hits = list.map((c, i) => ({ i, name: defOf(c).name })).filter(h => nameMatches(want, h.name));
   if (!hits.length) {
-    throw new Error(`${what}里没有「${idxOrName}」。当前：${list.map(c => defOf(c).name).join(' / ') || '（空）'}`);
+    throw new Error(`${what}里没有「${want}」。当前：${list.map(c => defOf(c).name).join(' / ') || '（空）'}`);
+  }
+  if (ordinal) {
+    const k = Number.parseInt(ordinal[2], 10);
+    if (k < 1 || k > hits.length) {
+      throw new Error(`${what}里只有 ${hits.length} 张「${want}」（要的是第 ${k} 张，编号 ${hits.map(h => h.i + 1).join('/')}）`);
+    }
+    return hits[k - 1].i;
   }
   if (hits.length > 1) {
-    throw new Error(`${what}里有 ${hits.length} 张「${idxOrName}」（编号 ${hits.map(h => h.i).join('/')}）`
-      + `——请用「编号+卡名」指定，如 play ${hits[0].i + 1} ${hits[0].name}`);
+    // **同名同态 = 等价**（打哪张都一样）→ 直接取第一张，不再逼玩家回到会漂移的编号。
+    // 状态不同（如一张已激活的咏唱与一张未激活的）才要求显式指定。
+    const first = list[hits[0].i];
+    const interchangeable = hits.every(h => list[h.i].defId === first.defId
+      && !!list[h.i].isActivated === !!first.isActivated);
+    if (interchangeable) return hits[0].i;
+    throw new Error(`${what}里有 ${hits.length} 张「${want}」且状态不同（编号 ${hits.map(h => h.i + 1).join('/')}）`
+      + `——请用「编号+卡名」或「${want}#序号」指定，如 play ${hits[0].i + 1} ${want}`);
   }
   return hits[0].i;
 }
@@ -494,7 +510,8 @@ export function exec(S, raw) {
           const it = run.shop.items[idx];
           const res = buyShopItem(run, idx);
           S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
-            + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '');
+            + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '')
+            + (res.kind === 'relic' ? `（槽位式需 relic equip ${res.relicId} 才生效；非槽位式拾起即生效）` : '');
           return;
         }
         if (b === 'claim') {
@@ -530,7 +547,7 @@ export function exec(S, raw) {
           const before = defOf(card).name;
           campUpgrade(run, card.uniqueID);
           S.roomDone = true;
-          S.lastOutcome = `营地升级：${before} → ${defOf(card).name}`;
+          S.lastOutcome = `升级：${before} → ${defOf(card).name}（营地）`;
           return;
         }
         throw new Error('营地动作：act rest | act remi | act upgrade <构筑#> <卡名>');
@@ -542,7 +559,7 @@ export function exec(S, raw) {
           if (gateErr) throw new Error(gateErr);
           const before = defOf(card).name;
           trainUpgrade(run, card.uniqueID);
-          S.lastOutcome = `训练升级：${before} → ${defOf(card).name}（接下来强制三选一抓牌）`;
+          S.lastOutcome = `升级：${before} → ${defOf(card).name}（训练场，接下来强制三选一抓牌）`;
           return;
         }
         if (a === 'draw') { trainDrawChoices(run); S.lastOutcome = '训练抓牌候选已生成'; return; }
@@ -687,10 +704,15 @@ export function exec(S, raw) {
       return;
     }
 
-    // ---- 遗物：装卸与主动使用（仅战前准备阶段；核心 API 见 run/prep.js）----
+    // ---- 遗物：装卸与主动使用（核心 API 见 run/prep.js）----
+    // 装卸在 prep 与奖励房都允许：奖励房（含商店）仍在下一场战斗之前，买完就能装上，
+    // 不必等下一层 prep 再回头装（第 2 轮试玩反馈：忘了装 = 整场白买）。主动 use 仍限 prep。
     case 'relic': {
-      if (stage !== 'prep') throw new Error('遗物操作仅能在战前准备阶段');
       const sub = a, id = b;
+      const equipish = sub === 'equip' || sub === 'unequip' || !sub;
+      if (!(stage === 'prep' || (stage === 'room' && equipish))) {
+        throw new Error(`遗物装卸仅能在战前准备/奖励房阶段（当前：${stageCn(stage)}）；主动使用仅限战前准备`);
+      }
       if (!sub || !id) {
         throw new Error(`用法：relic equip|use|unequip <遗物id>（背包：${(run.player.relics ?? []).join(' ') || '空'}）`);
       }
@@ -913,6 +935,18 @@ export function render(S) {
       const elite = def?.difficulty?.elite ? '精英·' : '';
       return `${elite}${def?.name ?? e.defId}(${e.maxHp}血${e.difficulty != null ? `·难${e.difficulty}` : ''})`;
     }).join(' + ')}`);
+    {
+      // 未装备遗物显式提醒（买/抽到忘装 = 整场不生效，第 2 轮试玩点名的最大摩擦点）
+      const costOf = (id) => { const d = getRelicDefinition(id); return d?.nonSlot ? 0 : (d?.cost ?? 1); };
+      const unequipped = (p.relics ?? []).filter(
+        id => !(p.equippedRelics ?? []).includes(id) && !getRelicDefinition(id)?.nonSlot);
+      const free = p.relicSlots - (p.equippedRelics ?? []).reduce((n, id) => n + costOf(id), 0);
+      if (unequipped.length) {
+        L.push(`⚠ 有 ${unequipped.length} 件遗物未装备（空槽 ${free} 点）→ 不装本场不生效：`
+          + unequipped.map(id => `${getRelicDefinition(id)?.name ?? id}(${costOf(id)}槽)`).join(' / ')
+          + `｜relic equip <遗物id>`);
+      }
+    }
     L.push(`→ fight 开战 / deck 看牌组`);
   } else if (stage === 'end') {
     L.push(`本局结束：${run.result === 'victory' ? '登顶成功' : '战败'}。感谢游玩！`);

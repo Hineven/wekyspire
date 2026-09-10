@@ -6,6 +6,7 @@ import {
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
+import { AddCardInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { getEffectDefinition } from '../effects/registry.js';
@@ -591,4 +592,38 @@ registerRelic({
   id: 'royalCrystal', name: '皇晶石', rarity: 'B', nonSlot: true,
   description: '每场战斗胜利后，额外获得 4 金币。',
   onBattleVictory: (run) => { run.player.money += 4; },
+});
+
+// ---- 生成衍生牌（RELICS.md 第二批；四张牌只由遗物生成，不进任何卡包）----
+
+registerRelic({
+  id: 'aronaIII', name: '阿罗那 III', rarity: 'C', cost: 1,
+  description: '战斗开始时，将 1 张/card{rapidFire}加入手牌。',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'rapidFire', toZone: 'hand' }));
+  },
+});
+
+registerRelic({
+  id: 'blackFireH3', name: '黑火 H-3', rarity: 'B', cost: 1,
+  description: '战斗开始时，将 1 张/card{pointShot}洗入牌库。',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'pointShot', index: 'random' }));
+  },
+});
+
+registerRelic({
+  id: 'prayerSystem', name: '祈祷制度', rarity: 'A', cost: 1,
+  description: '战斗开始时，将 1 张/card{suppressionFire}洗入牌库。',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'suppressionFire', index: 'random' }));
+  },
+});
+
+registerRelic({
+  id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'S', cost: 1,
+  description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));
+  },
 });
