@@ -80,6 +80,18 @@ export class DealDamageInstruction extends BattleInstruction {
   }
 }
 
+// 致命预判（只读）：该伤害指令按当前 payload 结算后目标是否会死。
+// 公式与上面 execute 同源（防御 → 护盾 → minHp 地板），供 PRE 订阅做「致命拦截」用
+// （塞西莉亚之恩赐）；两者必须一起改，否则拦截会在临界值上判错。
+export function wouldBeLethal(instr, target) {
+  const raw = instr.fixed ? instr.amount : instr.payload.damage;
+  const pierce = instr.fixed ? false : instr.payload.pierce;
+  const defense = (pierce || instr.fixed) ? 0 : target.getStat('defense');
+  let dmg = Math.max(raw - defense, 0);
+  if (!pierce) dmg -= Math.min(target.shield, dmg);
+  return target.hp - dmg <= target.getStat('minHp');
+}
+
 // 治疗：白名单 ['amount']，不超过 maxHp。
 export class ApplyHealInstruction extends BattleInstruction {
   constructor({ target, amount }, opts = {}) {
