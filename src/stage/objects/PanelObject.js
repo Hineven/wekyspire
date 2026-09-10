@@ -108,8 +108,17 @@ export class PanelObject extends THREE.Group {
         // object 留 null：按钮统一由 _buttons 清理（横向组的瓦片也在同一张表里），避免二次释放
         this._rows.push({ widget: w, object: null, top: y, h: hWu, contentH: hWu });
       } else if (w.kind === 'tiles' || w.kind === 'cards') {
-        const row = this._buildHorizontal(w, y, hWu, centerX, left, innerW);
-        this._rows.push(row);
+        // 网格：cols 缺省 = 单行（一行放下全部）；给定 cols 则换行，组高按实际行数推导
+        const items = w.items ?? [];
+        const cols = Math.max(1, w.cols ?? (items.length || 1));
+        const rows = Math.max(1, Math.ceil(items.length / cols));
+        const itemH = this._itemHeightWu(w);
+        const gapY = (w.gapY ?? TILE.gap) / PX_PER_WU;
+        const groupH = rows * itemH + (rows - 1) * gapY;
+        this._rows.push(this._buildGrid(w, { y, groupH, centerX, cols, itemH, gapY }));
+        y -= groupH;
+        this._contentBottom = y;
+        continue; // 组高已在此推进
       } else {
         const text = new TextBlockObject({
           bakeText: this._bakeText,
@@ -216,48 +225,62 @@ export class PanelObject extends THREE.Group {
     this._backdrop = bg;
   }
 
-  /** 横向组（瓦片/卡面）：整体在 centerX 居中，返回行记录。 */
-  _buildHorizontal(w, y, hWu, centerX, left, innerW) {
+  /** 横向组的单项高度（wu）：卡面按缩放，瓦片按给定高。 */
+  _itemHeightWu(w) {
+    return w.kind === 'cards'
+      ? CARD_HEIGHT * (w.scale ?? CARD_SCALE)
+      : (w.tileHeight ?? 96) / PX_PER_WU;
+  }
+
+  /** 网格（瓦片/卡面）：整组在 centerX 居中；末行按自身数量居中；返回行记录。 */
+  _buildGrid(w, { y, groupH, centerX, cols, itemH, gapY }) {
     const items = w.items ?? [];
     const isCards = w.kind === 'cards';
-    const itemW = isCards ? CARD_WIDTH * CARD_SCALE : TILE.width / PX_PER_WU;
+    const cardScale = w.scale ?? CARD_SCALE;
+    const itemW = isCards ? CARD_WIDTH * cardScale : TILE.width / PX_PER_WU;
     const gap = TILE.gap / PX_PER_WU;
-    const total = items.length * itemW + Math.max(0, items.length - 1) * gap;
-    const x0 = centerX - total / 2 + itemW / 2;
-    let contentH = 0;
-    items.forEach((item, i) => {
-      const x = x0 + i * (itemW + gap);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const row = Math.floor(i / cols);
+      const inRow = Math.min(cols, items.length - row * cols); // 末行短行 → 按自身居中
+      const col = i % cols;
+      const rowW = inRow * itemW + Math.max(0, inRow - 1) * gap;
+      const x = centerX - rowW / 2 + itemW / 2 + col * (itemW + gap);
+      const cy = y - row * (itemH + gapY) - itemH / 2;
       if (isCards) {
         const pickId = `${w.idPrefix}:${item.defId}`;
+        const data = item.view ? { ...item.view, uniqueID: pickId, defId: item.defId } : item.defId;
         const obj = new CardObject({
           uniqueID: pickId, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
         });
-        // 卡面数据用 view 的副本：CardObject 只读烘焙字段，不回写
-        obj.setCard(item.view ? { ...item.view, uniqueID: pickId, defId: item.defId } : item.defId);
-        obj.position.set(x, y - hWu / 2, Z.CONTENT);
-        obj.scale.set(CARD_SCALE, CARD_SCALE, 1);
+        obj.setCard(data);
+        obj.position.set(x, cy, Z.CONTENT);
+        obj.scale.set(cardScale, cardScale, 1);
         this.add(obj);
+        // 勾选态：卡面高亮（与 hover 同一通道，hover 会盖过它——两者都不影响命中语义）
+        if (item.active) obj.setVisualState('highlighted');
         this._cardActions.set(pickId, item.action ?? { action: 'claimReward', defId: item.defId });
         this._picker?.addPickable(pickId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
-        this._cards.push({ id: pickId, object: obj, data: item.view ? { ...item.view, uniqueID: pickId, defId: item.defId } : item.defId });
-        contentH = Math.max(contentH, CARD_HEIGHT * CARD_SCALE);
+        this._cards.push({ id: pickId, object: obj, data });
       } else {
         const pickId = `${w.idPrefix}:${item.id}`;
         const btn = new ButtonObject({
           id: pickId, width: TILE.width, height: w.tileHeight ?? 96,
           bakeButton: this._bakeButton, fontPx: 15,
         });
-        btn.setData({ label: item.name, sublabel: item.desc, enabled: item.enabled !== false });
-        btn.placeCenter(x, y - hWu / 2);
+        btn.setData({
+          label: item.name, sublabel: item.desc,
+          enabled: item.enabled !== false, active: !!item.active,
+        });
+        btn.placeCenter(x, cy);
         btn.position.z = Z.CONTENT;
         this.add(btn);
         this._buttons.set(pickId, btn);
         this._buttonActions.set(pickId, { action: item.action, enabled: item.enabled !== false });
         this._picker?.addPickable(pickId, btn, { kind: 'button', space: 'ui' });
-        contentH = Math.max(contentH, (w.tileHeight ?? 96) / PX_PER_WU);
       }
-    });
-    return { widget: w, object: null, top: y, h: hWu, contentH };
+    }
+    return { widget: w, object: null, top: y, h: groupH, contentH: groupH };
   }
 
   _clearRows() {

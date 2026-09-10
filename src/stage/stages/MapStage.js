@@ -4,7 +4,7 @@ import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { PanelObject } from '../objects/PanelObject.js';
-import { buildPrepPanel, buildRewardPanel } from '../panels/index.js';
+import { buildPrepPanel, buildRewardPanel, buildAscensionPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
@@ -16,6 +16,7 @@ import { sharedUnitArtCache } from '../art/unitArt.js';
 const PANEL_BUILDERS = {
   prep: { build: buildPrepPanel, form: 'anchored' },
   reward: { build: buildRewardPanel, form: 'modal' },
+  ascension: { build: buildAscensionPanel, form: 'modal' },
 };
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
@@ -69,6 +70,8 @@ export class MapStage {
     this._unsubCardArt = null; // 卡图到图 → 面板卡面重烘
     this._picker = null;   // 输入通道（attachInput 注入：stageManager + 总线）
     this._panel = null;    // 当前休息阶段面板对象（setPanel 装配；null = 无面板）
+    this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
+    this._snap = null;     // 当前面板快照（本地重绘用）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
     this._downHit = null;  // 按压命中（抬起时配对，防"按下 A 抬起 B"误触发）
     this.setFloor(1, totalFloors);
@@ -92,16 +95,47 @@ export class MapStage {
     if (!entry) { this._removePanel(); this._syncCardArtSub(); return; }
     if (!this._panel || this._panel.kind !== snap.kind) {
       this._removePanel();
+      this._panelUi = { selected: new Set() }; // 换面板 = 清空面板本地交互态
       this._panel = new PanelObject({
         form: entry.form,
-        onIntent: (a) => this._onIntent?.(a),
+        onIntent: (a) => this._onPanelAction(a),
         bakeFace: this._bakeFace,
       });
       this.uiScene.add(this._panel);
     }
-    this._panel.attachPicker(this._picker);
-    this._panel.setWidgets(snap.kind, entry.build(snap));
+    this._snap = snap;
+    this._renderPanel();
     this._syncCardArtSub();
+  }
+
+  /**
+   * 面板动作分流：`local: true` 的是**面板本地交互态**（如种子包勾选）——舞台自己消化
+   * 并就地重绘，不惊动 core；其余原样上报给 runController。
+   * 判据见 THREE_UI_MIGRATION §6.3：被确认前的勾选是纯 UI 态，确认时才作为载荷上行。
+   */
+  _onPanelAction(action) {
+    if (!action) return;
+    if (action.local) {
+      if (action.action === 'toggleSeed') {
+        const sel = this._panelUi.selected;
+        const id = action.defId;
+        if (sel.has(id)) sel.delete(id);
+        else if (sel.size < (this._snap?.offering?.picks ?? 0)) sel.add(id);
+        this._renderPanel(); // 就地重绘（勾选高亮 + 确认键可用性）
+      }
+      return;
+    }
+    this._onIntent?.(action);
+  }
+
+  /** 用当前快照 + 面板本地态重绘（setPanel 与本地交互共用同一入口）。 */
+  _renderPanel() {
+    const snap = this._snap;
+    if (!snap || !this._panel) return;
+    const entry = PANEL_BUILDERS[snap.kind];
+    if (!entry) return;
+    this._panel.attachPicker(this._picker);
+    this._panel.setWidgets(snap.kind, entry.build(snap, { selected: this._panelUi?.selected }));
   }
 
   // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅
@@ -116,7 +150,10 @@ export class MapStage {
   }
 
   _removePanel() {
-    if (!this._panel) return;
+    // 面板本地交互态随之清空：同一面板种类稍后重入时不得带出上次的勾选
+    this._panelUi = null;
+    this._snap = null;
+    if (!this._panel) { this._syncCardArtSub(); return; }
     this.uiScene.remove(this._panel);
     this._panel.dispose();
     this._panel = null;

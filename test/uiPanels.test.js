@@ -6,8 +6,8 @@ import { StageManager } from '../src/stage/StageManager.js';
 import { PanelObject } from '../src/stage/objects/PanelObject.js';
 import { ButtonObject } from '../src/stage/objects/ButtonObject.js';
 import { TextBlockObject } from '../src/stage/objects/TextBlockObject.js';
-import { panelSnapshot, prepSnapshot, rewardSnapshot } from '../src/core/run/panelSnapshot.js';
-import { buildPrepPanel, buildRewardPanel } from '../src/stage/panels/index.js';
+import { panelSnapshot, prepSnapshot, rewardSnapshot, ascensionSnapshot } from '../src/core/run/panelSnapshot.js';
+import { buildPrepPanel, buildRewardPanel, buildAscensionPanel } from '../src/stage/panels/index.js';
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
@@ -459,6 +459,110 @@ describe('rewardSnapshot + 模态面板（卡片三选一）', () => {
     expect(ctrl.run.gameStage).not.toBe('reward'); // 领取即离房
     // notify 回推的是新阶段的面板（reward 已结束）
     expect(map.pushes.at(-1)?.kind).not.toBe('reward');
+  });
+});
+
+describe('ascensionSnapshot + 种子包勾选（本地交互态）', () => {
+  // 造一个处于 ascension 阶段的 run
+  async function ascRun(seed = 71) {
+    const m = await import('../src/core/run/ascension.js');
+    const run = createRun({ seed });
+    run.gameStage = 'ascension';
+    return { run, m };
+  }
+
+  it('常规态快照：四维度带等级、突破说明、跳过可点', async () => {
+    const { run } = await ascRun();
+    const snap = ascensionSnapshot(run);
+    expect(snap.kind).toBe('ascension');
+    expect(snap.offering).toBeNull();
+    // LEINO_DIMENSIONS 目前只实装火（木/空/体待实装）——快照如实反映 core 的维度表
+    expect(snap.dims.map(d => d.id)).toEqual(['fire']);
+    expect(snap.dims.every(d => typeof d.level === 'number')).toBe(true);
+    expect(snap.maxAscensions).toBeGreaterThan(0);
+    expect(snap.healAmount).toBeGreaterThan(0);
+
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('ascension', buildAscensionPanel(snap));
+    const dimTiles = panel.buttons.filter(b => b.pickId.startsWith('dim:'));
+    expect(dimTiles).toHaveLength(snap.dims.length);
+    expect(panel.buttons.some(b => b.pickId === 'asc:skip')).toBe(true);
+    panel.dispose();
+  });
+
+  it('种子包态：九张卡面（5 列换行）、确认键初始禁用、刷新键按剩余次数', async () => {
+    const { run, m } = await ascRun(72);
+    m.chooseAscension(run, 'fire'); // 首次 0→1 → 获赠基石卡并挂起九选三
+    expect(run.cardOffering).toBeTruthy();
+    const snap = ascensionSnapshot(run);
+    expect(snap.offering.cards).toHaveLength(9);
+    expect(snap.offering.picks).toBe(3);
+    expect(snap.grant).toBeTruthy(); // 首次点亮的体系赠礼
+    expect(snap.grant.cardNames.length).toBeGreaterThan(0);
+
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('ascension', buildAscensionPanel(snap, { selected: new Set() }));
+    expect(panel._cards).toHaveLength(9);
+    expect(panel.children).toBeTruthy();
+    // 9 张 5 列 → 2 行（末行 4 张也居中）
+    const ys = [...new Set(panel._cards.map(c => Math.round(c.object.position.y)))];
+    expect(ys).toHaveLength(2);
+    const confirm = panel._buttonActions.get('seed:confirm');
+    expect(confirm.enabled).toBe(false); // 未选满 3 张不可确认
+    panel.dispose();
+  });
+
+  it('勾选缓冲：local 动作由舞台消化并就地重绘，选满 3 张后确认键可用', async () => {
+    const { run, m } = await ascRun(73);
+    m.chooseAscension(run, 'fire');
+    const snap = ascensionSnapshot(run);
+    const stage = new MapStage({});
+    const sm = fakeManager();
+    const intents = [];
+    stage.setPanelIntentHandler((a) => intents.push(a));
+    stage.attachInput({ stageManager: sm, bus: mitt() });
+    stage.setPanel(snap);
+    expect(stage._panelUi.selected.size).toBe(0);
+
+    const ids = snap.offering.cards.map(c => c.defId);
+    // 点选前两张：本地消化，不上报 core
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[0]}` });
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[1]}` });
+    expect([...stage._panelUi.selected]).toEqual([ids[0], ids[1]]);
+    expect(intents).toHaveLength(0);
+    // 高亮态反映勾选；确认键仍禁用
+    expect(stage._panel._cards.find(c => c.id === `seed:${ids[0]}`).object.visualState).toBe('highlighted');
+    expect(stage._panel._buttonActions.get('seed:confirm').enabled).toBe(false);
+
+    // 第三张 → 确认键可用；再点已选的 → 取消勾选
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[2]}` });
+    expect(stage._panel._buttonActions.get('seed:confirm').enabled).toBe(true);
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[2]}` });
+    expect(stage._panelUi.selected.size).toBe(2);
+    expect(stage._panel._buttonActions.get('seed:confirm').enabled).toBe(false);
+
+    // 选满后确认 → 非 local，上报 core（载荷是 id 列表）
+    stage._panel.onClick({ kind: 'card', id: `seed:${ids[2]}` });
+    stage._panel.onClick({ kind: 'button', id: 'seed:confirm' });
+    expect(intents.at(-1)).toEqual({ action: 'chooseSeedCards', defIds: [ids[0], ids[1], ids[2]] });
+
+    // 换面板 → 本地态清空（防旧勾选串到下一处）
+    stage.setPanel(null);
+    expect(stage._panelUi).toBeNull();
+    stage.dispose();
+  });
+
+  it('勾选不超上限（picks 张之后不再接受新勾选）', async () => {
+    const { run, m } = await ascRun(74);
+    m.chooseAscension(run, 'fire');
+    const snap = ascensionSnapshot(run);
+    const stage = new MapStage({});
+    stage.attachInput({ stageManager: fakeManager(), bus: mitt() });
+    stage.setPanel(snap);
+    const ids = snap.offering.cards.map(c => c.defId);
+    for (const id of ids.slice(0, 5)) stage._panel.onClick({ kind: 'card', id: `seed:${id}` });
+    expect(stage._panelUi.selected.size).toBe(snap.offering.picks);
+    stage.dispose();
   });
 });
 

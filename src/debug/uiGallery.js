@@ -16,9 +16,10 @@ import '../core/content/index.js';
 import { StageManager } from '../stage/StageManager.js';
 import { MapStage } from '../stage/stages/MapStage.js';
 import { createRun, enterBattle, finishBattle, completeRewards } from '../core/run/runFlow.js';
-import { prepSnapshot, rewardSnapshot } from '../core/run/panelSnapshot.js';
+import { prepSnapshot, rewardSnapshot, ascensionSnapshot } from '../core/run/panelSnapshot.js';
 import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
 import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
+import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
 import { attachTooltipForwarding } from '../shell/tooltipForward.js';
 import { tooltipState } from '../shell/tooltipHub.js';
 import mitt from 'mitt';
@@ -48,7 +49,11 @@ const intentLine = overlay.querySelector('#ug-intent');
 let run = null;
 function buildRun() {
   const r = createRun({ seed: SEED });
-  if (PANEL === 'reward') {
+  if (PANEL === 'ascension') {
+    // 进阶事件：进 ascension 阶段；?offering=1 直接走到种子包（火灵脉首次 0→1）
+    r.gameStage = 'ascension';
+    if (opt('offering', '0') === '1') chooseAscension(r, 'fire');
+  } else if (PANEL === 'reward') {
     // 战后奖励：赢一场即进 reward（初始只解锁体修包 → 核心自动开包，直接进三选一）
     enterBattle(r);
     finishBattle(r, 'victory');
@@ -75,7 +80,8 @@ const bus = mitt();
 attachTooltipForwarding(bus);
 
 const push = () => {
-  if (PANEL === 'reward') mapStage.setPanel(rewardSnapshot(run));
+  if (PANEL === 'ascension') mapStage.setPanel(ascensionSnapshot(run));
+  else if (PANEL === 'reward') mapStage.setPanel(rewardSnapshot(run));
   else mapStage.setPanel(prepSnapshot(run));
   // 顶端资源行/状态栏也给上（面板与之同屏，便于检查遮挡关系）
   mapStage.setStatus({
@@ -97,11 +103,16 @@ mapStage.setPanelIntentHandler((intent) => {
     else if (a === 'useRelic') prepUseRelic(run, intent.relicId);
     else if (a === 'startBattle') intentLine.textContent += '  （陈列页不进入战斗）';
     else if (a === 'chooseRewardPack') chooseRewardPack(run, intent.packId);
+    else if (a === 'chooseAscensionDimension') chooseAscension(run, intent.dimension);
+    else if (a === 'chooseSeedCards') chooseSeedCards(run, intent.defIds);
+    else if (a === 'rerollSeedOffering') rerollSeedOffering(run);
     else if (a === 'claimReward') {
       chooseSkillReward(run, intent.defId ?? null);
       completeRewards(run);
       // 领取即离房：重建一份 reward 样本，面板留在屏幕上继续可点
       if (PANEL === 'reward' && run.gameStage !== 'reward') run = buildRun();
+    } else if (PANEL === 'ascension' && a === 'chooseSeedCards') {
+      if (run.gameStage !== 'ascension') run = buildRun(); // 选完即离房 → 重建样本
     }
   } catch (e) {
     intentLine.textContent += `  ✗ ${e.message}`;

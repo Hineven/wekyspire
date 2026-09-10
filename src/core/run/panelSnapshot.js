@@ -19,6 +19,10 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { cardViewFromDef } from '../skills/cardView.js';
 import { isBossFloor, FLOORS_PER_CHAPTER } from './runFlow.js';
 import { PACKS } from './rewards.js';
+import {
+  LEINO_DIMENSIONS, SEED_OFFERING, ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
+} from './ascension.js';
+import { getAbilityDefinition } from '../abilities/registry.js';
 
 /**
  * 当前阶段的面板快照；无可呈现面板时返回 null。
@@ -30,6 +34,7 @@ export function panelSnapshot(run) {
   switch (run.gameStage) {
     case 'prep': return prepSnapshot(run);
     case 'reward': return rewardSnapshot(run);
+    case 'ascension': return ascensionSnapshot(run);
     default: return null;
   }
 }
@@ -93,5 +98,52 @@ export function rewardSnapshot(run) {
       defId: id,
       view: cardViewFromDef(getSkillDefinition(id), { player: run.player }),
     })),
+  };
+}
+
+/**
+ * 进阶事件（房间层·模态面板）：两条路径。
+ *   ① 常规：选一条主维度突破（维度顺序与等级取自 core）。
+ *   ② 种子包（该维度首次 0→1）：九选三 + 一次刷新。
+ * 卡面视图在此解析；**勾选缓冲不进快照**——它被确认前是纯 UI 交互态（在 Stage 侧），
+ * 确认时作为 intent 载荷上报（见 THREE_UI_MIGRATION §6.3 裁决）。
+ */
+export function ascensionSnapshot(run) {
+  const offering = run.cardOffering;
+  const p = run.player;
+  const base = {
+    kind: 'ascension',
+    title: '进阶事件',
+    dims: LEINO_DIMENSIONS.map(id => ({ id, level: p.leino?.[id] ?? 0 })),
+    ascensionCount: p.ascensionCount ?? 0,
+    maxAscensions: ASCENSION_PLACEHOLDER.maxAscensions,
+    healAmount: ASCENSION_PLACEHOLDER.healAmount,
+    manaGain: ASCENSION_PLACEHOLDER.manaGain,
+    offering: null,
+    grant: null,
+  };
+  if (!offering) return base;
+
+  // 首次点亮的体系赠礼（基石卡直入牌组 + 体系能力）：仅该维度恰好 1 级时展示
+  const g = FIRST_ASCENSION_GRANT[offering.dimension];
+  const ability = g?.ability ? getAbilityDefinition(g.ability) : null;
+  const grant = (g && p.leino?.[offering.dimension] === 1) ? {
+    cardNames: (g.cards ?? []).map(id => getSkillDefinition(id)?.name ?? id),
+    abilityName: ability?.name ?? null,
+    abilityDesc: ability?.description ?? '',
+  } : null;
+
+  return {
+    ...base,
+    offering: {
+      dimension: offering.dimension,
+      cards: (offering.cards ?? []).map(id => ({
+        defId: id,
+        view: cardViewFromDef(getSkillDefinition(id), { player: p }),
+      })),
+      picks: SEED_OFFERING.picks,
+      rerollsLeft: offering.rerollsLeft ?? 0,
+    },
+    grant,
   };
 }

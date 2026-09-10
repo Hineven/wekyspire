@@ -399,6 +399,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'startBattle') startBattle();
     else if (action === 'chooseRewardPack') chooseRewardPack(intent.packId);
     else if (action === 'claimReward') claimReward(intent.defId ?? null);
+    else if (action === 'chooseAscensionDimension') chooseAscensionDimension(intent.dimension);
+    else if (action === 'skipAscension') skipAscension();
+    else if (action === 'chooseSeedCards') chooseSeedCards(intent.defIds);
+    else if (action === 'rerollSeedOffering') rerollSeedOffering();
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
 
