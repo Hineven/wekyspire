@@ -49,8 +49,10 @@ export class UseSkillInstruction extends BattleInstruction {
         // 出牌时点手位捕获（结算中自身已离手，位置类语义只能读这一刻；回手落位同用）
         this._handIndexAtPlay = ctx.battleState.zones.hand
           .findIndex(c => c.uniqueID === this.skill.uniqueID);
-        // 打出已激活咏唱 = 免费解除：离手前先熄（播报/注销订阅在 deactivateChant 内）
-        if (this._chantOff) deactivateChant(ctx, this.skill, 'played');
+        // 打出已激活咏唱 = 免费解除：离手前先熄（播报/注销订阅在 deactivateChant 内）；
+        // 解除目标随行（终止类群伤的软指定：选定目标恒最后命中）
+        if (this._chantOff) deactivateChant(ctx, this.skill, 'played',
+          this.targetUniqueID ? findAliveUnit(ctx, this.targetUniqueID) : null);
         moveCard(ctx.battleState, this.skill.uniqueID, 'pending');
         ctx.kernel.submitInstruction(new ActivateSkillInstruction({
           skill: this.skill,

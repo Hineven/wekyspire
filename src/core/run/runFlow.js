@@ -85,12 +85,17 @@ export function createRunBattle(run, { presenter = null, config = {} } = {}) {
 
 // 战斗终局回写：胜利 → reward（生成战后固定奖励）；失败 → end(defeat)。
 // battle 传入时同步瑞米状态：HP 归零 = 被打跑（§3），之后不再出战直至营地找回。
+// Boss 通关奖励：HP 回满（章间断层修复——「险胜 Boss 带残血进下一章被处刑」是
+// 20 局试玩的头号死亡漏斗，2026-09 定案：满血进章；营地休整相应降档至 30%）。
 export function finishBattle(run, verdict, battle = null) {
   expectStage(run, 'battle');
   const remi = battle?.battleState.allies.find(a => a.defId === 'remi');
   if (remi?.isDead()) run.remi.drivenOff = true;
   if (verdict === 'victory') {
-    if (isBossFloor(run.floor)) run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
+    if (isBossFloor(run.floor)) {
+      run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
+      run.player.hp = run.player.maxHp; // 章间休整：HP 回满
+    }
     run.gameStage = 'reward';
     spawnRewards(run);
   } else {

@@ -19,6 +19,7 @@ export const ASCENSION_PLACEHOLDER = {
   trainingsPerLevel: 2, // 之后每 2 次训练 +1 级（累计 1/3/5/7/9 → 第 2/14/26/34/42 层）
   maxAscensions: 6,     // 总进阶次数封顶（含「跳过」；§5.1 数值锚点）
   manaGain: 1,          // 每次进阶魏启上限提升量
+  healAmount: 10,       // 每次进阶恢复生命量（2026-09 试玩反馈：全恢复碾压营地，定为定量恢复）
 };
 
 // 种子包规格：抽 N 张互不重复的基石卡，任选 M 张入牌组，可刷新 R 次。
@@ -161,7 +162,8 @@ export function chooseAscension(run, dimension = null) {
   run.player.ascensionCount += 1;
   run.player.maxMana += ASCENSION_PLACEHOLDER.manaGain; // 魏启上限提升
   run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
-  run.player.hp = run.player.maxHp;                     // 全恢复（生命）
+  // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「跳过/点火」无脑化，回满血留给 Boss 通关）
+  run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);
 
   if (dimension === null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）

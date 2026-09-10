@@ -26,9 +26,13 @@ import {
 // ====================================================================
 
 // 群伤：对每个存活敌人提交一枚 tags:['aoe'] 的伤害指令（群伤标记供「爆发」类
-// 能力/订阅识别，见 test/elementalBurst.test.js 群伤原型）。
-function aoeDamage(sctx, amount) {
-  for (const e of aliveEnemies(sctx.battleState)) {
+// 能力/订阅识别，见 test/elementalBurst.test.js 群伤原型）。选定目标（若有）恒
+// 排在最后命中——瑞米跟随「最后被命中的敌人」，群伤卡由此获得软指定索敌
+// （隐藏机制：卡面仍写「群伤N」，选目标只是改变命中顺序，不写明）。
+function aoeDamage(sctx, amount, chosen = null) {
+  const enemies = aliveEnemies(sctx.battleState).filter(e => e !== chosen);
+  if (chosen && !chosen.isDead()) enemies.push(chosen);
+  for (const e of enemies) {
     attackDamage(sctx, amount, { target: e, tags: ['aoe'] });
   }
 }
@@ -122,7 +126,7 @@ function burstChantCard({ id, name, tier, base, perMana }) {
       }],
       onDisable: (sctx) => {
         const total = base + (sctx.self.burstPool ?? 0);
-        aoeDamage(sctx, total);
+        aoeDamage(sctx, total, enemyTarget(sctx)); // 解除时带目标：选定敌人最后命中
       },
     },
     describe: () => `每消耗1魏启，/named{终止}伤害+${perMana}。/named{终止}：${base}群伤`,
@@ -203,10 +207,10 @@ registerSkill({
   id: 'fireRain', name: '火雨', type: 'fire', tier: 'C', series: 'fireRain',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'none',
+  cardMode: 'normal', targetMode: 'enemy',
   promotesTo: 'fireStream',
   use(sctx) {
-    aoeDamage(sctx, 12);
+    aoeDamage(sctx, 12, enemyTarget(sctx));
     return true;
   },
   describe: () => '群伤12',
@@ -218,9 +222,9 @@ registerSkill({
   id: 'fireStream', name: '火流', type: 'fire', tier: 'A', series: 'fireRain',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'none',
+  cardMode: 'normal', targetMode: 'enemy',
   use(sctx, stage) {
-    aoeDamage(sctx, 12);
+    aoeDamage(sctx, 12, enemyTarget(sctx));
     return stage === 0 ? false : true; // stage 0 第一波，stage 1 第二波（重读存活）
   },
   describe: () => '群伤12×2',

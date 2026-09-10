@@ -5,7 +5,7 @@ import Unit from './unit.js';
 // 字段寄存在此仅供战斗流程读写；shield/effects/actionPoints 同为战斗内重置与推进。
 export default class Player extends Unit {
   constructor(opts = {}) {
-    super({ name: '玩家', ...opts });
+    super({ name: '玩家', maxHp: 30, ...opts }); // 缺省 30：裸构造（测试夹具/run 缺省）对齐数值基准
     this.side = 'player';
     this.maxMana = opts.maxMana ?? 3;
     this.mana = this.maxMana;

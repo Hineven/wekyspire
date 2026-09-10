@@ -4,7 +4,7 @@ import { promoteCard, canPromoteRuntime } from '../promotion.js';
 // 选项随 run 状态动态可见：找回瑞米（仅被打跑时）、休整、升级卡（仅有可升级卡时）。
 
 export const CAMP_PLACEHOLDER = {
-  restHealRatio: 0.5, // 休整恢复玩家生命比例（§4.3 定 50%；数值如需调整集中在此）
+  restHealRatio: 0.3, // 休整恢复玩家生命比例（§4.3；2026-09 试玩反馈：Boss 通关已回满血，营地降档至 30%）
 };
 
 export function campOptions(run) {

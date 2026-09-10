@@ -32,7 +32,7 @@ import {
   startBattle, playerUseSkill, playerEndTurn, playerSwapCard, isBattleFinished, respondInput,
 } from '../src/core/flow/battle.js';
 import {
-  createRun, enterBattle, createRunBattle, finishBattle, completeRewards, completeRoom,
+  createRun, enterBattle, createRunBattle, finishBattle, completeRewards, completeRoom, isBossFloor,
 } from '../src/core/run/runFlow.js';
 import {
   chooseSkillReward, chooseRewardPack, isRewardsClaimed, PACKS, maxRewardTier,
@@ -184,9 +184,13 @@ function settleBattle(S) {
   const verdict = S.battle.ctx.kernel.verdict;
   finishBattle(S.run, verdict, S.battle);
   S.battle = null;
-  S.lastOutcome = verdict === 'victory'
-    ? `⚔ 战斗胜利！HP ${S.run.player.hp}/${S.run.player.maxHp}，进入奖励`
-    : '💀 战斗失败……';
+  if (verdict === 'victory') {
+    S.lastOutcome = isBossFloor(S.run.floor)
+      ? '⚔ Boss 击破！HP 回满，进入奖励'
+      : `⚔ 战斗胜利！HP ${S.run.player.hp}/${S.run.player.maxHp}，进入奖励`;
+  } else {
+    S.lastOutcome = '💀 战斗失败……';
+  }
 }
 
 const num = (s) => Number.parseInt(s, 10);
@@ -393,8 +397,8 @@ function exec(S, raw) {
     // ---- 进阶 ----
     case 'dim': {
       if (stage !== 'ascension') throw new Error('当前不在进阶事件');
-      if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = '跳过进阶（体修隐藏等级+1，全恢复，魏启上限+1）'; }
-      else if (a === '火' || a === 'fire') { chooseAscension(run, 'fire'); S.lastOutcome = '火灵脉 +1（全恢复，魏启上限+1）'; }
+      if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修隐藏等级+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）`; }
+      else if (a === '火' || a === 'fire') { chooseAscension(run, 'fire'); S.lastOutcome = `火灵脉 +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）`; }
       else throw new Error('dim 火 | dim 跳过');
       return;
     }

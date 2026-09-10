@@ -85,9 +85,10 @@ export function freeChantToggle(def, self) {
  * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）。
  * 幂等：未激活静默落空。anchored 不设防——离手熄灭是物理事实，锁定只挡主动解除。
  */
-export function deactivateChant(ctx, skill, reason) {
+export function deactivateChant(ctx, skill, reason, target = null) {
   if (!skill?.isActivated) return false;
   const sctx = makeSkillCtx(ctx, skill);
+  if (target) sctx.target = target; // 解除路径的出牌目标（终止类群伤的软指定用）
   sctx.def.activated?.onDisable?.(sctx, reason);
   skill.isActivated = false;
   ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);

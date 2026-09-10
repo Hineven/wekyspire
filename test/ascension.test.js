@@ -76,7 +76,7 @@ describe('进阶事件结算', () => {
     expect(run.player.ascensionCount).toBe(1);
     expect(run.player.maxMana).toBe(maxManaBefore + ASCENSION_PLACEHOLDER.manaGain);
     expect(run.player.mana).toBe(run.player.maxMana); // 全恢复（魏启）
-    expect(run.player.hp).toBe(run.player.maxHp);     // 全恢复（生命）
+    expect(run.player.hp).toBe(5 + ASCENSION_PLACEHOLDER.healAmount); // 定量恢复（生命，2026-09）
     expect(run.gameStage).toBe('prep');
     expect(run.floor).toBe(2);
   });

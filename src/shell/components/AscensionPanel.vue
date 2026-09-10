@@ -94,7 +94,7 @@ function rerollSeed() {
       <button class="skip-ascend" @click="ctrl.skipAscension()">跳过</button>
       <p class="note">
         总进阶 {{ run.player.ascensionCount }}/{{ ASCENSION_PLACEHOLDER.maxAscensions }}
-        ｜ 突破后全恢复且魏启上限 +{{ ASCENSION_PLACEHOLDER.manaGain }}
+        ｜ 突破后恢复{{ ASCENSION_PLACEHOLDER.healAmount }}点生命且魏启上限 +{{ ASCENSION_PLACEHOLDER.manaGain }}
         ｜ 首次点亮灵脉将开启种子包（九选三）
       </p>
     </template>

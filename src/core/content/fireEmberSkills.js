@@ -304,12 +304,15 @@ registerFireControlPair('fireControlDisturb', '控火术：扰', 'B', 3, 'none',
 
 // 控火术：爆 A —— 消耗所有敌人的全部燃烧，每层对全体敌人造成 1 点群伤
 // （口径："敌人"取敌方全体——与同系列始终用"目标"指代单体的写法相区别；
-// 群伤总量 = 消耗层数总和，tags:['aoe'] 与爆裂术同语言）。
+// 群伤总量 = 消耗层数总和，tags:['aoe'] 与爆裂术同语言；选定目标恒最后命中
+// ——瑞米跟随软指定，隐藏机制不明说）。
 registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 6, 'enemy', {
   use(sctx) {
-    const enemies = aliveEnemies(sctx.battleState);
+    const chosen = enemyTarget(sctx);
+    const enemies = aliveEnemies(sctx.battleState).filter(e => e !== chosen);
+    if (chosen && !chosen.isDead()) enemies.push(chosen);
     let total = 0;
-    for (const e of enemies) {
+    for (const e of [...enemies]) {
       const stacks = e.getEffectStacks('burn');
       if (stacks > 0) {
         addEffect(sctx, 'burn', -stacks, e);
