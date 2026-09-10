@@ -137,14 +137,18 @@ export class EnemyTurnInstruction extends BattleInstruction {
         }
         return false;
       case 2:
-        // 下回合意图预算：敌我 AI 单位同刷（盟友行动在玩家回合 P7，此处一并预告）
+        // 下回合意图预算：敌我 AI 单位同刷（盟友行动在玩家回合 P7，此处一并预告）。
+        // 带晕眩层数的单位意图覆写为「晕眩」——预告 = 实际（其下回合行动必被
+        // veto 跳过，显示脚本意图会误导），也是 'stun' 意图 kind 的通用来源。
         for (const e of aliveEnemies(ctx.battleState)) {
-          const def = getEnemyDefinition(e.defId);
-          e.intention = def.getIntention ? def.getIntention(e, ctx.battleState) : { kinds: ['unknown'] };
+          e.intention = e.getEffectStacks('stun') > 0
+            ? { kinds: ['stun'], note: '晕眩：跳过行动' }
+            : intentionOf(getEnemyDefinition(e.defId), e, ctx.battleState);
         }
         for (const a of aliveAllies(ctx.battleState)) {
-          const def = getAllyDefinition(a.defId);
-          a.intention = def.getIntention ? def.getIntention(a, ctx.battleState) : { kinds: ['unknown'] };
+          a.intention = a.getEffectStacks('stun') > 0
+            ? { kinds: ['stun'], note: '晕眩：跳过行动' }
+            : intentionOf(getAllyDefinition(a.defId), a, ctx.battleState);
         }
         ctx.kernel.submitInstruction(new EnemyTurnEndInstruction(), this);
         return false;
@@ -164,4 +168,9 @@ export class TurnLoopInstruction extends BattleInstruction {
     }
     return false;
   }
+}
+
+// AI 单位意图：定义带 getIntention 用之，否则未知
+function intentionOf(def, unit, battleState) {
+  return def.getIntention ? def.getIntention(unit, battleState) : { kinds: ['unknown'] };
 }

@@ -387,3 +387,45 @@ registerEnemy({
     return { kinds: ['attack'], hits: 1, damage: 3 + atk };
   },
 });
+
+// ⑫ 沼泽伏击者（第 1 章精英，2026-09）：开局起盾扑咬（盾18+攻15），随后三拍循环——
+// 盾15+中毒5 → 盾15+攻10 → 晕眩发呆（不行动，玩家的破盾窗口）。护盾滚动厚但
+// 每三拍送一拍空转；中毒 5 是长线压力（回合末固定伤害递减），逼玩家带节奏强攻。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
+  id: 'swampAmbusher', name: '沼泽伏击者',
+  createUnit: () => new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 55 }),
+  act(actx) {
+    const atk = actx.unit.getStat('attack');
+    if (actx.unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 18 }));
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 15 + atk,
+      }));
+      return;
+    }
+    const phase = (actx.unit.actionIndex - 1) % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'poison', stacks: 5,
+      }));
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 10 + atk,
+      }));
+    }
+    // phase 2：晕眩发呆——不提交任何指令（破盾/回血的喘息拍）
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) {
+      return { kinds: ['defend', 'attack'], hits: 1, damage: 15 + atk, note: '自身护盾18' };
+    }
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒5' };
+    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 10 + atk, note: '自身护盾15' };
+    return { kinds: ['stun'], note: '晕眩（不行动）' };
+  },
+});

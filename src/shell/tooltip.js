@@ -70,6 +70,7 @@ const INTENTION_ACTS = Object.freeze({
   buff: '强化自身',
   debuff: '赋予负面效果',
   summon: '召唤援军',
+  stun: '晕眩（不行动）',
 });
 
 function intentionSentence(intention) {

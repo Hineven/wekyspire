@@ -501,6 +501,71 @@ describe('精英怪：雪狼（第 1 章样例）', () => {
   });
 });
 
+describe('精英怪：沼泽伏击者（第 1 章）', () => {
+  function ambush() {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch', 'punch', 'punch'],
+      enemies: [spawnEnemy('swampAmbusher')], seed: 5, player: { maxHp: 100 },
+      config: { drawPerTurn: 0 },
+    });
+    d.start();
+    return d;
+  }
+
+  it('开局：盾18 + 攻15；意图一致', () => {
+    const d = ambush();
+    const unit = d.state.enemies[0];
+    expect(unit.maxHp).toBe(55);
+    const intent = getEnemyDefinition('swampAmbusher').getIntention(unit, d.state);
+    expect(intent.kinds).toEqual(['defend', 'attack']);
+    expect(intent.damage).toBe(15);
+    const hp0 = d.player.hp;
+    d.endTurn();
+    expect(unit.shield).toBe(18);
+    expect(hp0 - d.player.hp).toBe(15);
+  });
+
+  it('循环拍一：盾15 + 中毒5；循环拍二：盾15 + 攻10；拍三：晕眩发呆（无任何结算）', () => {
+    const d = ambush();
+    d.endTurn();                                        // 开局拍
+    let intent = getEnemyDefinition('swampAmbusher').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['defend', 'debuff']);
+    d.endTurn();                                        // 拍一（敌方回合开始清盾后再上）
+    expect(d.state.enemies[0].shield).toBe(15);
+    expect(d.player.getEffectStacks('poison')).toBe(5);
+    intent = getEnemyDefinition('swampAmbusher').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['defend', 'attack']);
+    expect(intent.damage).toBe(10);
+    const hp0 = d.player.hp;
+    d.endTurn();                                        // 拍二（含玩家回合末中毒跳 5）
+    expect(hp0 - d.player.hp).toBe(10 + 5);
+    expect(d.state.enemies[0].shield).toBe(15);         // 回合开始清盾后再上 15
+    intent = getEnemyDefinition('swampAmbusher').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['stun']);             // 新增意图 kind：晕眩
+    const hp1 = d.player.hp;
+    d.endTurn();                                        // 拍三：发呆（只剩中毒跳伤 4，无攻击/上盾）
+    expect(hp1 - d.player.hp).toBe(4);
+    expect(d.state.enemies[0].shield).toBe(0);          // 清盾后未再上盾
+    expect(d.player.getEffectStacks('poison')).toBe(3); // 中毒未被追加，自然递减 5→4→3
+  });
+});
+
+describe('晕眩意图 kind（被晕单位预告覆写）', () => {
+  it('带晕眩层数的敌人：意图刷新为 { kinds: [stun] }，行动被跳过', () => {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch'], enemies: [spawnEnemy('slime')], seed: 5,
+      player: { maxHp: 50 }, config: { drawPerTurn: 0 },
+    });
+    d.start();
+    const slime = d.state.enemies[0];
+    d.dispatch(new AddEffectInstruction({ target: slime, effectId: 'stun', stacks: 2 }));
+    const hp0 = d.player.hp;
+    d.endTurn();                                        // 被晕：不攻击
+    expect(d.player.hp).toBe(hp0);
+    expect(slime.intention.kinds).toEqual(['stun']);    // 仍剩 1 层：下回合预告 = 晕眩
+  });
+});
+
 describe('精英怪房（生成侧）', () => {
   const runAt = (floor, seed = 9) => {
     const run = createRunState({ seed, player: new Player({ maxHp: 30 }) });
@@ -519,15 +584,16 @@ describe('精英怪房（生成侧）', () => {
         const enc = generateEncounter(runAt(floor, 600 + i));
         expect(enc.length, `${floor}`).toBeGreaterThanOrEqual(1);
         expect(enc.length, `${floor}`).toBeLessThanOrEqual(2);
-        const wolves = enc.filter(e => e.defId === 'snowwolf');
-        expect(wolves, `${floor}`).toHaveLength(1);     // 恒一只精英
+        const elites = enc.filter(e => getEnemyDefinition(e.defId).difficulty.elite);
+        expect(elites, `${floor}`).toHaveLength(1);     // 恒一只精英（雪狼/沼泽伏击者）
         expect(enc.reduce((n, e) => n + e.difficulty, 0), `${floor}`)
           .toBe(floorDifficulty(floor));                // Σ = D（精英模板恒贴线）
-        const w = wolves[0];
+        const w = elites[0];
         expect(w.difficulty).toBeGreaterThanOrEqual(4);
         expect(w.difficulty).toBeLessThanOrEqual(7);
-        const sc = difficultyScaling(w.difficulty, 5);  // 锚点 = base 5
-        expect(w.maxHp).toBe(Math.round(70 * sc.hpMult));
+        const def = getEnemyDefinition(w.defId);
+        const sc = difficultyScaling(w.difficulty, def.difficulty.base);  // 锚点 = base
+        expect(w.maxHp).toBe(Math.round(def.createUnit().maxHp * sc.hpMult));
       }
     }
   });

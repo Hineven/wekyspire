@@ -290,7 +290,7 @@ export class UnitObject extends THREE.Group {
   }
 
   /**
-   * 意图图标条同步：{ kinds: ['attack'|'defend'|'buff'|'debuff'], hits?, damage? }，
+   * 意图图标条同步：{ kinds: ['attack'|'defend'|'buff'|'debuff'|'summon'|'stun'], hits?, damage? }，
    * kinds 最多两两组合（battle.md 意图分类）。仅攻击附数字文本（hits>1 显
    * 「N×M」，否则只显伤害值），其余种类纯图标；{ kinds:['unknown'] } 显「?」。
    * 签名驱动重烘，死亡/空意图即隐。
@@ -552,8 +552,9 @@ function shieldIconTexture() {
 }
 
 // ---- 意图图标条烘焙 ----
-// 五基础意图两两组合：攻（剑 + N×M 数字）/防（盾）/增强（升双箭头，绿）/
-// 削弱（降双箭头，紫）/未知（?）。全程序化矢量绘制——emoji 位图字在缩小
+// 基础意图两两组合：攻（剑 + N×M 数字）/防（盾）/增强（升双箭头，绿）/
+// 削弱（降双箭头，紫）/召唤（四芒星）/晕眩（螺旋，不行动）/未知（?）。
+// 全程序化矢量绘制——emoji 位图字在缩小
 // 采样下发糊且跨平台风格不可控，弃用；数字与 bakeBoldText 同语言（白粗体深描边）。
 const INTENTION_STRIP_H = 6.8;   // 图标条世界高（wu）——放大一倍便于阅读（用户定）
 const INTENTION_GAP = 0.55;      // 图标/数字间距（wu）
@@ -691,6 +692,32 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       ctx.arc(cx, cy, s * 0.09, 0, Math.PI * 2);
       ctx.fillStyle = '#eafffb';
       ctx.fill();
+      break;
+    }
+    case 'stun': {
+      // 晕眩：灰黄螺旋（渐收的圈线——不动之相；被晕单位/发呆拍共用）
+      const cx = x + s / 2;
+      const cy = y + s * 0.52;
+      const turns = 2.6;
+      const steps = 42;
+      for (const pass of [
+        { w: Math.max(2.2, s * 0.085), color: 'rgba(10, 12, 18, 0.8)' },   // 深描边
+        { w: Math.max(1.2, s * 0.05), color: '#d9c46a' },                  // 灰黄主线
+      ]) {
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const ang = t * turns * Math.PI * 2 - Math.PI / 2;
+          const r = s * (0.42 - 0.34 * t);
+          const px = cx + Math.cos(ang) * r;
+          const py = cy + Math.sin(ang) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.lineWidth = pass.w;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = pass.color;
+        ctx.stroke();
+      }
       break;
     }
     default: {

@@ -82,7 +82,7 @@ const intentText = (u) => {
   if (!it) return '未知';
   const kind = (it.kinds ?? []).map(k => ({
     attack: '攻击', defend: '防御', buff: '强化', debuff: '削弱',
-    summon: '召唤', unknown: '未知',
+    summon: '召唤', unknown: '未知', stun: '晕眩',
   }[k] ?? k)).join('+');
   const dmg = it.damage ? ` ${it.damage}${it.hits > 1 ? `×${it.hits}` : ''}` : '';
   return kind + dmg + (it.note ? `（${it.note}）` : '');
