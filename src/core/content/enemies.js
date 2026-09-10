@@ -254,7 +254,7 @@ registerEnemy({
 
 // ==== 精英怪（2026-09 难度制）：机制更强 / 基准数值更高 / 难度≈两个普通敌人 ====
 // 精英只经「精英怪房」模板出场（difficulty.elite: true 同时把它挡在普通通配池外）。
-// 缩放锚点：精英的基准数值按自身 base 难度授权（雪狼 70 血 = 难5 白板），
+// 缩放锚点：精英的基准数值按自身 base 难度授权（雪狼 55 血 = 难5 白板），
 // 属性按 (d − base) 缩放——普通敌人按 (d − 2) 缩放，两套锚点见 ENEMY_GENERATION.md。
 
 // 震慑（雪狼衍生塞牌）：消耗，无效果，1AP——纯手牌淤积（占手牌位 + 打出收 AP 税），
@@ -276,7 +276,7 @@ registerSkill({
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
   id: 'snowwolf', name: '雪狼',
-  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 70 }),
+  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 55 }),
   act(actx) {
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
@@ -391,17 +391,21 @@ registerEnemy({
   },
 });
 
-// ⑫ 沼泽伏击者（第 1 章精英，2026-09）：开局起盾扑咬（盾18+攻15），随后三拍循环——
-// 盾15+中毒5 → 盾15+攻10 → 晕眩发呆（不行动，玩家的破盾窗口）。护盾滚动厚但
-// 每三拍送一拍空转；中毒 5 是长线压力（回合末固定伤害递减），逼玩家带节奏强攻。
+// ⑫ 沼泽伏击者（第 1 章精英，2026-09）：**战斗开始自带 18 盾**（createUnit 预置——
+// 敌方回合开始才清盾，故这层盾完整覆盖玩家第一回合，防开局被爆发斩杀），开局扑咬
+// 攻15，随后三拍循环——盾15+中毒5 → 盾15+攻10 → 晕眩发呆（不行动，破盾窗口）。
+// 中毒 5 是长线压力（回合末固定伤害递减），逼玩家带节奏强攻。
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
-  createUnit: () => new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 55 }),
+  createUnit: () => {
+    const u = new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 32 });
+    u.shield = 18; // 战斗开始自带护盾（试玩反馈：此前开局无盾，被首回合爆发白嫖）
+    return u;
+  },
   act(actx) {
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 18 }));
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: actx.unit, target: actx.player, amount: 15 + atk,
       }));
@@ -424,7 +428,7 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) {
-      return { kinds: ['defend', 'attack'], hits: 1, damage: 15 + atk, note: '自身护盾18' };
+      return { kinds: ['attack'], hits: 1, damage: 15 + atk, note: '自身开局自带护盾18' };
     }
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒5' };

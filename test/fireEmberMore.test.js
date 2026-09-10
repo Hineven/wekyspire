@@ -6,6 +6,7 @@ import Enemy from '../src/core/state/enemy.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
 import { ChantTriggerInstruction } from '../src/core/instructions/turn.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // ---- 火灵脉·叠炎（续）：自焚 / 焰愈 / 焚原 / 镜燃 / 咏唱（燃心决/取暖/绝炎）----
 // 全程 BattleDriver 驱动真实结算（不 mock Core）。
@@ -36,7 +37,7 @@ describe('自焚系列：自伤换高伤（0费 + 冷却1）', () => {
     expect(d.player.getEffectStacks('burn')).toBe(5);
 
     d.endTurn(); // 敌方：燃焰术士攻 10；回合2 P1：燃烧跳 5 穿透；P2：冷却推进回充
-    expect(d.player.hp).toBe(50 - 10 - 5);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 10 - 5);
     expect(d.player.getEffectStacks('burn')).toBe(4);
     // 玩火冷却 1 回合归零 → 回充 1 格（回合 2 抽牌后已回手）
     const pfRecharged = d.state.zones.hand.find(c => c.defId === 'playWithFire');
@@ -177,7 +178,7 @@ describe('咏唱（§2.2）', () => {
     d.endTurn(); // P5：+3 魏启 + 燃烧7 → 敌方史莱姆攻 6 → 回合2 P1：燃烧跳 7、+1 魏启
     expect(d.player.mana).toBe(mana0 + 3 + 1);
     expect(d.player.getEffectStacks('burn')).toBe(7 - 1);
-    expect(d.player.hp).toBe(50 - 6 - 7);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 - 7);
     expect(card.isActivated).toBe(true); // 全程钉在手牌
   });
 
@@ -193,7 +194,7 @@ describe('咏唱（§2.2）', () => {
     expect(s2.hp).toBe(20 - 1);
     expect(s1.getEffectStacks('burn')).toBe(0);
     expect(s2.getEffectStacks('burn')).toBe(0);
-    expect(d.player.hp).toBe(50 - 6 * 2);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 * 2);
   });
 
   it('绝炎：燃烧层数免疫下降（驱散与自然递减均被取消），跳伤照常结算', () => {
@@ -214,14 +215,14 @@ describe('咏唱（§2.2）', () => {
     expect(d.player.getEffectStacks('burn')).toBe(5);
     expect(slime.getEffectStacks('burn')).toBe(5);
     expect(slime.hp).toBe(20 - 5);
-    expect(d.player.hp).toBe(50 - 6 - 5);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 - 5);
 
     d.endTurn(); // 第二轮：层数依旧钉在 5，跳伤照常累积
     // （史莱姆行动序 攻→盾→攻：第二轮开盾不攻击，玩家只承受伤燃烧跳伤）
     expect(d.player.getEffectStacks('burn')).toBe(5);
     expect(slime.getEffectStacks('burn')).toBe(5);
     expect(slime.hp).toBe(20 - 5 * 2);
-    expect(d.player.hp).toBe(50 - 6 - 5 * 2);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 - 5 * 2);
   });
 });
 

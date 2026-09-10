@@ -3,6 +3,7 @@ import '../src/core/content/index.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { registerAbility } from '../src/core/abilities/registry.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // ---- 武者/武帝（格挡≥3 减免）原型：压测 PRE 伤害修饰与优先级叠加 ----
 
@@ -52,7 +53,7 @@ describe('武者：格挡（护盾）≥3 时减免 75% 伤害', () => {
     d.player.shield = 5;
 
     hitPlayer(d, 12); // 12 → floor(12×0.25)=3 → 护盾吸收
-    expect(d.player.hp).toBe(50);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);
     expect(d.player.shield).toBe(2);
   });
 
@@ -65,7 +66,7 @@ describe('武者：格挡（护盾）≥3 时减免 75% 伤害', () => {
     d.player.shield = 2;
 
     hitPlayer(d, 12);
-    expect(d.player.hp).toBe(50 - 10); // 护盾吸收 2
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 10); // 护盾吸收 2
     expect(d.player.shield).toBe(0);
   });
 
@@ -80,7 +81,7 @@ describe('武者：格挡（护盾）≥3 时减免 75% 伤害', () => {
     // priority 10 战鼓先结算：12+6=18；武者后结算：floor(18×0.25)=4
     // （若顺序反了：12→3→9，护盾只够吸 5，会掉 4 血）
     hitPlayer(d, 12);
-    expect(d.player.hp).toBe(50);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);
     expect(d.player.shield).toBe(1);
   });
 });
@@ -95,7 +96,7 @@ describe('武帝：格挡（护盾）≥3 时减免全部伤害', () => {
     d.player.shield = 3;
 
     hitPlayer(d, 12);
-    expect(d.player.hp).toBe(50);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);
     expect(d.player.shield).toBe(3);
   });
 });

@@ -8,6 +8,7 @@ import AwaitPlayerInputInstruction from '../src/core/instructions/input.js';
 import { BurnCardInstruction, DiscardCardInstruction, MoveCardInstruction } from '../src/core/instructions/cards.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 import { EnemyTurnStartInstruction } from '../src/core/instructions/turn.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // ---- 异步结算（结算期玩家输入）鲁棒性批次 ----
 // 压测 WAIT 挂起/恢复、连续多段输入、非玩家回合输入、守卫与终局截断。
@@ -261,7 +262,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
 
     d.respond(true); // 确认反击
     expect(slime.hp).toBe(20 - 7);
-    expect(d.player.hp).toBe(50 - 6); // 反击后敌方行动照常结算
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6); // 反击后敌方行动照常结算
     expect(d.isWaiting()).toBe(true);  // 回到下一玩家回合
     expect(d.state.turn.side).toBe('player');
   });
@@ -278,7 +279,7 @@ describe('异步结算：非玩家回合的输入（反制架势）', () => {
     d.endTurn();
     d.respond(false);
     expect(slime.hp).toBe(20);
-    expect(d.player.hp).toBe(50 - 6);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6);
     expect(d.isWaiting()).toBe(true);
   });
 });

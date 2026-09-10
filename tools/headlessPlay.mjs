@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import '../src/core/content/index.js';
-import Player from '../src/core/state/player.js';
+import Player, { PLAYER_BASE_HP } from '../src/core/state/player.js';
 import { createSkillRuntime } from '../src/core/state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../src/core/content/bodySkills.js';
 import { createNullPresenter, createRecordingPresenter } from '../src/core/presenter.js';
@@ -109,7 +109,7 @@ function cardLine(idx, rt, battleCtx) {
 
 // ---------- 会话状态机（replay 解释器） ----------
 function freshState(seed) {
-  const run = createRun({ seed, player: new Player({ maxHp: 50, maxMana: 3, maxActionPoints: 3 }) });
+  const run = createRun({ seed, player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3 }) });
   run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
   run.player.abilities = [];
   return { run, battle: null, lastOutcome: '', presenter: createRecordingPresenter() };

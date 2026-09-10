@@ -12,6 +12,7 @@ import { AddEffectInstruction } from '../src/core/instructions/effects.js';
 import { DiscardCardInstruction } from '../src/core/instructions/cards.js';
 import { DrawCardsInstruction } from '../src/core/instructions/cards.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // ---- 本批次专用测试内容 ----
 
@@ -144,7 +145,7 @@ describe('复杂战斗：veto（眩晕）', () => {
     expect(slime.getEffectStacks('stun')).toBe(1);
 
     d.endTurn(); // 敌方回合：行动应被 veto
-    expect(d.player.hp).toBe(50);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);
     expect(slime.getEffectStacks('stun')).toBe(0); // 替代指令补位执行，层数扣尽
     expect(slime.actionIndex).toBe(0);             // 行动未发生，游标未推进
 

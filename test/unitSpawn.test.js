@@ -3,6 +3,7 @@ import '../src/core/content/index.js'; // 触发登记（bigSlime/slime/…）
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { getEnemyDefinition } from '../src/core/enemies/registry.js';
 import { UnitSpawnInstruction } from '../src/core/instructions/units.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // UnitSpawnInstruction + 大史莱姆召唤行为。
 // 约定锚点（详见 content/enemies.js）：
@@ -42,7 +43,7 @@ describe('大史莱姆：条件召唤', () => {
     expect(slime.defId).toBe('slime');
     expect(slime.side).toBe('enemy');
     expect(slime.actionIndex).toBe(0);          // 本回合没轮到它行动
-    expect(d.player.hp).toBe(50);               // 大史莱姆召唤而非攻击
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);               // 大史莱姆召唤而非攻击
     expect(d.presenter.calls.some(c => c.method === 'unitSpawned'
       && c.args[0].source === d.state.enemies[0])).toBe(true);
     // 行动后意图：场上已有史莱姆 → 攻击+防御
@@ -57,11 +58,11 @@ describe('大史莱姆：条件召唤', () => {
     d.endTurn(); // 敌 2（玩家回合 2 无操作）
     expect(d.state.enemies).toHaveLength(2);    // 冷却中：不再召唤
     expect(d.state.enemies[0].shield).toBe(5);  // 攻 10 + 盾 5
-    expect(d.player.hp).toBe(50 - 10 - 6);      // 大史莱姆 10 + 史莱姆（首次行动）6
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 10 - 6);      // 大史莱姆 10 + 史莱姆（首次行动）6
 
     d.endTurn(); // 敌 3：史莱姆仍存活 → 继续攻防（史莱姆转盾）
     expect(d.state.enemies).toHaveLength(2);
-    expect(d.player.hp).toBe(50 - 10 - 6 - 10);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 10 - 6 - 10);
   });
 
   it('史莱姆死亡后隔一回合重新召唤', () => {
@@ -91,7 +92,7 @@ describe('大史莱姆：条件召唤', () => {
     d.endTurn();
     expect(d.state.enemies).toHaveLength(4);      // 无空位：不召唤
     // 攻击照常：大史莱姆 10 + 燃焰术士 10（石像卫士该轮再生不动手）
-    expect(d.player.hp).toBe(50 - 10 - 10);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 10 - 10);
     expect(d.state.enemies[0].shield).toBe(5);
   });
 });

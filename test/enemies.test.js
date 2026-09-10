@@ -457,7 +457,7 @@ describe('精英怪：雪狼（第 1 章样例）', () => {
   it('开局：虚弱2 + 攻8；意图与行为一致', () => {
     const d = wolfBattle();
     const wolf = d.state.enemies[0];
-    expect(wolf.maxHp).toBe(70);                       // 白板（spawnEnemy 裸 id）
+    expect(wolf.maxHp).toBe(55);                       // 白板（spawnEnemy 裸 id）
     const intent = getEnemyDefinition('snowwolf').getIntention(wolf, d.state);
     expect(intent.kinds).toEqual(['debuff', 'attack']);
     expect(intent.damage).toBe(8);
@@ -523,17 +523,18 @@ describe('精英怪：沼泽伏击者（第 1 章）', () => {
     return d;
   }
 
-  it('开局：盾18 + 攻15；意图一致', () => {
+  it('开局：战斗开始自带盾18（护住玩家第一回合）+ 攻15；意图一致', () => {
     const d = ambush();
     const unit = d.state.enemies[0];
-    expect(unit.maxHp).toBe(55);
+    expect(unit.maxHp).toBe(32);
+    expect(unit.shield).toBe(18);                       // createUnit 预置：开局即在
     const intent = getEnemyDefinition('swampAmbusher').getIntention(unit, d.state);
-    expect(intent.kinds).toEqual(['defend', 'attack']);
+    expect(intent.kinds).toEqual(['attack']);           // 盾已自带，开局行动只攻15
     expect(intent.damage).toBe(15);
     const hp0 = d.player.hp;
     d.endTurn();
-    expect(unit.shield).toBe(18);
     expect(hp0 - d.player.hp).toBe(15);
+    expect(unit.shield).toBe(0);                        // 敌方回合开始清盾，开局行动不再补盾
   });
 
   it('循环拍一：盾15 + 中毒5；循环拍二：盾15 + 攻10；拍三：晕眩发呆（无任何结算）', () => {

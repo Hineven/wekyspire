@@ -6,6 +6,7 @@ import { zoneOf, firstAliveEnemy } from '../src/core/state/battleState.js';
 import { BurnCardInstruction } from '../src/core/instructions/cards.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
+import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
 // ---- 火灵脉（焚卡 + 自伤）原型：压测 burn zone 与高副作用结算 ----
 
@@ -52,14 +53,14 @@ describe('火灵脉：陨落星炎（自伤叠燃烧）', () => {
     d.play('meteorFlame');
     expect(slime.hp).toBe(20 - 12);
     expect(d.player.getEffectStacks('burn')).toBe(2);
-    expect(d.player.hp).toBe(50);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP);
 
     d.endTurn(); // 敌方回合：史莱姆打 3 → 回合 2 开始：燃烧跳 2 穿透
-    expect(d.player.hp).toBe(50 - 6 - 2);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 - 2);
     expect(d.player.getEffectStacks('burn')).toBe(1);
 
     d.endTurn(); // 史莱姆第二动是开盾（无伤害）→ 回合 3 开始：燃烧跳 1，层数扣尽
-    expect(d.player.hp).toBe(50 - 6 - 2 - 1);
+    expect(d.player.hp).toBe(PLAYER_BASE_HP - 6 - 2 - 1);
     expect(d.player.getEffectStacks('burn')).toBe(0);
     expect(d.player.getEffect('burn')).toBeNull();
   });
