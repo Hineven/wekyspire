@@ -269,6 +269,22 @@ function resolveHandArg(list, idxOrName, nameArg, what = '手牌') {
   return hits[0].i;
 }
 
+// play/swap 的手牌定位：优先「编号+卡名」双重确认；**编号与卡名不符时改按卡名定位**
+// （卡名是不漂移的意图，编号会随抽牌前移——三轮试玩的第一高频摩擦）。
+// 返回 { skill, note }；note 用于回执里说明发生过回落。
+function pickHandCard(hand, idxOrName, nameArg, byIndex) {
+  if (byIndex && nameArg != null) {
+    try {
+      return { skill: hand[resolveHandArg(hand, idxOrName, nameArg)], note: '' };
+    } catch (err) {
+      if (!/不是「/.test(err.message)) throw err;   // 越界/找不到卡等错误照常抛
+      const i = resolveHandArg(hand, nameArg);
+      return { skill: hand[i], note: `（编号 ${idxOrName} 与卡名不符，已按卡名定位到第 ${i + 1} 张）` };
+    }
+  }
+  return { skill: hand[resolveHandArg(hand, idxOrName)], note: '' };
+}
+
 // 候选列表（元素数组）同款两种写法；只给名字时返回命中的**元素本身**
 function resolveChoiceArg(choices, idxOrName, nameArg, what = '候选', nameOf = (x) => x) {
   if (isIdxArg(idxOrName)) return resolveChoiceStrict(choices, idxOrName, nameArg, what, nameOf);
@@ -425,13 +441,15 @@ export function exec(S, raw) {
       if (battle.battleState.pendingInput) throw new Error('有待应答的输入请求（先用 in <候选#> <卡名>）');
       const hand = battle.battleState.zones.hand;
       const byIndex = isIdxArg(a);
-      const skill = hand[resolveHandArg(hand, a, byIndex ? b : undefined)];
+      const { skill, note } = pickHandCard(hand, a, b, byIndex);
       const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
       const targetArg = byIndex ? t[3] : b; // 只给卡名的写法里，第二个参数就是目标
       const target = targetArg != null
         ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
+      // 指定目标已死：引擎会回落到首个存活敌人（cardKit.enemyTarget）——静默改打很坑，明确告知
+      const deadTargetNote = target?.isDead() ? `（指定目标「${target.name}」已死，实际打向首个存活敌人）` : '';
       if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) throw new Error('无法打出（费用/条件不满足）');
-      S.lastOutcome = `打出 ${name}`;
+      S.lastOutcome = `打出 ${name}${note}${deadTargetNote}`;
       if (isBattleFinished(battle)) settleBattle(S);
       return;
     }
@@ -439,9 +457,9 @@ export function exec(S, raw) {
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
       if (!hand.length) throw new Error('手牌为空，无法换牌');
-      const skill = hand[resolveHandArg(hand, a, isIdxArg(a) ? b : undefined)];
+      const { skill, note } = pickHandCard(hand, a, b, isIdxArg(a));
       if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
-      S.lastOutcome = `换牌 ${defOf(skill).name}`;
+      S.lastOutcome = `换牌 ${defOf(skill).name}${note}`;
       return;
     }
     case 'end': {
