@@ -271,9 +271,9 @@ describe('复杂战斗：效果致死', () => {
     slime.hp = 4;
     d.start();
 
-    d.play('inflame'); // 2 伤害 + 2 层燃烧 → 剩 2 血
-    expect(slime.hp).toBe(2);
-    d.endTurn();       // 敌方回合开始：燃烧跳 2 穿透 → 死亡
+    d.play('inflame'); // 点火：3 伤害 + 燃烧5 → 剩 1 血（2026-09 火系数值：点火 3伤/燃烧5）
+    expect(slime.hp).toBe(1);
+    d.endTurn();       // 敌方回合开始：燃烧跳 5（固定伤害，护盾可挡）→ 死亡
 
     expect(slime.isDead()).toBe(true);
     expect(d.verdict).toBe('victory');
@@ -310,8 +310,10 @@ describe('复杂战斗：敌方施加状态', () => {
 
     for (let i = 0; i < 4 && !d.isFinished(); i++) d.endTurn();
 
+    // 燃烧 tick = 无来源的固定伤害（2026-09 起：燃烧由穿透改为固定伤害/护盾可挡，
+    // 故不再按 pierce 过滤，改按「无来源 + 打玩家」识别）
     const burnTicks = d.calls('damage')
-      .filter(c => c.args[0].pierce === true && c.args[0].target === d.player);
+      .filter(c => c.args[0].target === d.player && c.args[0].source === null);
     expect(burnTicks.length).toBeGreaterThan(0);
     expect(d.player.getEffectStacks('burn')).toBeLessThanOrEqual(1);
   });

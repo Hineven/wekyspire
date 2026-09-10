@@ -215,7 +215,9 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
       for (let i = 0; i < 6; i++) {
         const enc = generateEncounter(runAt(floor, 1000 + i * 7));
         expect(enc.length, `${floor}`).toBeGreaterThanOrEqual(1);
-        expect(enc.length, `${floor}`).toBeLessThanOrEqual(3);
+        // 编成规模上限 = 4：「连环爆」（爆囊×2 + 石茧×2）是第一章主题编成里的四敌房
+        // （槽位数与 config.maxEnemies 都是 4）
+        expect(enc.length, `${floor}`).toBeLessThanOrEqual(4);
         // 贴模板时 Σ 恒等；贴线收场（无够得着的模板）最多缺 2（章末高预算保护带）
         expect(floorDifficulty(floor) - sumDiff(enc), `${floor}`).toBeLessThanOrEqual(2);
         expect(sumDiff(enc), `${floor}`).toBeLessThanOrEqual(floorDifficulty(floor));
@@ -263,7 +265,8 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
   });
 
   it('分段池（楼层区间）：低层不出高层敌人；敌人按楼层区间退役', () => {
-    const chapter1 = new Set(['slime', 'hedgehog', 'wraith', 'slimelet', 'buzzbug']);
+    const chapter1 = new Set(['slime', 'hedgehog', 'wraith', 'slimelet', 'buzzbug',
+      'mossBall', 'pufferToad', 'blastPod', 'stoneCocoon', 'rockSnail']);
     for (let i = 0; i < 20; i++) {
       const enc = generateEncounter(runAt(2, 100 + i));
       for (const e of enc) expect(chapter1.has(e.defId)).toBe(true);
@@ -302,8 +305,9 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
     for (let i = 0; i < 30; i++) {
       const enc = generateEncounter(runAt(7, 900 + i));
       const slimes = enc.filter(e => e.defId === 'slime').length;
-      expect(enc).toHaveLength(2);
-      expect(slimes).toBeLessThanOrEqual(1);
+      // 结构约束只对**双敌**编成成立（史莱姆战 = 1 史莱姆 + 1 其他）；
+      // 第一章还有三/四敌主题编成（淤泥滩、连环爆），不参与这条断言
+      if (enc.length === 2) expect(slimes, `seed ${900 + i}`).toBeLessThanOrEqual(1);
     }
     // 章 2+ 出现的影袭编成：含暗影刺客的编成长度为 2
     for (let i = 0; i < 30; i++) {
@@ -438,7 +442,9 @@ describe('小史莱姆 / 嗡嗡虫（前期微威胁杂兵）', () => {
       let seen = false;
       for (let i = 0; i < 40; i++) {
         const enc = generateEncounter(runAt2(floor, 1200 + i));
-        if (enc.some(e => e.defId === 'slimelet' || e.defId === 'buzzbug')) seen = true;
+        // 「填充位可见」= 低难度小怪照样能被塞进低预算槽；不锁定具体是哪一只
+        // （第一章补充敌人爆囊 base1、石茧 base3 等也会落进这些槽位）
+        if (enc.some(e => e.difficulty <= 2)) seen = true;
       }
       expect(seen, `f${floor}`).toBe(true);
     }

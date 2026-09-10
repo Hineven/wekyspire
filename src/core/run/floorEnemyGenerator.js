@@ -70,6 +70,13 @@ const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
   { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
+  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §7）——
+  // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
+  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'stoneCocoon' }] },
+  { id: 'twinClock', name: '钟摆双塔', minFloor: 5, maxFloor: 10, slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
+  // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
+  { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
+  { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },

@@ -539,3 +539,26 @@ registerEnemy({
     ? { kinds: ['unknown'], note: '沉眠·苏醒时攻击+2' }
     : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
 });
+
+// ⑰ 岩螺（第一章「苦战」底盘，2026-09 用户定：给慢慢磨的牌组留位置）：攻 4+攻击 ↔
+// 缩壳（自身护盾6 + 回复4），两拍循环。特征 = **攻击弱、不会越来越强、血巨厚**：
+// 它不叠 buff、不爆发、不召唤，纯粹考「能不能一边稳挡一边保持输出节奏」——缩壳的回血
+// 让「纯磨血」不够，但也不需要任何爆发。它是第一章唯一适合打持久战的敌人。
+registerEnemy({
+  difficulty: { base: 3, min: 2, max: 4, floorMin: 4, floorMax: 16 },
+  id: 'rockSnail', name: '岩螺',
+  createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 40 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 4 + actx.unit.getStat('attack'),
+      }));
+    } else {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 6 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 4 }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
+    : { kinds: ['defend', 'buff'], note: '缩壳：自身护盾6，回复4' }),
+});
