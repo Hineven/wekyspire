@@ -23,18 +23,24 @@ import {
   LEINO_DIMENSIONS, SEED_OFFERING, ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from './ascension.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
+import { trainingMode, upgradableCards } from './rooms/training.js';
+import { campOptions } from './rooms/camp.js';
+import { SLOT_PLACEHOLDER } from './rooms/slotMachine.js';
+import { gatedPromotionTargets } from './promotion.js';
 
 /**
  * 当前阶段的面板快照；无可呈现面板时返回 null。
  * @param {object} run runState
+ * @param {object} extra 舞台侧瞬态（不属于 run 的表现态），见 roomSnapshot
  * @returns {null | {kind: string, ...}}
  */
-export function panelSnapshot(run) {
+export function panelSnapshot(run, extra = {}) {
   if (!run) return null;
   switch (run.gameStage) {
     case 'prep': return prepSnapshot(run);
     case 'reward': return rewardSnapshot(run);
     case 'ascension': return ascensionSnapshot(run);
+    case 'room': return roomSnapshot(run, extra);
     default: return null;
   }
 }
@@ -146,4 +152,66 @@ export function ascensionSnapshot(run) {
     },
     grant,
   };
+}
+
+/**
+ * 奖励房（房间层·模态面板）：训练场 / 营地 / 老虎机 / 事件房。
+ *
+ * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { anim, lastSpin }, eventResult }`。
+ * 它们由 Shell 的 runController 持有（老虎机演出播放态 / 事件结算结果），核心拿不到——
+ * 但本函数仍是纯函数（只由入参决定输出，无副作用）。四房共用同一快照外壳：
+ * `room` 决定形态，`training` / `camp` / `slot` / `event` 各带自己的载荷。
+ */
+export function roomSnapshot(run, extra = {}) {
+  const room = run.currentRoom;
+  const p = run.player;
+  const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
+  const upgradable = upgradableCards(run).map(rt => {
+    const target = gatedPromotionTargets(run, getSkillDefinition(rt.defId))[0] ?? null;
+    return {
+      uniqueID: rt.uniqueID,
+      name: getSkillDefinition(rt.defId)?.name ?? rt.defId,
+      toName: target?.name ?? null,
+    };
+  });
+
+  if (room === 'training') {
+    const choices = run.roomData?.drawChoices ?? null;
+    snap.training = {
+      mode: trainingMode(run),            // 'upgrade'（免费升一）| 'draw'（退化抓牌）
+      forced: !!run.roomData?.forced,     // 升级后的强制尾款 → 不给跳过
+      choices,                            // 候选 defId 列表；null = 还没开局
+      choicesCards: (choices ?? []).map(id => ({
+        defId: id,
+        view: cardViewFromDef(getSkillDefinition(id), { player: p }),
+      })),
+      upgradable,
+    };
+    return snap;
+  }
+
+  if (room === 'camp') {
+    snap.camp = { options: campOptions(run), upgradable };
+    return snap;
+  }
+
+  if (room === 'slot') {
+    const anim = extra.slot?.anim ?? null;
+    const lastSpin = extra.slot?.lastSpin ?? null;
+    snap.slot = {
+      spinCost: SLOT_PLACEHOLDER.spinCost,
+      money: p.money,
+      // 演出进行中：{ id, prize }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）
+      spinning: anim ? { id: anim.id, prize: anim.prize?.type ?? null } : null,
+      lastSpin, // 结果载荷原样带上：文本由 Stage 侧翻译（表现文案）
+    };
+    return snap;
+  }
+
+  if (room === 'event') {
+    snap.event = { result: extra.eventResult ?? null };
+    return snap;
+  }
+
+  return snap;
 }

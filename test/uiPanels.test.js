@@ -7,7 +7,8 @@ import { PanelObject } from '../src/stage/objects/PanelObject.js';
 import { ButtonObject } from '../src/stage/objects/ButtonObject.js';
 import { TextBlockObject } from '../src/stage/objects/TextBlockObject.js';
 import { panelSnapshot, prepSnapshot, rewardSnapshot, ascensionSnapshot } from '../src/core/run/panelSnapshot.js';
-import { buildPrepPanel, buildRewardPanel, buildAscensionPanel } from '../src/stage/panels/index.js';
+import { SlotRollObject } from '../src/stage/objects/SlotRollObject.js';
+import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../src/stage/panels/index.js';
 import { createRun, enterBattle, finishBattle } from '../src/core/run/runFlow.js';
 import { grantRelic, equipRelic } from '../src/core/run/prep.js';
 import { EventNames } from '../src/bridge/events.js';
@@ -264,10 +265,15 @@ describe('MapStage 输入通道与面板装配', () => {
     stage.dispose();
   });
 
-  it('未登记的 kind 不装配（该面板仍由 Vue 渲染）', () => {
+  it('未登记的 kind 不装配（迁移期该面板仍由 Vue 渲染；四个休息面板现已全部登记）', () => {
     const stage = new MapStage({});
     stage.attachInput({ stageManager: fakeManager(), bus: mitt() });
-    stage.setPanel({ kind: 'room', roomType: 'slot' });
+    stage.setPanel({ kind: 'noSuchPanel' });
+    expect(stage.panel).toBeNull();
+    // 快照为 null（如战斗阶段）同样清场
+    stage.setPanel(prepSnapshot(createRun({ seed: 91 })));
+    expect(stage.panel).not.toBeNull();
+    stage.setPanel(null);
     expect(stage.panel).toBeNull();
     stage.dispose();
   });
@@ -610,6 +616,151 @@ describe('ascensionSnapshot + 种子包勾选（本地交互态）', () => {
     const ids = snap.offering.cards.map(c => c.defId);
     for (const id of ids.slice(0, 5)) stage._panel.onClick({ kind: 'card', id: `seed:${id}` });
     expect(stage._panelUi.selected.size).toBe(snap.offering.picks);
+    stage.dispose();
+  });
+});
+
+describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () => {
+  function roomRun(room, seed = 81) {
+    const run = createRun({ seed });
+    run.gameStage = 'room';
+    run.currentRoom = room;
+    return run;
+  }
+
+  it('训练场：升级行带晋升目标名；候选态给卡面；强制尾款不给跳过', () => {
+    const run = roomRun('training', 82);
+    grantRelic(run, 'warHorn'); // 无关，仅确保 run 完整
+    let snap = panelSnapshot(run);
+    expect(snap.kind).toBe('room');
+    expect(snap.room).toBe('training');
+    expect(['upgrade', 'draw']).toContain(snap.training.mode);
+    if (snap.training.mode === 'upgrade') {
+      expect(snap.training.upgradable.length).toBeGreaterThan(0);
+      expect(snap.training.upgradable[0].uniqueID).toBeTruthy();
+      expect(snap.training.upgradable[0].name).toBeTruthy();
+    }
+
+    // 候选态（模拟升级后的强制尾款）
+    run.roomData = { drawChoices: snap.training.upgradable.length ? [] : null, forced: true };
+    run.roomData = { drawChoices: ['punch'], forced: true };
+    snap = panelSnapshot(run);
+    expect(snap.training.choices).toEqual(['punch']);
+    expect(snap.training.choicesCards[0].view).toBeTruthy();
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    expect(panel._cards).toHaveLength(1); // 候选卡面
+    expect(panel._buttonActions.has('train:skip')).toBe(false); // 强绑尾款不给跳过
+    panel.dispose();
+
+    // 非强制时可跳过
+    run.roomData = { drawChoices: ['punch'], forced: false };
+    const p2 = new PanelObject({ form: 'modal' });
+    p2.setWidgets('room', buildRoomPanel(panelSnapshot(run)));
+    expect(p2._buttonActions.get('train:skip').enabled).toBe(true);
+    p2.dispose();
+    run.roomData = null;
+  });
+
+  it('营地：瓦片按选项动态出现，升级行走 campChoose', () => {
+    const run = roomRun('camp', 83);
+    const snap = panelSnapshot(run);
+    expect(snap.camp.options).toContain('rest');
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    expect(panel.buttons.some(b => b.pickId === 'camp:rest')).toBe(true);
+    // 未被打跑时不应有「找回瑞米」
+    expect(panel.buttons.some(b => b.pickId === 'camp:recoverRemi')).toBe(false);
+    run.remi.drivenOff = true;
+    panel.setWidgets('room', buildRoomPanel(panelSnapshot(run)));
+    expect(panel.buttons.some(b => b.pickId === 'camp:recoverRemi')).toBe(true);
+    panel.dispose();
+  });
+
+  it('老虎机：spinning 中禁止连点；揭示态给结果文案；意图表齐备', () => {
+    const run = roomRun('slot', 84);
+    run.player.money = 20;
+    let snap = panelSnapshot(run, { slot: { anim: null, lastSpin: null } });
+    expect(snap.slot.spinCost).toBeGreaterThan(0);
+    expect(snap.slot.money).toBe(20);
+
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    expect(panel._buttonActions.get('slot:spin').enabled).toBe(true);
+    expect(panel.buttons.some(b => b.pickId === 'slot:leave')).toBe(true);
+
+    // 转动中：拉杆禁用（防连点）
+    snap = panelSnapshot(run, { slot: { anim: { id: 'a1', prize: { type: 'money', money: 15 } }, lastSpin: null } });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    expect(snap.slot.spinning.id).toBe('a1');
+    expect(panel._buttonActions.get('slot:spin').enabled).toBe(false);
+
+    // 揭示：结果文案出现
+    snap = panelSnapshot(run, { slot: { anim: null, lastSpin: { type: 'money', money: 15 } } });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    const texts = panel._rows.filter(r => r.widget.kind === 'text').map(r => r.widget.text);
+    expect(texts.some(t => t.includes('15'))).toBe(true);
+    panel.dispose();
+  });
+
+  it('事件房：探索前只给探索键，探索后给结果与离开', () => {
+    const run = roomRun('event', 85);
+    const panel = new PanelObject({ form: 'modal' });
+    panel.setWidgets('room', buildRoomPanel(panelSnapshot(run, {})));
+    expect(panel.buttons.some(b => b.pickId === 'event:explore')).toBe(true);
+    expect(panel.buttons.some(b => b.pickId === 'event:leave')).toBe(false);
+
+    const snap = panelSnapshot(run, { eventResult: { eventId: 'moneyBag', money: 15 } });
+    panel.setWidgets('room', buildRoomPanel(snap));
+    expect(panel.buttons.some(b => b.pickId === 'event:leave')).toBe(true);
+    const texts = panel._rows.filter(r => r.widget.text).map(r => r.widget.text);
+    expect(texts.some(t => t.includes('15'))).toBe(true);
+    panel.dispose();
+  });
+});
+
+describe('老虎机揭示闸门：演出完成才出结果（回归：旧实现靠 DOM animationend）', () => {
+  it('转轮到时长才回执一次；快照未出现 spinning 时不播', () => {
+    const roll = new SlotRollObject({ durationMs: 1000 });
+    let done = 0;
+    roll.play(() => { done += 1; });
+    expect(roll.running).toBe(true);
+    expect(roll.update(400)).toBe(false); // 未到时长不回执
+    expect(done).toBe(0);
+    expect(roll.update(700)).toBe(true);  // 越过时长 → 恰好一次回执
+    expect(done).toBe(1);
+    expect(roll.running).toBe(false);
+    expect(roll.update(50)).toBe(false);  // 结束后不再重复回执
+    expect(done).toBe(1);
+    roll.dispose();
+  });
+
+  it('舞台接线：快照出现 spinning → 播一次 → 回执上报 slotAnimDone（同轮不重播）', () => {
+    const stage = new MapStage({});
+    stage.attachInput({ stageManager: fakeManager(), bus: mitt() });
+    const intents = [];
+    stage.setPanelIntentHandler((a) => intents.push(a));
+    const run = (() => { const r = createRun({ seed: 86 }); r.gameStage = 'room'; r.currentRoom = 'slot'; return r; })();
+
+    stage.setPanel(panelSnapshot(run, { slot: { anim: null, lastSpin: null } }));
+    expect(stage._slotRoll ?? null).toBeNull(); // 未转动时不创建转轮对象（惰性）
+
+    // 转动开始
+    stage.setPanel(panelSnapshot(run, { slot: { anim: { id: 'a1', prize: { type: 'money', money: 15 } }, lastSpin: null } }));
+    expect(stage._slotRoll.running).toBe(true);
+
+    // 同轮重绘不重播（进度不被打断）
+    stage._slotRoll.update(300);
+    stage.setPanel(panelSnapshot(run, { slot: { anim: { id: 'a1', prize: { type: 'money', money: 15 } }, lastSpin: null } }));
+    expect(stage._slotRoll.running).toBe(true);
+
+    // 播完 → 恰好一次回执，且带上轮次 id
+    stage._slotRoll.update(2000);
+    expect(intents).toEqual([{ action: 'slotAnimDone', id: 'a1' }]);
+
+    // 结果揭示（spinning 消失）→ 转轮收起
+    stage.setPanel(panelSnapshot(run, { slot: { anim: null, lastSpin: { type: 'money', money: 15 } } }));
+    expect(stage._slotRoll.running).toBe(false);
     stage.dispose();
   });
 });

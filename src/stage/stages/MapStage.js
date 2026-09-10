@@ -3,8 +3,10 @@ import gsap from 'gsap';
 import { isBossFloor } from '../../core/run/runFlow.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
+import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject } from '../objects/PanelObject.js';
-import { buildPrepPanel, buildRewardPanel, buildAscensionPanel } from '../panels/index.js';
+import { SlotRollObject } from '../objects/SlotRollObject.js';
+import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
@@ -17,6 +19,7 @@ const PANEL_BUILDERS = {
   prep: { build: buildPrepPanel, form: 'anchored' },
   reward: { build: buildRewardPanel, form: 'modal' },
   ascension: { build: buildAscensionPanel, form: 'modal' },
+  room: { build: buildRoomPanel, form: 'modal' },
 };
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
@@ -72,6 +75,8 @@ export class MapStage {
     this._panel = null;    // 当前休息阶段面板对象（setPanel 装配；null = 无面板）
     this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
     this._snap = null;     // 当前面板快照（本地重绘用）
+    this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
+    this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
     this._downHit = null;  // 按压命中（抬起时配对，防"按下 A 抬起 B"误触发）
     this.setFloor(1, totalFloors);
@@ -125,6 +130,8 @@ export class MapStage {
       }
       return;
     }
+    // 老虎机演出完成回执：不是玩家意图，而是**舞台的演出回执**——旧实现由 DOM 的
+    // @animationend 发出，迁到 Three 后只能由本舞台自己给（结果揭示的闸门）。
     this._onIntent?.(action);
   }
 
@@ -136,6 +143,26 @@ export class MapStage {
     if (!entry) return;
     this._panel.attachPicker(this._picker);
     this._panel.setWidgets(snap.kind, entry.build(snap, { selected: this._panelUi?.selected }));
+    this._syncSlotRoll();
+  }
+
+  // ---- 老虎机转轮（演出即闸门）----
+  // 快照里出现新的 spinning 就播一次；播完上报 slotAnimDone（runController 据此
+  // 揭示结果并推进 sequencer 队列）。演出态本身不进快照（用户裁决：播放进度留 Stage）。
+  _syncSlotRoll() {
+    const spinning = this._snap?.slot?.spinning ?? null;
+    if (!spinning) { this._slotRoll?.reset(); this._slotRollId = null; return; }
+    if (spinning.id === this._slotRollId) return; // 同一轮已在播（重绘不重播）
+    this._slotRollId = spinning.id;
+    if (!this._slotRoll) {
+      this._slotRoll = new SlotRollObject({ bakeText: this._bakeLabel });
+      this._slotRoll.position.set(0, UI_CAMERA_LOOK_AT_Y - 18, 82); // 面板内容右侧中段（背板之上）
+      this.uiScene.add(this._slotRoll);
+    }
+    this._slotRoll.play(() => {
+      this._slotRollId = null;
+      this._onIntent?.({ action: 'slotAnimDone', id: spinning.id });
+    });
   }
 
   // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅
@@ -232,6 +259,7 @@ export class MapStage {
     this._unsubTick?.();
     this._unsubTick = manager.onTick((dt) => {
       this._statusBar.update(dt);
+      this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
     });
   }
 
@@ -246,6 +274,11 @@ export class MapStage {
     this._unsubCardArt?.();
     this._unsubCardArt = null;
     this._removePanel();
+    if (this._slotRoll) {
+      this.uiScene.remove(this._slotRoll);
+      this._slotRoll.dispose();
+      this._slotRoll = null;
+    }
     this.detachInput();
     for (const child of [...this._tower.children]) { // 塔身层块（与 setFloor 重建同律）
       child.geometry.dispose();

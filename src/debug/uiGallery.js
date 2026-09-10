@@ -16,10 +16,15 @@ import '../core/content/index.js';
 import { StageManager } from '../stage/StageManager.js';
 import { MapStage } from '../stage/stages/MapStage.js';
 import { createRun, enterBattle, finishBattle, completeRewards } from '../core/run/runFlow.js';
-import { prepSnapshot, rewardSnapshot, ascensionSnapshot } from '../core/run/panelSnapshot.js';
+import { prepSnapshot, rewardSnapshot, ascensionSnapshot, roomSnapshot } from '../core/run/panelSnapshot.js';
 import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
 import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
 import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
+import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
+import { campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
+import { spinSlot } from '../core/run/rooms/slotMachine.js';
+import { playEvent } from '../core/run/rooms/event.js';
+import { completeRoom } from '../core/run/runFlow.js';
 import { attachTooltipForwarding } from '../shell/tooltipForward.js';
 import { tooltipState } from '../shell/tooltipHub.js';
 import mitt from 'mitt';
@@ -47,9 +52,16 @@ const intentLine = overlay.querySelector('#ug-intent');
 
 // ---- 样本 run（按面板种类造对应阶段）----
 let run = null;
+let roomUi = null; // 房间层舞台侧瞬态（老虎机演出态 / 事件结果）
 function buildRun() {
   const r = createRun({ seed: SEED });
-  if (PANEL === 'ascension') {
+  if (PANEL === 'room') {
+    // 房间层：?room=training|camp|slot|event（默认 slot，含演出与揭示）
+    r.gameStage = 'room';
+    r.currentRoom = opt('room', 'slot');
+    roomUi = { slot: { anim: null, lastSpin: null }, eventResult: null };
+    if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
+  } else if (PANEL === 'ascension') {
     // 进阶事件：进 ascension 阶段；?offering=1 直接走到种子包（火灵脉首次 0→1）
     r.gameStage = 'ascension';
     if (opt('offering', '0') === '1') chooseAscension(r, 'fire');
@@ -80,7 +92,8 @@ const bus = mitt();
 attachTooltipForwarding(bus);
 
 const push = () => {
-  if (PANEL === 'ascension') mapStage.setPanel(ascensionSnapshot(run));
+  if (PANEL === 'room') mapStage.setPanel(roomSnapshot(run, roomUi));
+  else if (PANEL === 'ascension') mapStage.setPanel(ascensionSnapshot(run));
   else if (PANEL === 'reward') mapStage.setPanel(rewardSnapshot(run));
   else mapStage.setPanel(prepSnapshot(run));
   // 顶端资源行/状态栏也给上（面板与之同屏，便于检查遮挡关系）
@@ -103,6 +116,28 @@ mapStage.setPanelIntentHandler((intent) => {
     else if (a === 'useRelic') prepUseRelic(run, intent.relicId);
     else if (a === 'startBattle') intentLine.textContent += '  （陈列页不进入战斗）';
     else if (a === 'chooseRewardPack') chooseRewardPack(run, intent.packId);
+    else if (PANEL === 'room') {
+      // 房间层：真走 core，并让「老虎机演出 → 回执 → 揭示」在陈列页也跑通
+      if (a === 'trainingUpgrade') trainUpgrade(run, intent.uniqueID);
+      else if (a === 'trainingDrawRoll') trainDrawChoices(run);
+      else if (a === 'trainingDraw') { trainingDraw(run, intent.defId ?? null); completeRoom(run); }
+      else if (a === 'trainingSkip') { skipTraining(run); completeRoom(run); }
+      else if (a === 'campChoose') {
+        if (intent.option === 'rest') campRest(run);
+        else if (intent.option === 'recoverRemi') campRecoverRemi(run);
+        else if (intent.option === 'upgrade') campUpgrade(run, intent.uniqueID);
+        completeRoom(run);
+      }
+      else if (a === 'spin') {
+        const outcome = spinSlot(run);
+        roomUi.slot = { anim: { id: `a${Date.now()}`, prize: outcome }, lastSpin: null };
+      } else if (a === 'slotAnimDone') {
+        roomUi.slot = { anim: null, lastSpin: roomUi.slot.anim?.prize ?? null };
+      } else if (a === 'leaveSlot') completeRoom(run);
+      else if (a === 'triggerEvent') roomUi.eventResult = playEvent(run);
+      else if (a === 'leaveEvent') completeRoom(run);
+      if (run.gameStage !== 'room') run = buildRun(); // 离房 → 重建样本
+    }
     else if (a === 'chooseAscensionDimension') chooseAscension(run, intent.dimension);
     else if (a === 'chooseSeedCards') chooseSeedCards(run, intent.defIds);
     else if (a === 'rerollSeedOffering') rerollSeedOffering(run);

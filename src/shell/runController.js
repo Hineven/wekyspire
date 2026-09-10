@@ -126,6 +126,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
+  // 房间层舞台侧瞬态（不进 core run）：老虎机演出播放态 + 事件结算结果。
+  // 面板快照经 panelExtras() 一并下行（roomSnapshot 的 extra 入参）。
+  const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
+  const eventRoom = reactive({ result: null });
   let battleStage = null;
   const log = reactive([]);  // 战斗日志（Shell 展示用）
 
@@ -162,12 +166,14 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage?.statusBar.setPlayerHp(run.player.hp, run.player.maxHp);
     battleStage?.statusBar.setRemi(remiView());
   };
+  // 面板快照的舞台侧瞬态：老虎机演出播放态与事件结果不在 core run 里（见 roomSnapshot 注释）
+  const panelExtras = () => ({ slot, eventResult: eventRoom.result });
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
-  mapStage?.setPanel?.(panelSnapshot(run)); // 休息阶段面板快照（数据下行唯一通道）
+  mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
   const notify = () => {
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
-    mapStage?.setPanel?.(panelSnapshot(run)); // 面板内容跟随阶段迁移（同一快照推导）
+    mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 面板内容跟随阶段迁移（同一快照推导）
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
@@ -317,7 +323,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRoom(run);
     notify();
   }
-  const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
   function spin() { // 可重复消费（每次扣费）；roll 动画经 run sequencer 串行编排
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
@@ -345,7 +350,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRoom(run);
     notify();
   }
-  const eventRoom = reactive({ result: null });
   function triggerEvent() {
     if (run.gameStage !== 'room' || run.currentRoom !== 'event' || eventRoom.result) return; // 已探索不重复结算
     eventRoom.result = playEvent(run);
@@ -403,6 +407,17 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'skipAscension') skipAscension();
     else if (action === 'chooseSeedCards') chooseSeedCards(intent.defIds);
     else if (action === 'rerollSeedOffering') rerollSeedOffering();
+    // 房间层
+    else if (action === 'trainingUpgrade') trainingUpgrade(intent.uniqueID);
+    else if (action === 'trainingDrawRoll') trainingDrawRoll();
+    else if (action === 'trainingDraw') trainingDraw(intent.defId ?? null);
+    else if (action === 'trainingSkip') trainingSkip();
+    else if (action === 'campChoose') campChoose(intent.option, intent.uniqueID ?? null);
+    else if (action === 'spin') spin();
+    else if (action === 'slotAnimDone') reportSlotAnimDone(intent.id); // 舞台演出回执（非玩家意图）
+    else if (action === 'leaveSlot') leaveSlot();
+    else if (action === 'triggerEvent') triggerEvent();
+    else if (action === 'leaveEvent') leaveEvent();
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
 

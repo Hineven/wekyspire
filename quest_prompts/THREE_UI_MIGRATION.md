@@ -376,12 +376,12 @@ RoomPanel 最重（滚动 + 老虎机演出），放最后。
 |---|---|---|
 | **P0 管道** | ✅ 完成 | `MapStage.attachInput/handlePointer*`（Picker + 按下/抬起命中配对）；`App.vue` 指针路由泛化为「当前舞台」（battle → BattleStage，其余 → MapStage）；**常驻 tooltip 转发器** `shell/tooltipForward.js`（补上 rest 阶段 3D tooltip 的链路缺口）；`test/uiPanels.test.js` 覆盖前两项与转发的**幂等**契约 |
 | **P1 原语** | ✅ 主体完成 | `core/run/panelSnapshot.js`（纯函数，数据下行唯一通道）；`PanelObject`（**锚定 + 模态两形态** + 固定行高行流 + 等比收敛 + 按钮/瓦片/卡面三类 widget + 点击路由）；`ButtonObject`（三态 + 签名 diff）；`TextBlockObject`；`core/skills/cardView.js`（卡面视图，与 CardFacePreview 共用，消除重复）；`richtext/cardFaceDefaults.js` + `objects/cardMetrics.js`（从 BattleStage 抽出的卡面烘焙/尺寸，战斗与面板同源）；`stage/panels/index.js`（快照 → widget 构建器注册表）。**待补**：`TileGrid`/`ListLayout` 独立化（当前瓦片行流已够用）、`ScrollListObject`（随牌库级选卡界面） |
-| **P2 面板** | 🟡 3/4 | **prep**（锚定）、**reward**（模态 + 卡面三选一）、**ascension**（模态 + 九选三网格 + 面板本地勾选态）已迁入 Three 并删除对应 Vue 组件（不留双实现）。余：RoomPanel（含老虎机 sequencer 改造） |
+| **P2 面板** | ✅ 完成 | **prep**（锚定）、**reward**（模态 + 卡面三选一）、**ascension**（模态 + 九选三网格 + 面板本地勾选态）、**room**（模态 + 四子房 + 老虎机转轮演出）全部迁入 Three，四个 Vue 组件均已删除；`runPanels.css` 随最后一个用户消失而整文件删除（AGENTS.md「删除废弃旧代码含 CSS」） |
 | **P3 收尾** | ⬜ 未开始 | 渐进揭示 + 正式特效 |
 
-**验收门**：`test/uiPanels.test.js`（33 例：快照推导 / 原语 headless 可构造 / 布局不重叠不越界 /
+**验收门**：`test/uiPanels.test.js`（40 例：快照推导 / 原语 headless 可构造 / 布局不重叠不越界 /
 按钮与卡面点击路由 / disabled 拦截 / 重建幂等 / 释放无残留 / tooltip 转发幂等 / runController 端到端通道）
-+ `uiGallery.html`（`?panel=prep|reward|ascension&seed=&relics=&equip=&floor=&offering=1`，
++ `uiGallery.html`（`?panel=prep|reward|ascension|room&seed=&relics=&equip=&floor=&offering=1&room=slot&money=20`，
 面板内按钮与卡面可点、真实走 core 意图）。浏览器视觉验收按项目惯例**由所有者验收**（prep 观感与遮挡关系已验收通过）。
 
 **执行中发现并修掉的既有 bug（迁移动机的意外收获）**：`runController.endBattle` 等待塔楼抵达
@@ -391,7 +391,12 @@ RoomPanel 最重（滚动 + 老虎机演出），放最后。
 并补齐「回执放行 + 等待侧保险丝」两处。同时修掉模态层序：文本/按钮落在背板之后被遮挡。
 → 教训已写进 §4.2-1 的同源要求：**迁移到推流驱动的 UI 时，必须确认推流时机本身没有既有的断点**。
 
-**下一步**：RoomPanel（最重：老虎机演出改由 sequencer 回执驱动，见 §2.4 的分期陷阱）。
+**老虎机揭示闸门（room 落地时收口）**：旧的完成信号是 `RoomPanel.vue` 的 DOM `@animationend`，
+现在由舞台自己的 `SlotRollObject` 给出——dt 驱动（与舞台 tick 同时钟，headless 可直接 `update(dt)`
+推演，不依赖 rAF），播完经意图通道上报 `slotAnimDone` → `runController.reportSlotAnimDone` 开闸。
+「roll 落定才揭示结果」的渐进揭示语义保持不变；转动中拉杆禁用（防连点）。
+
+**下一步**：P3 收尾（渐进揭示 + 正式特效接入，等美术资源）。
 
 **面板本地交互态的实现口径（ascension 落地后定型）**：勾选缓冲这类「被确认前是纯 UI 态」的数据
 **留在舞台**（`MapStage._panelUi`，换面板即清空），动作标 `local: true` 由舞台自己消化并就地重绘，

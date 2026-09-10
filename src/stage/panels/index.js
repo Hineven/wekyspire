@@ -178,3 +178,124 @@ export function buildAscensionPanel(snap, { selected = new Set() } = {}) {
   });
   return w;
 }
+
+// 房间标题/图标/提示：表现文案（core 只给 currentRoom 这个 id）
+const ROOM_META = {
+  training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——每层训练记录在案，达标即可进阶' },
+  camp: { name: '营地', glyph: '⛺', hint: '暂作休整，选择一件好事发生' },
+  slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
+  event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
+};
+
+// 老虎机奖项文案（结果载荷 → 可读文本；奖励房通用）
+const prizeText = (p) => ({
+  nothing: '什么也没发生……',
+  money: `金币 +${p.money}`,
+  fruit: '获得 remi 升级果 ×1',
+  training: '训练次数 +1',
+  card: `获得卡牌：${p.defId}`,
+  relic: `获得遗物：${p.relicId}`,
+}[p.type] ?? '……');
+const eventText = (r) => ({
+  moneyBag: `捡到钱袋：金币 +${r.money}`,
+  spring: `治愈泉：回复 ${r.heal} 点生命`,
+}[r.eventId] ?? '迷雾散去，什么也没留下。');
+
+/** 升级行（训练场/营地共用）：卡名 →（晋升目标名）。 */
+const upgradeRows = (items, actionOf, idPrefix) => items.map(u => ({
+  kind: 'button', id: `${idPrefix}:${u.uniqueID}`, width: 420, size: 'sub',
+  label: u.toName ? `${u.name} → ${u.toName}` : u.name,
+  action: actionOf(u),
+}));
+
+/** 奖励房（模态）：训练场 / 营地 / 老虎机 / 事件房。 */
+export function buildRoomPanel(snap) {
+  const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
+  const w = [];
+  w.push({ kind: 'title', text: `${meta.glyph} ${meta.name}`, align: 'center' });
+
+  if (snap.room === 'training') {
+    const t = snap.training ?? {};
+    // 候选抉择中（升级后的强制尾款 / 退化模式已开局）：差别只在有无跳过
+    if (t.choices?.length) {
+      w.push({
+        kind: 'sub', align: 'center', tint: '#9aa3b8',
+        text: t.forced ? '升级完成！必须择一张加入牌组：' : '择一张加入牌组：',
+      });
+      w.push({
+        kind: 'cards', idPrefix: 'train', cols: 3, scale: 0.8,
+        items: t.choicesCards.map(c => ({
+          defId: c.defId, view: withLabels(c.view),
+          action: { action: 'trainingDraw', defId: c.defId },
+        })),
+      });
+      if (!t.forced) {
+        w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingDraw', defId: null } });
+      }
+      return w;
+    }
+    if (t.mode === 'upgrade') {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '免费升级一张卡（完成后须再择一张加入牌组）：' });
+      w.push(...upgradeRows(t.upgradable ?? [], u => ({ action: 'trainingUpgrade', uniqueID: u.uniqueID }), 'trainUp'));
+      w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
+      return w;
+    }
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '暂无可升级的卡牌，本次改为抓一张（可跳过）。' });
+    w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌', action: { action: 'trainingDrawRoll' } });
+    w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
+    return w;
+  }
+
+  if (snap.room === 'camp') {
+    const c = snap.camp ?? { options: [] };
+    const tiles = [];
+    if (c.options.includes('recoverRemi')) {
+      tiles.push({ id: 'recoverRemi', name: '🐾 找回瑞米', desc: '那位老朋友回到了身边', action: { action: 'campChoose', option: 'recoverRemi' } });
+    }
+    if (c.options.includes('rest')) {
+      tiles.push({ id: 'rest', name: '🔥 休整', desc: '回复 35% 最大生命，魏启全部回满', action: { action: 'campChoose', option: 'rest' } });
+    }
+    if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
+    if (c.options.includes('upgrade')) {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '或免费升级一张卡：' });
+      w.push(...upgradeRows(c.upgradable ?? [], u => ({ action: 'campChoose', option: 'upgrade', uniqueID: u.uniqueID }), 'campUp'));
+    }
+    return w;
+  }
+
+  if (snap.room === 'slot') {
+    const s = snap.slot ?? {};
+    w.push({
+      kind: 'sub', align: 'center', tint: '#9aa3b8',
+      text: `单抽 ${s.spinCost} 金币 ｜ 持有 ${s.money}`,
+    });
+    // 转动中禁止连点（与旧面板 rolling 态一致）；演出本体是 uiScene 里的 SlotRollObject
+    w.push({
+      kind: 'button', id: 'slot:spin', width: 260, size: 'main',
+      label: s.spinning ? '转动中…' : '拉杆！', enabled: !s.spinning,
+      action: { action: 'spin' },
+    });
+    if (s.spinning) {
+      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '🎰 …' });
+    } else if (s.lastSpin) {
+      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: prizeText(s.lastSpin) });
+    }
+    w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
+    return w;
+  }
+
+  if (snap.room === 'event') {
+    const e = snap.event ?? {};
+    if (!e.result) {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
+      w.push({ kind: 'button', id: 'event:explore', width: 240, label: '探索', action: { action: 'triggerEvent' } });
+    } else {
+      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: eventText(e.result) });
+      w.push({ kind: 'button', id: 'event:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveEvent' } });
+    }
+    return w;
+  }
+
+  w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（此房间暂无面板）' });
+  return w;
+}

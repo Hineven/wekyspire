@@ -14,7 +14,6 @@ import StartScreen from './components/StartScreen.vue';
 import AssetLoadingScreen from './components/AssetLoadingScreen.vue';
 import GameMenu from './components/GameMenu.vue';
 import BattleHud from './components/BattleHud.vue';
-import RoomPanel from './components/RoomPanel.vue';
 import EndPanel from './components/EndPanel.vue';
 import MenuPopup from './components/MenuPopup.vue';
 import MenuDialog from './components/MenuDialog.vue';
@@ -24,7 +23,6 @@ import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
-import './components/runPanels.css'; // 发育阶段 run 面板公共样式（奖励/房间/进阶）
 
 const canvas = ref(null);
 const frame = ref(null);
@@ -166,7 +164,6 @@ onBeforeUnmount(() => {
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
       <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
       <BattleHud v-if="stage === 'battle'" :ctrl="ctrl" />
-      <RoomPanel v-else-if="stage === 'room'" :ctrl="ctrl" />
       <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>
