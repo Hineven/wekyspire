@@ -11,6 +11,7 @@ import {
 import { spawnableCardPool } from '../src/core/run/rewards.js';
 import { isBossFloor } from '../src/core/run/runFlow.js';
 import { createRunState } from '../src/core/state/runState.js';
+import { moveCard } from '../src/core/state/battleState.js';
 import Player from '../src/core/state/player.js';
 
 // 新敌人体系验证：四个新效果（荆棘/蓄势/虚弱/再生）的结算语义、
@@ -244,7 +245,7 @@ describe('floorEnemyGenerator（2026-09 难度制）', () => {
   });
 
   it('分段池（楼层区间）：低层不出高层敌人；敌人按楼层区间退役', () => {
-    const chapter1 = new Set(['slime', 'hedgehog', 'wraith']);
+    const chapter1 = new Set(['slime', 'hedgehog', 'wraith', 'slimelet', 'buzzbug']);
     for (let i = 0; i < 20; i++) {
       const enc = generateEncounter(runAt(2, 100 + i));
       for (const e of enc) expect(chapter1.has(e.defId)).toBe(true);
@@ -326,6 +327,106 @@ describe('效果定义元数据完整（前端效果行渲染依赖）', () => {
       expect(def.icon, id).toBeTruthy();
       expect(['buff', 'debuff']).toContain(def.type);
       expect(def.description, id).toBeTruthy();
+    }
+  });
+});
+
+describe('小史莱姆 / 嗡嗡虫（前期微威胁杂兵）', () => {
+  const runAt2 = (floor, seed = 9) => {
+    const run = createRunState({ seed, player: new Player({ maxHp: 30 }) });
+    run.floor = floor;
+    return run;
+  };
+
+  it('小史莱姆：塞粘液进牌库末 ↔ 攻3 两拍；粘液 1AP 抽1 消耗', () => {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch', 'punch', 'punch'],
+      enemies: [spawnEnemy('slimelet')], seed: 5, player: { maxHp: 50 },
+      config: { drawPerTurn: 0, initialDraw: 3 },   // 留 1 张在牌库供粘液抽1验证
+    });
+    d.start();
+    const deck0 = d.state.zones.deck.length;
+    const intent = getEnemyDefinition('slimelet').getIntention(d.state.enemies[0], d.state);
+    expect(intent.kinds).toEqual(['debuff']);
+    d.endTurn();                                       // 塞粘液（牌库末）
+    expect(d.state.zones.deck.at(-1).defId).toBe('gooCard');
+    expect(d.state.zones.deck).toHaveLength(deck0 + 1);
+    const hp0 = d.player.hp;
+    d.endTurn();                                       // 攻3
+    expect(hp0 - d.player.hp).toBe(3);
+    // 粘液：1AP 抽1 消耗——能打（换手），但吃 AP、焚毁
+    const goo = d.state.zones.deck.at(-1);
+    moveCard(d.state, goo.uniqueID, 'hand');
+    const hand0 = d.state.zones.hand.length;
+    const ap0 = d.player.actionPoints;
+    d.play(goo.uniqueID);
+    expect(d.player.actionPoints).toBe(ap0 - 1);
+    expect(d.state.zones.hand).toHaveLength(hand0);    // 自身离手 + 抽1 = 持平
+    expect(d.state.zones.burnt.some(c => c.uniqueID === goo.uniqueID)).toBe(true);
+    expect(spawnableCardPool().map(x => x.id)).not.toContain('gooCard');
+  });
+
+  it('嗡嗡虫：闪避1 → 攻1×4 → 攻3 三拍；闪避免疫下一次攻击并消耗', () => {
+    const d = new BattleDriver({
+      deck: ['punch', 'punch', 'punch', 'punch'],
+      enemies: [spawnEnemy('buzzbug')], seed: 5, player: { maxHp: 50 },
+      config: { drawPerTurn: 0 },
+    });
+    d.start();
+    const bug = d.state.enemies[0];
+    expect(bug.maxHp).toBe(7);
+    let intent = getEnemyDefinition('buzzbug').getIntention(bug, d.state);
+    expect(intent.kinds).toEqual(['buff']);
+    d.endTurn();                                       // 闪避1
+    expect(bug.getEffectStacks('dodge')).toBe(1);
+    // 玩家攻击被免疫：血不变、闪避层消耗；再打一发照常掉血
+    const hp0 = bug.hp;
+    d.play('punch');
+    expect(bug.hp).toBe(hp0);
+    expect(bug.getEffectStacks('dodge')).toBe(0);
+    const punch2 = d.state.zones.hand.find(c => c.defId === 'punch');
+    d.play(punch2.uniqueID);
+    expect(bug.hp).toBe(hp0 - (6 - 0));
+    // 意图预告：攻1×4（hits=4）→ 实打四段各 1
+    intent = getEnemyDefinition('buzzbug').getIntention(bug, d.state);
+    expect(intent.kinds).toEqual(['attack']);
+    expect(intent.hits).toBe(4);
+    const php0 = d.player.hp;
+    d.endTurn();                                       // 攻1×4
+    expect(php0 - d.player.hp).toBe(4);
+    d.endTurn();                                       // 攻3
+    expect(php0 - d.player.hp).toBe(7);
+  });
+
+  it('闪避不吃环境伤害：燃烧跳伤照常结算', () => {
+    const d = new BattleDriver({
+      deck: ['punch'], enemies: [spawnEnemy('buzzbug')], seed: 5,
+    });
+    d.start();
+    const bug = d.state.enemies[0];
+    d.dispatch(new AddEffectInstruction({ target: bug, effectId: 'dodge', stacks: 1 }));
+    d.dispatch(new AddEffectInstruction({ target: bug, effectId: 'burn', stacks: 3 }));
+    const hp0 = bug.hp;
+    d.endTurn();                                       // 敌方回合开始燃烧跳 3（穿透、无来源）
+    expect(bug.hp).toBe(hp0 - 3);
+    // 闪避未被消耗（1 层原样保留）+ 嗡嗡虫行动拍又自加 1 层 = 2
+    expect(bug.getEffectStacks('dodge')).toBe(2);
+  });
+
+  it('生成侧：低预算双敌房与三敌房填充位可见、16 层后退役', () => {
+    // 小难度怪天然落在低份额槽：f3 低预算双敌 / f13 三敌填充（f6-7、f9-10 纯双敌
+    // 段份额必为 3/4，上限 2 的小怪接不住——预算制的自然死区，非缺陷）
+    for (const floor of [3, 13]) {
+      let seen = false;
+      for (let i = 0; i < 40; i++) {
+        const enc = generateEncounter(runAt2(floor, 1200 + i));
+        if (enc.some(e => e.defId === 'slimelet' || e.defId === 'buzzbug')) seen = true;
+      }
+      expect(seen, `f${floor}`).toBe(true);
+    }
+    for (let i = 0; i < 20; i++) {
+      const enc = generateEncounter(runAt2(20, 1300 + i));
+      expect(enc.some(e => e.defId === 'slimelet' || e.defId === 'buzzbug')).toBe(false);
     }
   });
 });

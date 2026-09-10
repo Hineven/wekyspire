@@ -324,6 +324,30 @@ registerEffect({
   }],
 });
 
+// 闪避：免疫下一次攻击（层数 -1）。判定口径与火墙一致：「攻击」= 有来源、
+// 非燃烧/中毒等环境标记的伤害指令（玩家普攻/多段/固定伤害都算；燃烧跳伤、
+// 中毒结算不算）。被 veto 的结算无联动（A4）——荆棘不反、命中探针不触发。
+registerEffect({
+  id: 'dodge',
+  type: 'buff',
+  stacking: 'count',
+  name: '闪避',
+  description: '免疫下一次攻击，然后层数减少 1。',
+  icon: '💨',
+  color: 'cyan',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit
+      && instr.source
+      && !instr.tags?.includes('burn')
+      && !instr.tags?.includes('poison'),
+    react: (instr, ctx) => ctx.kernel.veto(instr, 'dodge', [
+      new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: -1 }),
+    ]),
+  }],
+});
+
 // 晕眩（EFFECTS.md 2026-09 新增）：回合行动时跳过行动，层数 -1。
 // AI 单位（敌人/盟友）经 AIActInstruction PRE veto 实现（被取消的结算无联动，A4；
 // 层数 -1 作为 veto 替代指令插入）；玩家的「行动」是回合阶段机的 P4 操作段，

@@ -1,6 +1,6 @@
 import { registerEnemy, getEnemyDefinition } from '../enemies/registry.js';
 import { registerSkill } from '../skills/registry.js';
-import { AddCardInstruction } from '../instructions/cards.js';
+import { AddCardInstruction, DrawCardsInstruction } from '../instructions/cards.js';
 import Enemy from '../state/enemy.js';
 import {
   DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction,
@@ -314,5 +314,76 @@ registerEnemy({
     if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 8 + atk, note: '并获护盾8' };
     if (phase === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk };
     return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
+  },
+});
+
+// ⑩ 小史莱姆（前期微威胁杂兵，2026-09 难度制）：塞粘液 ↔ 攻3 两拍循环。
+// 粘液 = 1AP 抽1 消耗的淤积牌（比震慑温和：能打出换手，但吃 AP、占牌库）。
+// 只经 AddCard 入场，不入奖励池。
+registerSkill({
+  id: 'gooCard', name: '粘液', type: 'normal', tier: 'D', series: 'enemyJunk',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  canSpawnAsReward: false,
+  use(sctx) {
+    sctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }));
+    return true;
+  },
+  describe: () => '抽1',
+});
+registerEnemy({
+  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  id: 'slimelet', name: '小史莱姆',
+  createUnit: () => new Enemy({ defId: 'slimelet', name: '小史莱姆', maxHp: 3 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      // 粘液塞牌库末（数组尾 = 最晚抽到）：污染在长线兑现，不卡当下
+      actx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'gooCard', toZone: 'deck', index: null,
+      }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 3 + actx.unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['debuff'], note: '向牌库末塞入1张「粘液」' }
+    : { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') }),
+});
+
+// ⑪ 嗡嗡虫（前期小敌人，2026-09）：闪避1 → 攻1×4 → 攻3 三拍循环。
+// 闪避逼玩家先垫一发再集火（或用燃烧/中毒等环境伤害绕过）。
+registerEnemy({
+  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  id: 'buzzbug', name: '嗡嗡虫',
+  createUnit: () => new Enemy({ defId: 'buzzbug', name: '嗡嗡虫', maxHp: 7 }),
+  act(actx) {
+    const atk = actx.unit.getStat('attack');
+    const phase = actx.unit.actionIndex % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'dodge', stacks: 1,
+      }));
+    } else if (phase === 1) {
+      for (let i = 0; i < 4; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: actx.unit, target: actx.player, amount: 1 + atk,
+        }));
+      }
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 3 + atk,
+      }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['buff'], note: '自身闪避1（免疫下一次攻击）' };
+    if (phase === 1) return { kinds: ['attack'], hits: 4, damage: 1 + atk };
+    return { kinds: ['attack'], hits: 1, damage: 3 + atk };
   },
 });
