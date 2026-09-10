@@ -195,9 +195,9 @@ describe('转化：结算期输入集成（点化）', () => {
     expect(target.defId).toBe('inflame');
     expect(zoneOf(d.state, target.uniqueID)).toBe('hand'); // 原地转化，仍在手牌
 
-    d.play(target.uniqueID); // 按点火结算：2 伤 + 4 层燃烧
-    expect(slime.hp).toBe(20 - 2);
-    expect(slime.getEffectStacks('burn')).toBe(4);
+    d.play(target.uniqueID); // 按点火结算：3 伤 + 5 层燃烧
+    expect(slime.hp).toBe(20 - 3);
+    expect(slime.getEffectStacks('burn')).toBe(5);
   });
 });
 

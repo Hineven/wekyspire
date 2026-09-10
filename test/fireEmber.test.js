@@ -27,21 +27,24 @@ const burnOn = (d, unit, stacks) =>
   d.dispatch(new AddEffectInstruction({ target: unit, effectId: 'burn', stacks }));
 
 describe('点火系列：烈焰 / 炙焰', () => {
-  it('2 伤害叠燃烧 6/9；敌方回合开始按层数跳穿透伤并 -1', () => {
-    const d = setup({ deck: ['blaze', 'inferno', 'punch', 'punch'] });
+  it('3 伤害叠燃烧 7/10；敌方回合开始按层数跳固定伤并 -1', () => {
+    const d = setup({
+      deck: ['blaze', 'inferno', 'punch', 'punch'],
+      enemies: [new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 200 })],
+    });
     const slime = d.state.enemies[0];
 
     d.play('blaze');
-    expect(slime.hp).toBe(18);                        // 20 - 2
-    expect(slime.getEffectStacks('burn')).toBe(6);
+    expect(slime.hp).toBe(197);                       // 200 - 3
+    expect(slime.getEffectStacks('burn')).toBe(7);
 
     d.play('inferno');
-    expect(slime.hp).toBe(16);                        // 20 - 2 - 2
-    expect(slime.getEffectStacks('burn')).toBe(15);   // 6 + 9
+    expect(slime.hp).toBe(194);                       // 200 - 3 - 3
+    expect(slime.getEffectStacks('burn')).toBe(17);   // 7 + 10
 
-    d.endTurn(); // 敌方回合开始：燃烧 15 穿透跳伤 → 16-15=1，层数 -1
-    expect(slime.hp).toBe(1);
-    expect(slime.getEffectStacks('burn')).toBe(14);
+    d.endTurn(); // 敌方回合开始：燃烧 17 固定跳伤 → 194-17=177，层数 -1
+    expect(slime.hp).toBe(177);
+    expect(slime.getEffectStacks('burn')).toBe(16);
   });
 
   it('点火晋升链完整：点火 → 烈焰 → 炙焰', () => {
@@ -142,7 +145,7 @@ describe('燃元系列：化焰（溢出魏启 → 全场燃烧）', () => {
 });
 
 describe('控火术：燃 / 灭 / 灼', () => {
-  it('燃：伤害 4，目标每层燃烧伤害 +1', () => {
+  it('燃：伤害 12，目标每层燃烧伤害 +1', () => {
     const d = setup({
       deck: ['fireControlBurn', 'punch', 'punch', 'punch'], player: { maxMana: 6 },
     });
@@ -151,7 +154,7 @@ describe('控火术：燃 / 灭 / 灼', () => {
     burnOn(d, slime, 5);
 
     d.play('fireControlBurn');
-    expect(slime.hp).toBe(11); // 20 - (4 + 5)
+    expect(slime.hp).toBe(3); // 20 - (12 + 5)
     expect(d.player.mana).toBe(3); // 6 - 3费
   });
 
@@ -175,7 +178,7 @@ describe('控火术：燃 / 灭 / 灼', () => {
     expect(slime2.getEffect('burn')).toBeNull(); // 负溢出无害，直接移除
   });
 
-  it('灼：下次攻击每造成 4 伤害赋予燃烧 1（余数丢弃），仅生效一次', () => {
+  it('灼：下次攻击每造成 3 伤害赋予燃烧 1（余数丢弃），仅生效一次', () => {
     const d = setup({
       deck: ['fireControlScorch', 'punch', 'punch', 'punch'], player: { maxMana: 6 },
     });
@@ -183,13 +186,13 @@ describe('控火术：燃 / 灭 / 灼', () => {
     fillMana(d);
     d.play('fireControlScorch');
 
-    d.play('punch'); // 6 伤害 → floor(6/4) = 1 层燃烧
+    d.play('punch'); // 6 伤害 → floor(6/3) = 2 层燃烧
     expect(slime.hp).toBe(14);
-    expect(slime.getEffectStacks('burn')).toBe(1);
+    expect(slime.getEffectStacks('burn')).toBe(2);
 
     d.play('punch'); // 灼已消耗：不再赋予
     expect(slime.hp).toBe(8);
-    expect(slime.getEffectStacks('burn')).toBe(1);
+    expect(slime.getEffectStacks('burn')).toBe(2);
   });
 });
 
@@ -357,7 +360,7 @@ describe('控火术：无上（发现 0 费控火术）', () => {
 });
 
 describe('边界：无燃烧 / 无加成时落空不崩溃', () => {
-  it('聚 / 炼 在零燃烧场面无变化；燃 无燃烧加成时仍造成裸 4 伤害', () => {
+  it('聚 / 炼 在零燃烧场面无变化；燃 无燃烧加成时仍造成裸 12 伤害', () => {
     const d = setup({
       deck: ['fireControlGather', 'fireControlRefine', 'fireControlBurn', 'punch'],
       player: { maxMana: 14 },
@@ -370,8 +373,8 @@ describe('边界：无燃烧 / 无加成时落空不崩溃', () => {
     expect(slime.hp).toBe(20);
     expect(slime.effects).toHaveLength(0);
 
-    d.play('fireControlBurn');    // 4 → 1：裸 4 伤害
-    expect(slime.hp).toBe(16);
+    d.play('fireControlBurn');    // 4 → 1：裸 12 伤害
+    expect(slime.hp).toBe(8);
     expect(d.player.mana).toBe(1);
   });
 });

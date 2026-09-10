@@ -60,13 +60,13 @@ function makeDriver(deck, enemies, player = {}) {
 }
 
 describe('火球术系列：直伤与抽牌', () => {
-  // [defId, 总伤害, 抽牌数]（火球连发 14×2 段）
+  // [defId, 总伤害, 抽牌数]（火球连发 15×2 段；2026-09 稿：火弹/火箭 15、火球 25）
   const cases = [
-    ['fireBolt', 18, 1],
-    ['fireArrow', 18, 2],
-    ['fireBall', 28, 2],
+    ['fireBolt', 15, 1],
+    ['fireArrow', 15, 2],
+    ['fireBall', 25, 2],
     ['greaterFireBall', 38, 2],
-    ['fireBarrage', 28, 3],
+    ['fireBarrage', 30, 3],
   ];
   for (const [id, dmg, draw] of cases) {
     it(`${id}：${dmg}伤害抽${draw}，费2魏启`, () => {
@@ -93,13 +93,13 @@ describe('火球术系列：直伤与抽牌', () => {
     const ball = d.state.zones.deck.find(c => c.defId === 'heatChargedBall');
     expect(ball.power).toBe(12);                          // 加成落 runtime.power（卡面威力直读）
 
-    d.play('fireBolt');                                   // 火弹 18：不吃蓄热
-    expect(d.state.enemies[0].hp).toBe(500 - 8 - 18);
+    d.play('fireBolt');                                   // 火弹 15：不吃蓄热
+    expect(d.state.enemies[0].hp).toBe(500 - 8 - 15);
 
     d.dispatch(new GainManaInstruction({ amount: 99 }));  // 回满（二打需 2 魏启）
     toHand(d, 'heatChargedBall');
     d.play('heatChargedBall');
-    expect(d.state.enemies[0].hp).toBe(500 - 8 - 18 - 20); // 二打：8 + 12
+    expect(d.state.enemies[0].hp).toBe(500 - 8 - 15 - 20); // 二打：8 + 12
   });
 });
 
@@ -130,7 +130,7 @@ describe('爆裂术系列：蓄能与终止群伤', () => {
       expect(burst.isActivated, id).toBe(false);
       expect(zoneOf(d.state, burst.uniqueID), id).toBe('deck'); // 无消耗：解除回牌库
       const total = base + 2 * coeff;
-      expect(d.state.enemies[0].hp, id).toBe(500 - 18 - total); // 首敌另吃了火弹18
+      expect(d.state.enemies[0].hp, id).toBe(500 - 15 - total); // 首敌另吃了火弹15
       expect(d.state.enemies[1].hp, id).toBe(500 - total);
     });
   }
@@ -472,7 +472,8 @@ describe('边界：魏启不足 / 群伤终局截断', () => {
 describe('可燃血液系列（2026-09 稿：防御咏唱——每回合P5 护盾+自施燃烧）', () => {
   // C/B：1AP；A：0费（设计稿未写费用 → 缺省约定）。点亮不结算；
   // 每回合 P5 咏唱触发：护盾N + 自身燃烧3；解除后停泵、燃烧不回收。
-  for (const [id, shield] of [['kindlingBlood', 8], ['kindlingBloodPlus', 12], ['kindlingBloodMaster', 12]]) {
+  // 2026-09 稿：护盾 9/13/13。
+  for (const [id, shield] of [['kindlingBlood', 9], ['kindlingBloodPlus', 13], ['kindlingBloodMaster', 13]]) {
     it(`${id}：点亮不结算，P5 触发护盾${shield}+燃烧3；解除后不再触发`, () => {
       const d = makeDriver([id, 'punch', 'punch'], [tank()], { maxMana: 4 });
       const card = toHand(d, id);

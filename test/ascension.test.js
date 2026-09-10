@@ -123,19 +123,33 @@ describe('种子包构成（用户 2026-09 定）', () => {
     expect(ids).not.toContain('flameSurge');  // flameBirth(C)→flameSurge(B) 同理
   });
 
-  it('必出卡：点火（seedGuaranteed）每次开包都在，刷新后仍在', () => {
+  it('无必出卡：点火改为获赠直发（seedGuaranteed 已移除），九选三纯自选', () => {
+    const pool = new Set(firePoolIds());
     for (const seed of [1, 2, 3, 42, 99]) {
       const cards = rollSeedCards(createRun({ seed }), 'fire');
       expect(cards.length).toBe(SEED_OFFERING.cards);
-      expect(cards).toContain('inflame');
       expect(new Set(cards).size).toBe(cards.length); // 互不重复
+      for (const id of cards) expect(pool.has(id), id).toBe(true); // 全部出自种子池
     }
-    // 刷新（exclude 避让已见卡）不挤掉必出卡
+    // 刷新（exclude 避让已见卡）重抽九张，不再有必出卡占位
     const run = leaveTraining(1);
     completeRoom(run);
     chooseAscension(run, 'fire');
-    expect(run.cardOffering.cards).toContain('inflame');
+    expect(run.cardOffering.cards).toHaveLength(SEED_OFFERING.cards);
     rerollSeedOffering(run);
-    expect(run.cardOffering.cards).toContain('inflame');
+    expect(run.cardOffering.cards).toHaveLength(SEED_OFFERING.cards);
+    for (const id of run.cardOffering.cards) expect(pool.has(id), id).toBe(true);
+  });
+
+  it('首次点亮火系：获赠 点火+火弹术 直入牌组 + 体系能力火灵脉', () => {
+    const run = leaveTraining(1);
+    completeRoom(run);
+    const deckBefore = run.player.deck.map(c => c.defId);
+    chooseAscension(run, 'fire');
+    // 获赠两张基石卡直入牌组（点火不再走种子包必出位）
+    expect(run.player.deck.filter(c => c.defId === 'inflame')).toHaveLength(1);
+    expect(run.player.deck.filter(c => c.defId === 'fireBolt')).toHaveLength(1);
+    expect(run.player.deck.length).toBe(deckBefore.length + 2);
+    expect(run.player.abilities).toContain('fireVein');
   });
 });

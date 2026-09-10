@@ -69,8 +69,8 @@ describe('万变拳：嵌套出牌 + 费用豁免', () => {
 
     expect(d.player.mana).toBe(2);        // 费用全免（新魏启规则：开局半满1+回合恢复1）
     expect(d.player.actionPoints).toBe(3);
-    expect(slime.hp).toBe(20 - 2);        // 点火效果照常
-    expect(slime.getEffectStacks('burn')).toBe(4);
+    expect(slime.hp).toBe(20 - 3);        // 点火效果照常
+    expect(slime.getEffectStacks('burn')).toBe(5);
     expect(zoneOf(d.state, inflame.uniqueID)).toBe('deck');      // 收尾迁移走标准管线（非消耗 → 牌库底）
     // FIFO：内层点火先落牌库底，外层万变拳收尾居末位
     expect(d.state.zones.deck.at(-2).uniqueID).toBe(inflame.uniqueID);

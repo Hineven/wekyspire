@@ -61,7 +61,8 @@ describe('种子包：首次点亮体系', () => {
     const pick = run.cardOffering.cards.slice(0, 3);
     chooseSeedCards(run, pick);
     expect(run.cardOffering).toBeNull();
-    expect(run.player.deck.length).toBe(deckBefore + 3);
+    // 获赠 2 张（点火+火弹术直入牌组）+ 选定 3 张种子卡
+    expect(run.player.deck.length).toBe(deckBefore + 5);
     expect(run.player.deck.slice(-3).map(c => c.defId)).toEqual(pick);
   });
 
