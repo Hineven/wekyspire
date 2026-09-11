@@ -60,6 +60,9 @@ import {
   bankView, bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
   pendingDebuffViews,
 } from '../src/core/run/rooms/bank.js';
+import {
+  ensureGurpasStock, gurpasView, buyGurpas, takeGurpasCard, sellGurpasRelic, removeCardAtGurpas,
+} from '../src/core/run/rooms/gurpas.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
@@ -670,6 +673,44 @@ export function exec(S, raw) {
           + '｜（训练）：act up <构筑#> <卡名> | act draw | act take <#> | act skipdraw | act skip'
           + '｜离开：next');
       }
+      if (room === 'gurpas') {
+        // 古尔帕斯之店（35 层固定房）：buy <#> / claim <#|defId> / sell <遗物id> / remove <构筑#> <卡名>
+        if (b === 'buy') {
+          const idx = num(t[3]);
+          const it = ensureGurpasStock(run).items[idx];
+          if (!it) throw new Error(`货架上没有这一件：${idx}`);
+          const res = buyGurpas(run, idx);
+          S.lastOutcome = `购买「${it.label}」(-${it.price}金)：${JSON.stringify(res)}`
+            + (res.kind === 'pack' ? '（用 act gurpas claim <#> 选卡）' : '');
+          return;
+        }
+        if (b === 'claim') {
+          const v = gurpasView(run);
+          if (!v.pendingPack) throw new Error('当前没有待选的卡包');
+          // 候选刚生成、不会漂移：给编号即选（与 act shop claim 同口径）；也可用卡名定位
+          const raw = t[3];
+          const defId = isIdxArg(raw)
+            ? v.pendingPack.choices[idxOk(num(raw), v.pendingPack.choices.length, '卡包候选')]
+            : resolveChoiceArg(v.pendingPack.choices, raw, t[4], '卡包候选',
+              id => getSkillDefinition(id)?.name ?? id);
+          takeGurpasCard(run, defId);
+          S.lastOutcome = `卡包开封：${getSkillDefinition(defId)?.name ?? defId} 已入组`;
+          return;
+        }
+        if (b === 'sell') {
+          const out = sellGurpasRelic(run, t[3]);
+          S.lastOutcome = `她收下了「${out.name}」(+${out.price}金) → 持有 ${run.player.money}`;
+          return;
+        }
+        if (b === 'remove') {
+          const card = run.player.deck[resolveHandStrict(run.player.deck, t[3], t[4], '构筑卡')];
+          const name = removeCardAtGurpas(run, card.uniqueID);
+          S.lastOutcome = `删卡服务：${name} 已从牌库彻底抹掉`;
+          return;
+        }
+        throw new Error('古尔帕斯之店动作：act gurpas buy <#> | claim <#|defId> [卡名]'
+          + ' | sell <遗物id> | remove <构筑#> <卡名>（离开用 next）');
+      }
       if (room === 'slot') {
         // 拉一次杆：产出会挂起（文档：产出总是可以放弃）→ 需 claim/drop 处理
         if (a === 'spin') {
@@ -1154,6 +1195,28 @@ export function render(S) {
         else L.push('  → act claim 领取 / act drop 放弃');
       } else {
         L.push('→ act spin 拉杆（产出可放弃）/ next 离开');
+      }
+    } else if (room === 'gurpas') {
+      const g = gurpasView(run);
+      L.push(`古尔帕斯之店（持有 ${g.money} 金币）——她只收 A/S 级遗物，货架买光不补：`);
+      g.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金`
+        + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')
+        + (it.kind === 'remove' ? `（本次已用 ${it.used ?? 0}/2）` : '')));
+      if (g.pendingPack) {
+        L.push('  卡包待选:');
+        g.pendingPack.choices.forEach((id, i) => {
+          const def = getSkillDefinition(id);
+          L.push(`    [${i + 1}] ${def?.tier ?? '?'}阶 ${def?.name ?? id}「${plain(def?.describe?.() ?? '')}」`);
+        });
+        L.push('  → act gurpas claim <#|defId> [卡名]');
+      } else {
+        L.push('  → act gurpas buy <#>｜act gurpas remove <构筑#> <卡名>（删卡服务）');
+      }
+      if (g.sellable.length) {
+        L.push('  收购（A/S）：' + g.sellable.map(x => `${x.name}(${x.rarity},+${x.price}金)`).join(' / '));
+        L.push('  → act gurpas sell <遗物id>');
+      } else {
+        L.push('  （身上没有她收的 A/S 级遗物）');
       }
     } else if (room === 'event') {
       L.push(`事件房 → act play 触发事件`);

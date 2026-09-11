@@ -20,7 +20,8 @@ import { isBossFloor } from '../run/runFlow.js';
 //   cost     槽位权重 0..3（Σ ≤ relicSlots=3）；0 槽 = 能装备但不花槽
 //   nonSlot  true = **非槽位式遗物**：不进装卸界面、拾起即恒生效（走 activeRelics）
 //   requires 灵脉门禁（抽选池过滤用，与卡包同一口径）：{leino,min} 或 {anyLeino}
-//   acquisition 来源标签 ['draft','shop','event']（缺省 draft+shop）；event = 仅事件获得
+//   acquisition 来源标签 ['draft','shop','event','gurpas']（缺省 draft+shop）；
+//     event = 仅事件获得（如「诸神」恩赐）；gurpas = 仅古尔帕斯之店（SHOP.md §二）
 //   onAcquire(run)  拾起时（一次性）；gainMaxHp 同时抬基础值与当前生命
 //   runModifiers(p) 或 {字段: 增量}：run 级数值修正——**从 baseStats 重算**，不增量累加
 //   battleModifiers(p) 或 {字段: 增量}：**本场战斗**修正（生命周期 = 一场战斗；由 PreBattle
@@ -53,7 +54,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'steelShard', name: '拟钢碎片', rarity: 'C', nonSlot: true,
+  id: 'steelShard', name: '拟钢碎片', rarity: 'C', nonSlot: true, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '拾起时，获得 1 最大生命；战斗开始时获得 1 护盾。',
   onAcquire: (run) => gainMaxHp(run, 1),
   onBattleStart(ctx) {
@@ -419,7 +420,7 @@ registerRelic({
 // ---- 本场资源 / 上限 ----
 
 registerRelic({
-  id: 'microAwfd', name: '微型AWFD', rarity: 'A', cost: 1,
+  id: 'microAwfd', name: '微型AWFD', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，获得 1 魏启；本场战斗魏启上限 +1。',
   battleModifiers: { maxMana: 1 },
   onBattleStart(ctx) {
@@ -428,7 +429,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'ancientTome', name: '古书序章', rarity: 'B', cost: 3,
+  id: 'ancientTome', name: '古书序章', rarity: 'B', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，抽 1 张牌；本场战斗手牌上限 +1。',
   battleModifiers: { maxHandSize: 1 },
   onBattleStart(ctx) {
@@ -437,7 +438,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 2,
+  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗的前 3 个回合，你的手牌上限 -1；第 4 回合开始时，获得力量 5。',
   onBattleStart(ctx) {
     applyBattleModifier(ctx, 'maxHandSize', -1);
@@ -457,7 +458,7 @@ registerRelic({
 // ---- 回合节奏 / 资源钩子 ----
 
 registerRelic({
-  id: 'clearCrystal', name: '澈晶石', rarity: 'B', cost: 1,
+  id: 'clearCrystal', name: '澈晶石', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '回合开始时，若你的魏启为 0，则获得 1 魏启。',
   // 时间点取 PlayerTurnInstruction 的 PRE：自然恢复（+1）是它的子指令，POST 时魏启已被抬过，
   // 再也看不到 0——要「为 0 则补 1」必须读恢复前的值。
@@ -470,7 +471,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'blackCrystalShard', name: '黑晶剑残片', rarity: 'A', cost: 1,
+  id: 'blackCrystalShard', name: '黑晶剑残片', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，获得力量 2；每回合开始时，你受 2 伤害。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(
@@ -486,7 +487,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'frostBrooch', name: '霜雪胸针', rarity: 'S', cost: 1,
+  id: 'frostBrooch', name: '霜雪胸针', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗一次：当你的生命降至一半以下时，获得力量 3 与格挡 3。',
   subscriptions: () => {
     let used = false; // 每场战斗一次（工厂每场调用一次）
@@ -507,7 +508,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'ranCrystal', name: '冉晶石', rarity: 'A', cost: 3,
+  id: 'ranCrystal', name: '冉晶石', rarity: 'A', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每回合开始时，获得 1 魏启，并对所有单位造成 1 点固定伤害（含你自己）。',
   subscriptions: () => [{
     when: TurnStartInstruction,
@@ -529,7 +530,7 @@ registerRelic({
 // ---- 战斗开始：群伤 / 负面 / 免疫 ----
 
 registerRelic({
-  id: 'evansCrown', name: '埃文斯冠冕', rarity: 'S', cost: 2,
+  id: 'evansCrown', name: '埃文斯冠冕', rarity: 'S', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，对所有敌人造成 4 点固定伤害，并赋予虚弱 2。',
   onBattleStart(ctx) {
     for (const e of ctx.battleState.enemies) {
@@ -544,7 +545,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'resonanceRound', name: '谐振弹', rarity: 'B', cost: 2,
+  id: 'resonanceRound', name: '谐振弹', rarity: 'B', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '非 Boss 战开始时，随机赋予一名敌人晕眩 1。',
   onBattleStart(ctx) {
     if (isBossFloor(ctx.runState.floor)) return;
@@ -589,7 +590,7 @@ registerRelic({
 // ---- 战后 run 级结算（走 run 层钩子，见 runFlow.finishBattle）----
 
 registerRelic({
-  id: 'royalCrystal', name: '皇晶石', rarity: 'B', nonSlot: true,
+  id: 'royalCrystal', name: '皇晶石', rarity: 'B', nonSlot: true, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗胜利后，额外获得 4 金币。',
   onBattleVictory: (run) => { run.player.money += 4; },
 });
@@ -597,7 +598,7 @@ registerRelic({
 // ---- 生成衍生牌（RELICS.md 第二批；四张牌只由遗物生成，不进任何卡包）----
 
 registerRelic({
-  id: 'aronaIII', name: '阿罗那 III', rarity: 'C', cost: 1,
+  id: 'aronaIII', name: '阿罗那 III', rarity: 'C', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，将 1 张/card{rapidFire}加入手牌。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'rapidFire', toZone: 'hand' }));
@@ -605,7 +606,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'blackFireH3', name: '黑火 H-3', rarity: 'B', cost: 1,
+  id: 'blackFireH3', name: '黑火 H-3', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，将 1 张/card{pointShot}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'pointShot', index: 'random' }));
@@ -613,7 +614,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'prayerSystem', name: '祈祷制度', rarity: 'B', cost: 1,
+  id: 'prayerSystem', name: '祈祷制度', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，将 1 张/card{suppressionFire}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'suppressionFire', index: 'random' }));
@@ -621,7 +622,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'A', cost: 1,
+  id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));
@@ -650,7 +651,7 @@ class PickCardsInstruction extends AwaitPlayerInputInstruction {
 // RELICS.md 标注「仅在古尔帕斯的店购买」——古尔帕斯之店尚未实装，故暂按可抽取处理
 // （与其他古尔帕斯货同口径：先让它能被拿到、能被试玩）。
 registerRelic({
-  id: 'embryo', name: '胚胎', rarity: 'S', cost: 1,
+  id: 'embryo', name: '胚胎', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，从牌库中寻找 1 张牌，自选加入手牌。',
   onBattleStart(ctx) {
     const pool = ctx.battleState.zones.deck;
@@ -673,7 +674,7 @@ registerRelic({
 // 原初拟态基质（A·3槽）：每场战斗一次，复制手牌中的一张牌。
 // 手牌要等初始抽牌之后才满（onBattleStart 早于 initialDraw）→ 挂首次抽牌的 POST。
 registerRelic({
-  id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 3,
+  id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗一次：复制你手牌中的一张牌。',
   onBattleStart(ctx) {
     ctx.kernel.addSubscription({

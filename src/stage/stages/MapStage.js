@@ -165,13 +165,19 @@ export class MapStage {
     // 玩家要在一堆灰卡里找目标（用户 2026-09-11 报）。快照里 enabled 即"有晋升目标"。
     const isBankUpgrade = source === 'bankUpgrade';
     const isBankBurn = source === 'bankBurn';
+    const isGurpasRemove = source === 'gurpasRemove';
+    const isBossRemove = source === 'bossRemove';
     const cards = (source === 'camp'
       ? (this._snap?.camp?.upgradeCards ?? [])
       : source === 'training'
         ? (this._snap?.training?.upgradeCards ?? [])
         : isBankUpgrade
           ? (this._snap?.bank?.upgradeCards ?? [])
-          : (this._snap?.bank?.burnCards ?? []))    // bankBurn：焚毁候选（含 S 级豁免过滤）
+          : isGurpasRemove
+            ? (this._snap?.gurpas?.removeCards ?? [])   // 删卡服务：整副牌组（不限等阶）
+            : isBossRemove
+              ? (this._snap?.cardRemoval?.removeCards ?? [])  // Boss 奖励删卡机会
+              : (this._snap?.bank?.burnCards ?? []))    // bankBurn：焚毁候选（含 S 级豁免过滤）
       .filter(c => c.enabled !== false);
     if (!cards.length) return;
     if (!this._cardPicker) {
@@ -190,22 +196,28 @@ export class MapStage {
               ? { action: 'trainingUpgrade', uniqueID }
               : isBankUpgrade
                 ? { action: 'bankUpgradeOffer', uniqueID }
-                : { action: 'bankBurnOffer', uniqueID });
+                : isGurpasRemove
+                  ? { action: 'gurpasRemove', uniqueID }
+                  : isBossRemove
+                    ? { action: 'bossRemoveCard', uniqueID }
+                    : { action: 'bankBurnOffer', uniqueID });
         },
       });
       this.uiScene.add(this._cardPicker);
     }
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
-      title: isBankBurn ? '选择要焚毁的卡' : '选择要升级的卡',
-      hint: isBankBurn
-        ? '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页'
-        : '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
+      title: (isGurpasRemove || isBossRemove) ? '选择要删除的卡' : (isBankBurn ? '选择要焚毁的卡' : '选择要升级的卡'),
+      hint: (isGurpasRemove || isBossRemove)
+        ? '这张牌将从牌库中彻底消失 ｜ 滚轮翻页'
+        : isBankBurn
+          ? '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页'
+          : '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
       cards: cards.map(c => ({
         uniqueID: c.uniqueID, defId: c.defId, view: c.view,
         enabled: c.enabled, tipDefId: c.tipDefId,
       })),
-      confirmLabel: isBankBurn ? '确认焚毁' : '确认升级',
+      confirmLabel: (isGurpasRemove || isBossRemove) ? '确认删除' : (isBankBurn ? '确认焚毁' : '确认升级'),
     });
     this._pickerFocus = 'upgrade';
   }

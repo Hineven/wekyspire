@@ -6,6 +6,7 @@ import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
 import { ensureShopStock } from './rooms/shop.js';
 import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
+import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
 import { activeRelics } from './prep.js';
 import { getRelicDefinition } from '../relics/registry.js';
 
@@ -39,6 +40,7 @@ export function deriveBattleSeed(seed, floor) {
 export function roomOfFloor(floor, rng) {
   if (isBossFloor(floor)) return null;   // Boss 层无奖励房（Boss 奖励=删卡，另行处理）
   if (isPreBossFloor(floor) || isTrainingFloor(floor)) return 'campTraining';
+  if (floor === GURPAS_FLOOR) return 'gurpas';   // 古尔帕斯之店：35 层固定（SHOP.md §二）
   return rng.pick(['slot', 'event']);
 }
 
@@ -128,6 +130,7 @@ export function completeRewards(run) {
     ensureShopStock(run);
     // 银行机与老虎机成对出现：进老虎机房即算"见到银行机一次"（递减超额取款黑名单）
     if (run.currentRoom === 'slot') bankOnVisit(run);
+    if (run.currentRoom === 'gurpas') ensureGurpasStock(run);  // 进店掷货架（同层不重掷）
     return run;
   }
   return advanceFloor(run); // Boss 层无奖励房，直接推进

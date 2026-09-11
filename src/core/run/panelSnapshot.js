@@ -28,6 +28,7 @@ import { campOptions } from './rooms/camp.js';
 import { slotView, devourableRelics, devourableCards } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
+import { gurpasView } from './rooms/gurpas.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
@@ -58,6 +59,7 @@ export function prepSnapshot(run) {
     title: '战前准备',
     floor: run.floor,
     totalFloors: run.totalFloors,
+    cardRemoval: cardRemovalSnapshot(run),
     toBoss: nextBoss - run.floor,
     atBossFloor: isBossFloor(run.floor),
     // 名字在此解析（注册表反查是 core 纯读），Stage 拿到的直接是可绘文本
@@ -108,6 +110,7 @@ export function rewardSnapshot(run) {
   return {
     kind: 'reward',
     title: '战后奖励',
+    cardRemoval: cardRemovalSnapshot(run),
     money: rw.money ?? 0,
     packs: (rw.packs ?? []).map(packMeta),
     packId: rw.packId ?? null,
@@ -202,6 +205,7 @@ export function roomSnapshot(run, extra = {}) {
     snap.shop = null;
   }
   const upgradeCards = deckUpgradeCards(run);
+  snap.cardRemoval = cardRemovalSnapshot(run);
 
   // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地·训练场合并房）共用
   if (room === 'training' || room === 'campTraining') {
@@ -226,6 +230,23 @@ export function roomSnapshot(run, extra = {}) {
       options: campOptions(run),
       upgradeCards,
       used: !!run.roomData?.campUsed,     // 本房营地动作已用过（合并房各自一次）
+    };
+    return snap;
+  }
+
+  if (room === 'gurpas') {
+    const v = gurpasView(run);
+    snap.gurpas = {
+      ...v,
+      pendingPackCards: (v.pendingPack?.choices ?? []).map(id => ({
+        defId: id,
+        view: cardViewFromDef(getSkillDefinition(id), { player: p }),
+      })),
+      // 删卡服务候选：整副牌组（删卡不限等阶）
+      removeCards: run.player.deck.map(rt => ({
+        uniqueID: rt.uniqueID, defId: rt.defId,
+        view: cardViewFromDef(getSkillDefinition(rt.defId), { player: p }),
+      })),
     };
     return snap;
   }
@@ -296,6 +317,22 @@ export function roomSnapshot(run, extra = {}) {
  * 不可升级的 enabled=false（界面置灰不可选）；tipDefId = 升级后的卡 id（hover 预览用它）。
  * 注意：gatedPromotionTargets 返回的是**目标 defId 字符串**，不是定义对象。
  */
+/**
+ * Boss 奖励的删卡机会（§2.1）：原先只有计数器、没有落地流程；现在与古尔帕斯的删卡服务
+ * 共用同一套选卡界面（候选 = 整副牌组，不限等阶）。三个面板（prep/reward/room）共用。
+ */
+export function cardRemovalSnapshot(run) {
+  if (!(run.pendingCardRemoval > 0)) return null;
+  const p = run.player;
+  return {
+    count: run.pendingCardRemoval,
+    removeCards: run.player.deck.map(rt => ({
+      uniqueID: rt.uniqueID, defId: rt.defId,
+      view: cardViewFromDef(getSkillDefinition(rt.defId), { player: p }),
+    })),
+  };
+}
+
 export function deckUpgradeCards(run) {
   const p = run.player;
   return p.deck.map((rt) => {

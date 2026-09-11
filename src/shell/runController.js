@@ -23,6 +23,9 @@ import {
   bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
 } from '../core/run/rooms/bank.js';
 import {
+  buyGurpas, takeGurpasCard, sellGurpasRelic, removeCardAtGurpas,
+} from '../core/run/rooms/gurpas.js';
+import {
   SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
   devourSlot, devourableRelics, devourableCards, slotView,
 } from '../core/run/rooms/slotMachine.js';
@@ -375,6 +378,32 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
 
+  // Boss 奖励的删卡机会（§2.1）：与古尔帕斯删卡服务同一套能力
+  function bossRemoveCard(uniqueID) {
+    if (run.pendingCardRemoval <= 0) return;
+    try {
+      removeCardAtGurpas(run, uniqueID);
+      run.pendingCardRemoval -= 1;
+    } catch (err) {
+      console.warn('[removeCard]', err.message);
+    }
+    notify();
+  }
+
+  // ---- 古尔帕斯之店（35 层固定房；SHOP.md §二）----
+  function gurpasDo(kind, arg, arg2) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'gurpas') return;
+    try {
+      if (kind === 'buy') buyGurpas(run, arg);
+      else if (kind === 'take') takeGurpasCard(run, arg);
+      else if (kind === 'sell') sellGurpasRelic(run, arg);
+      else if (kind === 'remove') removeCardAtGurpas(run, arg2 ?? arg);
+    } catch (err) {
+      console.warn('[gurpas]', err.message);
+    }
+    notify();
+  }
+
   function leaveRoom() {
     if (run.gameStage !== 'room') return;
     completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
@@ -518,6 +547,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'bankPick') bankDo('pick', intent.id);
     else if (action === 'bankUpgradeOffer') bankDo('upgradeOffer', intent.uniqueID);
     else if (action === 'bankBurnOffer') bankDo('burnOffer', intent.uniqueID);
+    else if (action === 'bossRemoveCard') bossRemoveCard(intent.uniqueID);
+    else if (action === 'gurpasBuy') gurpasDo('buy', intent.index);
+    else if (action === 'gurpasTake') gurpasDo('take', intent.defId);
+    else if (action === 'gurpasSell') gurpasDo('sell', intent.relicId);
+    else if (action === 'gurpasRemove') gurpasDo('remove', intent.uniqueID, intent.uniqueID);
     else if (action === 'leaveRoom') leaveRoom();
     else if (action === 'leaveSlot') leaveSlot();
     else if (action === 'slotTake') slotTake(intent.choice ?? null);
@@ -564,7 +598,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getBattleStage: () => battleStage,
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
-    campChoose, leaveRoom, bankDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
+    campChoose, leaveRoom, bankDo, gurpasDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };

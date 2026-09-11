@@ -25,6 +25,14 @@ const DIM_META = {
 export function buildPrepPanel(snap) {
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战前准备' });
+  // 未用掉的删卡机会（Boss 奖励）也可以在塔楼层用掉
+  if (snap.cardRemoval) {
+    w.push({
+      kind: 'button', id: 'prep:removeCard', width: 360, size: 'sub',
+      label: `使用删卡机会（剩 ${snap.cardRemoval.count} 次）`,
+      action: { action: 'openUpgradePicker', source: 'bossRemove', local: true },
+    });
+  }
   w.push({ kind: 'text', text: `层数 ${snap.floor} / ${snap.totalFloors}` });
   w.push({
     kind: 'text',
@@ -95,10 +103,21 @@ export function buildPrepPanel(snap) {
  * 卡包未选时给瓦片；已开包（含单包自动开）给卡面三选一。
  */
 export function buildRewardPanel(snap) {
+  const removal = snap.cardRemoval;
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战后奖励', align: 'center' });
   w.push({ kind: 'text', text: `金币 +${snap.money}`, tint: '#ffd75e', align: 'center' });
   w.push({ kind: 'gap' });
+
+  // Boss 通关奖励：删卡机会（§2.1）——与古尔帕斯的删卡服务同一套选卡界面
+  if (removal) {
+    w.push({
+      kind: 'button', id: 'reward:removeCard', width: 360, size: 'sub',
+      label: `使用删卡机会（剩 ${removal.count} 次）`,
+      action: { action: 'openUpgradePicker', source: 'bossRemove', local: true },
+    });
+    w.push({ kind: 'gap' });
+  }
 
   if (!snap.packId) {
     w.push({ kind: 'sub', text: '选择一个卡包（按该体系灵脉等级出卡）：', tint: '#9aa3b8', align: 'center' });
@@ -208,6 +227,7 @@ const ROOM_META = {
   training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——每层训练记录在案，达标即可进阶' },
   camp: { name: '营地', glyph: '⛺', hint: '暂作休整，选择一件好事发生' },
   campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
+  gurpas: { name: '古尔帕斯之店', glyph: '🏪', hint: '旧魏启大陆的物件——她只收 A/S 级遗物' },
   slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
@@ -527,6 +547,50 @@ export function buildRoomPanel(snap) {
       }
     }
     w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
+    return w;
+  }
+
+  if (snap.room === 'gurpas') {
+    const g = snap.gurpas ?? { items: [], sellable: [] };
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: `持有 ${g.money} 金币 ｜ 她只收 A/S 级遗物` });
+    // 买到即开的卡包：优先占屏（三选一）
+    if (g.pendingPackCards?.length) {
+      w.push({ kind: 'sub', align: 'center', tint: '#ffd75e', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
+      w.push({
+        kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
+        items: g.pendingPackCards.map(c => ({
+          defId: c.defId, view: withLabels(c.view),
+          action: { action: 'gurpasTake', defId: c.defId },
+        })),
+      });
+      return w;
+    }
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '货架：' });
+    g.items.forEach((it, i) => {
+      const sold = it.sold ? '（已售出）' : '';
+      const used = it.kind === 'remove' ? `（已用 ${it.used ?? 0}/${2}）` : '';
+      w.push({
+        kind: 'button', id: `gurpas:buy:${i}`, width: 460, size: 'sub',
+        label: `${it.label} — ${it.price} 金${sold}${used}`,
+        enabled: !it.sold && (it.kind !== 'remove' || (it.used ?? 0) < 2) && g.money >= it.price,
+        action: { action: 'gurpasBuy', index: i },
+      });
+      if (it.sub) w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `　${it.sub}` });
+    });
+    w.push({ kind: 'gap' });
+    if (g.sellable?.length) {
+      w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '收购（A/S 级）：' });
+      for (const s of g.sellable) {
+        w.push({
+          kind: 'button', id: `gurpas:sell:${s.relicId}`, width: 400, size: 'sub',
+          label: `卖出 ${s.name}（${s.rarity}）→ +${s.price} 金`,
+          action: { action: 'gurpasSell', relicId: s.relicId },
+        });
+      }
+    } else {
+      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（你身上没有她收的 A/S 级遗物）' });
+    }
+    w.push({ kind: 'button', id: 'room:leave', label: '离开', width: 240, size: 'sub', action: { action: 'leaveRoom' } });
     return w;
   }
 
