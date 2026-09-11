@@ -26,8 +26,16 @@ const TIER_FX = {
 // 读作"两侧先定、中间最后咬合"的层次。
 const LOCK_AT = [1.05, 1.55, 1.25];
 
-/** 让轮盘停在某个图案面：图案 k 的面在 `-k/5·2π` 处。 */
-const angleFor = (k, n) => -((k % n) / n) * Z;
+/**
+ * 让轮盘停在某个图案面 —— **推导（别再凭感觉改）**：
+ * 鼓面按角度分带：图案 k 占 `[k/N,(k+1)/N)` 扇区（`props/slotMachine.js` 的
+ * `p(a) = (sin a·r, y, cos a·r)`），故带心 `a_k = (k+0.5)/N·2π`。
+ * 以绕 X 旋转 θ 时，处于角度 a 的面移到 `a − θ`；要让带心朝正前（角度 0）需
+ * `θ ≡ a_k (mod 2π)`。取 `θ = a_k − 2π`（**负向**，与转轮自旋方向一致；
+ * 调用方还会继续减整圈，模 2π 不变）。
+ * 常见错法：用 `−a_k` 或 `−k/N·2π` —— 那会把**两带接缝**摆到正前（怼脸一眼可见）。
+ */
+const angleFor = (k, n) => (((k % n) + 0.5) / n) * Z - Z;
 
 export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const body = parts?.body ?? object;
