@@ -10,10 +10,11 @@
 //     parts.bulbs[]    屏幕一圈彩灯（rig 换成独立材质后逐灯驱动）
 //   ⚠ 不得进静态合批（配方 guaranteed 条目加 `live: true`）。
 //
-// 近景细节（用户 2026-09-11：怼脸能看见的部分要够细）：屏幕框（四边金属压边）+ 付款线 +
-// 窗内暗背板 + 拉杆座/护罩 + 投币口/出币盘/按钮 + 踢脚板。
+// 近景细节（用户定 2026-09-11：怼脸能看见的部分要够细）：屏幕框（四边金属压边）+ 付款线 +
+// 窗内暗背板 + 拉杆座/护罩 + 投币口/出币盘/按钮 + 踢脚板。**滚轴鼓走吃光族**（M.stone）——
+// 聚焦追光要能把它照亮（见 interactive/slotMachineRig.js 与 rooms/lighting.js 的 setFocus）。
 //
-// 布光职责：自带 unlit 发光面 + `lamp` 标签（配方层出无火焰点光池）。
+// 布光职责：自带 unlit 发光面（彩灯/顶灯牌/按钮） + `lamp` 标签（配方层出无火焰点光池）。
 
 import * as THREE from 'three';
 import { P, K, shade, M } from '../kit/index.js';
@@ -88,18 +89,39 @@ export default {
     const iron = shade(P.iron, -0.08);
     const gold = P.gold;
 
-    // ================= 柜体 =================
-    // 底座（踢脚板 + 台）
+    // 投币窗尺寸（**必须早于柜体**：柜体是围绕开口拼出来的，不是一整块箱子）
+    const y0 = 0.64;
+    const winY = y0 + bodyH * 0.52;
+    const winW = W - 1.0;
+    // 开口高度 ≈ 一格图案：开口要**明显小于鼓直径**，把转轮裁成"窗口里的一格图案"——
+    // 开口≥鼓径时整根鼓（含上下相邻图案）都露出来，读作三行机而不是单线机；
+    // 开口过高则每根鼓只剩一条竖条（读作窗格里立着三根柱子，不像滚轴）。
+    const winH = bodyH * 0.19;
+    const drumR = 0.9;
+
+    // ================= 柜体（带**真实开窗**）=================
+    // 病灶备忘：早期版本柜体是一整块箱子，窗口只是正面上的暗色矩形 + 从箱面探出的鼓顶——
+    // 怼脸看到的是一块平的色块（不是滚轴），"暗背板"也埋在箱子里根本没露面。
+    // 现在 = 上/下横梁 + 左右立柱围出真开口，鼓退到开口后方（真凹腔），暗背板才是屏底。
     g.add(K.put(K.box({ color: shade(P.iron, -0.26), size: [W + 0.34, 0.3, D + 0.24], family: 'metal' }),
       0, 0.15, 0));
     g.add(K.put(K.box({ color: shade(P.iron, -0.18), size: [W + 0.18, 0.34, D + 0.12], family: 'metal' }),
       0, 0.47, 0));
-    const y0 = 0.64;
-    g.add(K.put(K.box({ color: iron, size: [W, bodyH, D], family: 'metal' }), 0, y0 + bodyH / 2, 0));
-    // 背板（略暗，读作侧影）
+    const cabTop = y0 + bodyH, cabBot = y0;
+    const openTop = winY + winH / 2, openBot = winY - winH / 2;
+    const postW = Math.max(0.42, (W - winW) / 2);
+    g.add(K.put(K.box({ color: iron, size: [W, cabTop - openTop, D], family: 'metal' }),
+      0, (openTop + cabTop) / 2, 0));                                    // 上横梁
+    g.add(K.put(K.box({ color: iron, size: [W, openBot - cabBot, D], family: 'metal' }),
+      0, (cabBot + openBot) / 2, 0));                                    // 下横梁
+    for (const sx of [-1, 1]) {
+      g.add(K.put(K.box({ color: shade(iron, -0.04), size: [postW, winH, D], family: 'metal' }),
+        sx * (winW / 2 + postW / 2), winY, 0));                          // 左右立柱
+    }
+    // 背板（开口后方的暗底：腔体自成一个暗箱，鼓在前、背板在最后）
     g.add(K.put(K.box({ color: shade(iron, -0.22), size: [W - 0.4, bodyH - 0.5, 0.18], family: 'metal' }),
       0, y0 + bodyH / 2, -D / 2 - 0.06));
-    // 柜体金饰：两侧立柱 + 上下横箍（各 1 件）
+    // 柜体金饰：两侧立柱 + 上横箍（各 1 件）
     for (const sx of [-1, 1]) {
       g.add(K.put(K.box({ color: gold, size: [T * 0.8, bodyH, T * 0.8], family: 'metal' }),
         sx * (W / 2 - 0.12), y0 + bodyH / 2, D / 2 - 0.1));
@@ -107,20 +129,17 @@ export default {
     g.add(K.put(K.box({ color: gold, size: [W, T * 0.7, T * 0.7], family: 'metal' }), 0, y0 + bodyH - 0.1, D / 2 - 0.1));
 
     // ================= 屏幕窗（怼脸主角）=================
-    const winY = y0 + bodyH * 0.52;
-    const winW = W - 1.0, winH = bodyH * 0.34;
-    // 窗内暗背板（**必须在鼓身之后**：鼓心在 z≈0.6、半径 0.72，故背板退到 -0.35——
-    // 早期把它放在窗面（D/2）上，鼓一退后就被整块挡住，屏里只剩一片黑）
-    g.add(K.put(K.box({ color: P.night, size: [winW + 1.0, winH + 1.1, 0.3], family: 'metal' }),
-      0, winY, -0.35));
+    // 窗内暗背板（腔底，隔着鼓在最后；开窗后它才真正可见）
+    g.add(K.put(K.box({ color: P.night, size: [winW + 1.0, winH + 1.6, 0.3], family: 'metal' }),
+      0, winY, -0.62));
     // 四边金属压边（bezel）：上下各一条 + 左右各一条（内侧亮一档，读作倒角）
     const bzT = 0.2, bzD = 0.42;
     g.add(K.put(K.box({ color: shade(gold, 0.06), size: [winW + 0.9, bzT, bzD], family: 'metal' }),
-      0, winY + winH / 2 + 0.42, D / 2 + 0.06));
+      0, openTop + bzT / 2, D / 2 + 0.06));
     g.add(K.put(K.box({ color: shade(gold, -0.08), size: [winW + 0.9, bzT, bzD], family: 'metal' }),
-      0, winY - winH / 2 - 0.42, D / 2 + 0.06));
+      0, openBot - bzT / 2, D / 2 + 0.06));
     for (const sx of [-1, 1]) {
-      g.add(K.put(K.box({ color: shade(gold, 0.02), size: [bzT, winH + 1.0, bzD], family: 'metal' }),
+      g.add(K.put(K.box({ color: shade(gold, 0.02), size: [bzT, winH + 0.4, bzD], family: 'metal' }),
         sx * (winW / 2 + 0.42), winY, D / 2 + 0.06));
     }
     // 付款线（经典老虎机的横向标线）：**画在滚轴之前**（真机是印在前玻璃上的），
@@ -134,13 +153,15 @@ export default {
     for (let i = 0; i < reelCount; i++) {
       const cx = -winW / 2 + cellW * (i + 0.5);
       const drum = new THREE.Group();       // 绕 X 旋转换面
-      const radius = Math.min(winH * 0.46, 0.72);
-      // **鼓心必须退到窗后**：前表面 = drumZ + radius，只让它比窗面超前 ~0.1——
-      // 鼓中心一旦凸出窗口，怼脸看到的就是两端盖（灰盘）而不是鼓面（早期版本踩过）。
-      drum.position.set(cx, winY, D / 2 - radius + 0.12);
+      const radius = drumR;
+      // **鼓退到开口后方**（前表面比柜面低 0.07 = 真凹腔；背面仍在柜内 D/2 之内），
+      // 开口比鼓径小 → 只看见正前那一格图案 + 上下极窄的邻格边。
+      drum.position.set(cx, winY, D / 2 - radius - 0.07);
       const mesh = new THREE.Mesh(
-        drumGeometry({ radius, width: cellW - 0.18, colors: SLOT_SYMBOLS, coreColor: shade(P.night, 0.14) }),
-        M.unlit,                            // kit 共享族（顶点色自发光）
+        drumGeometry({ radius, width: cellW - 0.08, colors: SLOT_SYMBOLS, coreColor: shade(P.night, 0.14) }),
+        // **吃光族**（不是 unlit）：滚轴要能被"聚焦追光"照亮——zoomin 时房间压暗、屏幕被打亮，
+        // 才是"照亮老虎机屏幕"（unlit 会让鼓面恒定亮度、追光打在屏上毫无反应）。顶点色照旧承载图案。
+        M.stone,
       );
       drum.add(mesh);
       drum.userData.symbols = SLOT_SYMBOLS;

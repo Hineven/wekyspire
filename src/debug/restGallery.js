@@ -37,6 +37,9 @@ function applyLightingTune(recipe) {
   apply(num('fired'), v => { preset.fire.dist = v; });
   apply(num('lamp'), v => { if (preset.lamp) preset.lamp.base = v; });
   apply(num('lampd'), v => { if (preset.lamp) preset.lamp.dist = v; });
+  apply(num('fbase'), v => { if (preset.focus) preset.focus.base = v; });
+  apply(num('fdim'), v => { if (preset.focus) preset.focus.dim = v; });
+  apply(num('foff'), v => { if (preset.focus) preset.focus.offset = v; });
 }
 
 const canvas = document.createElement('canvas');
@@ -126,45 +129,48 @@ function focusMachine(name) {
   const rig = rigs.get(name);
   focused = name;
   savedOrbit = { az: orbit.az, el: orbit.el, dist: orbit.dist, target: orbit.target.clone() };
-  // 屏幕件世界坐标（老虎机取中间转轮、银行机取屏幕）——比按锚点猜高度稳
-  // 取景口径（用户定 2026-09-11）：**贴到屏幕前**（接近怼脸），但**必须留住侧面拉杆**——
+  // 取景口径（用户定 2026-09-11）：老虎机**贴到屏幕前**（接近怼脸），但**必须留住侧面拉杆**——
   // 于是按「屏幕自身尺寸 + 拉杆尖端外扩」算所需半宽/半高，再按相机 fov 反算距离。
+  // 银行机没有拉杆这件"侧面极限件"，怼到屏幕上只会剩一块色板 → 改按机身上 2/3 段取景
+  // （读作"站在这台机器前"，也留出下方交互 UI 的位置）。
   const parts = m.entry.parts ?? {};
   const reels = parts.reels ?? [];
-  const screenLike = reels[Math.floor(reels.length / 2)] ?? parts.screen ?? m.entry.object;
   const sp = new THREE.Vector3();
-  screenLike.getWorldPosition(sp);
-
-  // 屏幕尺寸近似：转轮中心距 + 一格 = 窗宽；窗高按格宽估
-  let screenW = 4.5, screenH = 3.4;
-  if (reels.length >= 2) {
+  let halfW; let halfH; let screenH; let margin;
+  if (parts.leverPivot && reels.length) {
+    const screenLike = reels[Math.floor(reels.length / 2)] ?? m.entry.object;
+    screenLike.getWorldPosition(sp);
     const a = new THREE.Vector3(); const b = new THREE.Vector3();
     reels[0].getWorldPosition(a);
     reels[reels.length - 1].getWorldPosition(b);
     const cell = Math.abs(a.x - b.x) / (reels.length - 1);
-    screenW = Math.abs(a.x - b.x) + cell * 1.35;
     screenH = cell * 1.05;
-  } else if (parts.screen) {
-    const sb = new THREE.Box3().setFromObject(parts.screen);
-    const sz = sb.getSize(new THREE.Vector3());
-    screenW = sz.x; screenH = sz.y;
-  }
-
-  // 需要装进画面的半宽/半高：屏幕本身，以及**拉杆整套**（它在侧面，是"能不能再近"的极限）
-  let halfW = screenW * 0.5;
-  let halfH = screenH * 0.5;
-  if (parts.leverPivot) {
+    halfW = (Math.abs(a.x - b.x) + cell * 1.35) * 0.5;
+    halfH = screenH * 0.5;
     const lb = new THREE.Box3().setFromObject(parts.leverPivot);
     halfW = Math.max(halfW, Math.abs(lb.max.x - sp.x), Math.abs(sp.x - lb.min.x));
     halfH = Math.max(halfH, Math.abs(lb.max.y - sp.y), Math.abs(sp.y - lb.min.y));
+    margin = 1.32;                          // 贴脸余量：越小越近（拉杆刚不出框；1.3 左右是极限）
+  } else {
+    // 无拉杆件（银行机）：**整机入画**（读作"走到机器前"）——怼屏幕只剩一块色板，
+    // 而机身上 2/3 段又太近（正面是一大片平壳）。下方 42% 会被交互面板盖住，正好。
+    const bb = new THREE.Box3().setFromObject(m.entry.object);
+    const size = bb.getSize(new THREE.Vector3());
+    sp.set((bb.min.x + bb.max.x) / 2, bb.min.y + size.y * 0.52, (bb.min.z + bb.max.z) / 2);
+    halfW = size.x * 0.5;
+    halfH = size.y * 0.5;
+    screenH = size.y * 0.3;
+    margin = 1.12;
   }
-  const margin = 1.32;                      // 贴脸余量：越小越近（拉杆刚不出框；1.3 左右是极限）
   const vFov = (camera.fov * Math.PI) / 180;
   const distV = (halfH * margin) / Math.tan(vFov / 2);
   const distH = (halfW * margin) / (Math.tan(vFov / 2) * Math.max(0.5, camera.aspect));
   const dist = Math.max(distV, distH, 9);
   const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
   startCamTween(sp.clone().addScaledVector(fwd, dist), sp.clone());
+  // 焦点布光（用户定 2026-09-11）：zoomin 时外围压暗、机器屏幕被观众侧补光打亮
+  // （目标是屏幕中心正上方一点——屏幕是视觉主体，光心落在它上更"怼脸聚光"）
+  room.lighting?.setFocus(sp.clone().setY(sp.y + Math.max(1.5, screenH * 0.25)), { strength: 1 });
 
   barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
   barBody.innerHTML = name === 'slot'
@@ -198,6 +204,7 @@ let savedOrbit = null;
 function unfocusMachine() {
   focused = null;
   barEl.classList.remove('open');
+  room?.lighting?.setFocus(null);          // 退出追光：外围光缓动回常规布光
   if (savedOrbit) { startCamTween(null, null, savedOrbit); savedOrbit = null; }
 }
 
@@ -459,3 +466,12 @@ window.__focus = (name) => focusMachine(name);
 window.__unfocus = unfocusMachine;
 window.__rigs = rigs;
 window.__pull = (outcome) => rigs.get('slot')?.pull(outcome ?? devOutcome());
+// 直接落机位（迭代视觉时用来推近看局部，免去拖 canvas / 裁剪猜坐标）：
+// __orbitTo(x, y, z, dist, az, el)——省略某参即保持原值；az/el 用弧度。
+window.__orbitTo = (x, y, z, dist, az, el) => {
+  if (x != null) orbit.target.set(x, y, z);
+  if (Number.isFinite(dist)) orbit.dist = dist;
+  if (Number.isFinite(az)) orbit.az = az;
+  if (Number.isFinite(el)) orbit.el = el;
+  camTween.active = false;
+};

@@ -372,7 +372,7 @@ const CASINO = {
   theme: 'dungeon',
   lighting: 'casino',
   room: { scale: 0.86 },   // 赌厅比要塞大厅亲密（空间收缩把背墙拉近、机器占比更大）
-  grading: { exposure: 1.06, tint: [1.0, 0.99, 1.06] },
+  grading: { exposure: 1.1, tint: [1.07, 1.0, 0.93] },   // 暖调（华丽感）：曝光微抬 + 红抬蓝压
   // 无窗室内（无窗 → 无体积月光光束；墙面靠皮肤与挂饰撑），只留一道高窄缝透一点夜光
   wall: {
     windows: [],
@@ -389,9 +389,10 @@ const CASINO = {
   facade: {
     structureProb: 0.34,
     structureOverlapProb: 0.3,
-    decorProb: { high: 0.2, mid: 0.44, low: 0.3 },
-    // 居室/室内陈设压过军事与宗教（镜/挂画/帘幕读作赌厅装潢）
-    tags: { quarters: 2.4, generic: 1.2, chapel: 0.5, crypt: 0.3 },
+    decorProb: { high: 0.2, mid: 0.5, low: 0.3 },
+    // 居室/室内陈设压过军事与宗教（镜/挂画/帘幕读作赌厅装潢）；
+    // **festoon 高权重**（用户定 2026-09-11：简陋小彩灯是赌厅的"华丽 vs 残破"戏剧对比主笔）
+    tags: { quarters: 2.4, generic: 1.2, chapel: 0.5, crypt: 0.3, festoon: 3.2 },
   },
   scatter: {
     tags: {
@@ -419,11 +420,11 @@ const CASINO = {
   clusters: 2,
   breakers: 2,
   maintenance: 0.5,
-  // 烛台（带火：赌厅的暖点；数量刻意少——赌厅靠机器灯池，不靠满场火把）
+  // 烛台（带火：赌厅的暖点；**外围光减量**——只留背墙两盏，亮度交给中央暖金光池
+  // 与机器灯池，火不再是撑场的光源）
   fires: [
-    { id: 'candelabraFloor', x: -25, z: -38 },
-    { id: 'candelabraFloor', x: 25, z: -38 },
-    { id: 'candelabraFloor', x: 0, z: -60 },
+    { id: 'candelabraFloor', x: -25, z: -40 },
+    { id: 'candelabraFloor', x: 25, z: -40 },
   ],
   // 构图定点：**核心设施**（老虎机/银行机 + 柜台）。整组压到背墙前（z≈-44）——
   // 休息房的构图读法是"背墙 + 柜台 + 两机"，悬在大厅中央会读成空旷走廊。
@@ -459,7 +460,7 @@ const CASINO = {
     uiSafe: { bottomRatio: 0.42 },
   },
   compositionDecal: null,
-  fog: { color: 0x10131f, near: 175, far: 350 },
+  fog: { color: 0x1b1219, near: 165, far: 345 },   // 暖暗雾（冷蓝会把"华丽赌厅"拉回地牢）
 };
 
 export const RECIPES = Object.freeze({
