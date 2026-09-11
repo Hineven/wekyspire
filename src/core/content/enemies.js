@@ -542,9 +542,12 @@ registerEnemy({
   act(actx) {
     const wakeDelay = actx.unit.wakeDelay ?? 1;
     if (actx.unit.actionIndex < wakeDelay) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'strength', stacks: actx.unit.wakeStrength ?? 2,
-      }));
+      // 力量只在**最后一拍沉眠**叠一次：否则沉眠越久叠得越多，「苏醒越晚难度越低」会被抵消
+      if (actx.unit.actionIndex === wakeDelay - 1) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.unit, effectId: 'strength', stacks: actx.unit.wakeStrength ?? 2,
+        }));
+      }
       return; // 沉眠：本拍不攻击
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
