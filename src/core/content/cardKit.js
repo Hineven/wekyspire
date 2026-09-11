@@ -180,6 +180,9 @@ export function hitLanded(sctx) {
  */
 export function requestCardSelection(sctx, {
   source = 'hand', min = 1, max = null, filter = null, reason = null, zone = null,
+  // 覆盖层开关：'hand' 来源默认走既有「点手牌」交互；'deck' 等区场景里没有可点对象，
+  // 默认必须开覆盖层（否则无从选取）。手牌来源也可显式 overlay:true 走覆盖层。
+  overlay = null,
 } = {}) {
   const zoneName = zone ?? (source === 'deck' ? 'deck' : 'hand');
   const pool = (sctx.battleState.zones[zoneName] ?? []).filter(c => (filter ? filter(c) : true));
@@ -189,6 +192,7 @@ export function requestCardSelection(sctx, {
   const instr = new AwaitPlayerInputInstruction({
     request: {
       kind: 'selectCards', source, min: lo, max: hi, reason,
+      picker: (overlay ?? (source !== 'hand')) ? 'overlay' : undefined,
       candidates: pool.map(c => c.uniqueID),
     },
   });

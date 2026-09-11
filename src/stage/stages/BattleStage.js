@@ -54,6 +54,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
 export { CARD_WIDTH, CARD_HEIGHT };
 
 export const PLAY_LINE_Y = -20;
+const PICK_SCALE = 0.62; // 选卡覆盖层的卡缩放（比手牌略大，便于点选）
 const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（静息 z≤15，悬浮抬升后 ≤36），viewer（z=80）打开时 aiming 不可达
 
 const BUTTON_SIZE = { w: 15, h: 6 };
@@ -190,6 +191,9 @@ export class BattleStage {
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
     this._inputSelection = [];
     // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
+    // 战斗内「选卡牌集」覆盖层（request.picker === 'overlay'）：手牌来源接管既有实例，
+    // 其它区来源按投影新建；见 _openPick/_closePick
+    this._pick = null;
     this._viewer = new CardGalleryObject({
       cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
       bakeFace: this._bakeFace, picker: this.picker,
@@ -325,6 +329,9 @@ export class BattleStage {
     const proj = this._snapshot;
     if (!proj) return;
     this._closeViewer(); // 状态已变，查看器内容失效
+    const overlayReq = proj.pendingInput?.request?.picker === 'overlay' ? proj.pendingInput.request : null;
+    if (overlayReq) this._openPick(overlayReq);   // 幂等（同一 request 不重建）
+    else this._closePick();
     this._syncUnits(proj);
     this._syncCardZones(proj);
     this._syncCardContents(proj);
@@ -705,7 +712,13 @@ export class BattleStage {
     // 主按钮：结束回合；结算期退化为确认/选择提示
     let label = '结束回合';
     let enabled = proj.waitingPlayerInput && !pending;
-    if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
+    if (this._pick) {
+      const n = this._pick.selection.length;
+      const { min, max } = this._pick;
+      const need = min === max ? `${min}` : `${min}~${max}`;
+      label = `确认(${n}/${need})`;
+      enabled = n >= min && n <= max;   // 到 min 即可提交（「至多 N」的上限由收集侧封顶）
+    } else if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
     else if (pending?.kind?.startsWith('select')) {
       if ((pending.count ?? 1) > 1) { label = `确认(${this._inputSelection.length}/${pending.count})`; enabled = this._inputSelection.length === pending.count; }
       else { label = '选择目标'; enabled = false; }
@@ -784,6 +797,84 @@ export class BattleStage {
     ]);
   }
 
+  // ---- 战斗内选卡牌集覆盖层 ----
+  // 'hand' 来源：候选在场景里已有唯一 CardObject（_views）→ **接管**（只改布局目标，
+  //   不渲染副本，关闭即还原手牌布局；弹簧/生命周期纪律不受影响）。
+  // 其它来源（deck/burnt…）：候选在场景里没有对象 → 按投影**新建**、关闭即销毁
+  //   （与牌库查看器 CardGalleryObject 同口径，id 加 'pick:' 前缀隔离）。
+  _openPick(request) {
+    if (this._pick && this._pick.request === request) return; // 幂等：同一请求刷新即跳过重建
+    this._closePick();
+    const ids = request.candidates ?? [];
+    const pick = {
+      request,
+      ids,
+      mode: request.source === 'hand' ? 'hand' : 'instantiate',
+      min: request.min ?? request.count ?? 1,
+      max: request.max ?? request.count ?? 1,
+      selection: [],
+      temp: new Map(), // pickerId -> { object, uniqueID }
+    };
+    this._pick = pick;
+    if (pick.mode === 'instantiate') {
+      const anchors = this._pickAnchors(ids.length);
+      ids.forEach((uid, i) => {
+        const cardProj = this._findCardProj(uid);
+        if (!cardProj) return;
+        const pickerId = `pick:${uid}`;
+        const obj = new CardObject({
+          uniqueID: pickerId, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
+        });
+        obj.setCard(cardProj);
+        const a = anchors[i];
+        obj.position.set(a.x, a.y, 30);
+        obj.scale.set(a.scale ?? PICK_SCALE, a.scale ?? PICK_SCALE, 1);
+        obj.visible = true;
+        this.uiScene.add(obj);
+        this.picker.addPickable(pickerId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
+        pick.temp.set(pickerId, { object: obj, uniqueID: uid });
+      });
+    }
+    this._layoutAndTrack();
+  }
+
+  _closePick() {
+    if (!this._pick) return;
+    for (const [pickerId, entry] of this._pick.temp) {
+      this.picker.removePickable(pickerId);
+      this.uiScene.remove(entry.object);
+      entry.object.dispose();
+    }
+    this._pick = null;
+  }
+
+  /** 覆盖层网格锚点（卡牌空间，整体居中）。列数与缩放随张数自适应：
+   *  张数多时（牌库来源常见 15~30 张）自动变多列、缩得更小，避免超出取景框。 */
+  _pickAnchors(count) {
+    const scale = count > 18 ? 0.42 : (count > 10 ? 0.52 : PICK_SCALE);
+    const cols = Math.min(count > 10 ? 8 : 5, Math.max(1, count));
+    const rows = Math.ceil(count / cols);
+    const stepX = CARD_WIDTH * scale * 1.12;
+    const stepY = CARD_HEIGHT * scale * 1.18;
+    const yTop = ((rows - 1) * stepY) / 2;
+    return Array.from({ length: count }, (_, i) => {
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      const inRow = Math.min(cols, count - r * cols);
+      return { x: (c - (inRow - 1) / 2) * stepX, y: yTop - r * stepY, scale };
+    });
+  }
+
+  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区） */
+  _findCardProj(uniqueID) {
+    const zones = this._snapshot?.zones ?? {};
+    for (const list of Object.values(zones)) {
+      const hit = (list ?? []).find(c => c.uniqueID === uniqueID);
+      if (hit) return hit;
+    }
+    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID) ?? null;
+  }
+
   _layoutAndTrack() {
     // 保持显示状态快照中的手牌顺序（视图表插入序≠手牌序）
     const proj = this._snapshot;
@@ -791,13 +882,24 @@ export class BattleStage {
     const orderedHand = proj.hand.map(c => c.uniqueID).filter(id => this._views.has(id));
     const onStage = new Set(orderedHand);
     // 瞄准中的卡视作"被撑开"对象：位置不变但抬升放大、两侧排开（瞄准时不响应 hover 切换）
-    const spreadId = this._aiming?.id ?? this._hoveredCardId;
+    const spreadId = this._pick ? null : (this._aiming?.id ?? this._hoveredCardId);
     this.layout.layoutHand('hand', orderedHand, spreadId);
     // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
       if (a && this.model.getZone(id) !== 'held') targets.set(id, a);
+    }
+    // 选卡覆盖层（手牌来源）：把候选的目标锚点换成网格位——同一批 CardObject 直接
+    // "飞"进界面，不渲染副本；关闭时 targets 自然回到手牌扇形
+    if (this._pick?.mode === 'hand') {
+      const anchors = this._pickAnchors(this._pick.ids.length);
+      this._pick.ids.forEach((uid, i) => {
+        if (!anchors[i]) return;
+        targets.set(uid, anchors[i]);
+        const view = this._views.get(uid);
+        if (view) view.scale.set(anchors[i].scale ?? PICK_SCALE, anchors[i].scale ?? PICK_SCALE, 1);
+      });
     }
     this.springs.setTargets(targets);
     for (const [id, view] of this._views) {
@@ -824,7 +926,12 @@ export class BattleStage {
       // 视觉态优先级：瞄准中（高亮）> 结算期选卡（候选高亮/其余压灰）> 换卡模式（可换手牌高亮）
       // > 手牌可发动性（不可发动淡灰白）> normal
       const pending = proj.pendingInput?.request;
-      if (this._aiming?.id === id) {
+      if (this._pick) {
+        // 覆盖层：候选可点（选中态高亮），非候选压灰；其余视觉态一律让位
+        const isCandidate = this._pick.ids.includes(id);
+        view.setVisualState(this._pick.selection.includes(id) ? 'highlighted'
+          : (isCandidate ? 'normal' : 'disabled'));
+      } else if (this._aiming?.id === id) {
         view.setVisualState('highlighted');
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
@@ -1359,6 +1466,7 @@ export class BattleStage {
 
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
+    if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
     const hit = this.picker.pick(x, y);
@@ -1395,6 +1503,21 @@ export class BattleStage {
     }
     const proj = this._snapshot;
     const pending = proj?.pendingInput?.request ?? null;
+
+    // 选卡覆盖层：点候选 = 切换选中（不打出、不瞄准）；上限封顶 max
+    if (this._pick && this._pick.request === pending) {
+      const hitPick = this.picker.pick(x, y);
+      const uid = hitPick?.kind !== 'card' ? null
+        : (this._pick.mode === 'hand' ? hitPick.id : this._pick.temp.get(hitPick.id)?.uniqueID);
+      if (uid && this._pick.ids.includes(uid)) {
+        const sel = this._pick.selection;
+        const i = sel.indexOf(uid);
+        if (i >= 0) sel.splice(i, 1);
+        else if (sel.length < this._pick.max) sel.push(uid);
+        this.reconcile();   // 同一 request 幂等 → 只刷新选中态与按钮
+        return;
+      }
+    }
 
     // 瞄准松手：指针在存活敌人身上 → 指定目标打出；否则取消（卡本就在锚点，只清状态）。
     // 提交前再验显示态：瞄准中途节拍推进可能已把卡压灰（如结算期），灰卡不打
@@ -1448,7 +1571,8 @@ export class BattleStage {
       // 显示态门：按钮面为灰（非等待输入/结算期未就绪）时不分发任何意图——
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
-      if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
+      if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
+      else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
       else this.bridge.intents.endTurn();
       this._inputSelection = [];

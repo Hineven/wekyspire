@@ -657,7 +657,8 @@ registerRelic({
     if (!pool.length) return;   // 空集守卫：候选为空时不发起请求（否则界面无合法应答）
     ctx.kernel.submitInstruction(new PickCardsInstruction({
       request: {
-        kind: 'selectCards', source: 'deck', min: 1, max: 1, reason: '胚胎：寻找一张牌加入手牌',
+        kind: 'selectCards', source: 'deck', min: 1, max: 1, picker: 'overlay',
+        reason: '胚胎：寻找一张牌加入手牌',
         candidates: pool.map(c => c.uniqueID),
       },
       then: (c, sel, self) => {
@@ -684,7 +685,8 @@ registerRelic({
         if (!pool.length) return; // 空集守卫
         c.kernel.submitInstruction(new PickCardsInstruction({
           request: {
-            kind: 'selectCards', source: 'hand', min: 1, max: 1, reason: '原初拟态基质：复制手牌中的一张牌',
+            kind: 'selectCards', source: 'hand', min: 1, max: 1, picker: 'overlay',
+            reason: '原初拟态基质：复制手牌中的一张牌',
             candidates: pool.map(x => x.uniqueID),
           },
           then: (cc, sel, self) => {
