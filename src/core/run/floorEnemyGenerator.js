@@ -72,7 +72,9 @@ const TEMPLATES = [
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
   // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §7）——
   // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
-  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'stoneCocoon' }] },
+  // 2026-09-11 用户试玩后削：原「爆囊×2 + 石茧×2」四敌同时施压（两只石茧苏醒后每回合 20+ 伤
+  // 叠爆囊死亡反伤）堪比精英，删掉一只石茧 → 三敌；难度份额改由前三槽分摊。
+  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }] },
   { id: 'twinClock', name: '钟摆双塔', minFloor: 5, maxFloor: 10, slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
   // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
   { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
