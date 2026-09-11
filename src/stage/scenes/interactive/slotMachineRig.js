@@ -11,7 +11,7 @@
 // 纯 Stage 层：不读 Core、不读 Bridge；输入只有「拉杆时给定的结果」（调用方从 Core 拿）。
 
 import * as THREE from 'three';
-import { P } from '../kit/index.js';
+import { P, shade } from '../kit/index.js';
 
 const Z = Math.PI * 2;
 
@@ -63,6 +63,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     t: 0,
     phase: Math.random() * 10,
     hover: 0,            // 0..1 hover 权重（平滑过渡）
+    focus: 0,            // 0..1 追光权重（相机怼脸时抑制抖动，见 calm）
     pulling: false,
     leverAngle: 0,       // 0 = 静止，负 = 拉下
     leverRelease: 0,     // 弹起进度（0..1）
@@ -73,10 +74,11 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   };
 
   // ---- 彩灯：常态呼吸 + 灯效（逐灯独立材质，直接改 color）----
-  const shadeHex = (hex, k) => new THREE.Color(hex).multiplyScalar(1 + k);
+  // **逐颗底色**来自资产登记的 userData.tint（一圈彩灯颜色不同才有"赌具"味），缺省暖金。
   const bulbOn = new THREE.Color(P.flameCore);
-  const bulbWarm = new THREE.Color(P.gold);
-  const bulbDim = new THREE.Color(shadeHex(P.gold, -0.3));
+  const tintOf = (b) => b.userData?.tint ?? P.gold;
+  const bulbWarm = (b) => new THREE.Color(shade(tintOf(b), 0.1));
+  const bulbDim = (b) => new THREE.Color(shade(tintOf(b), -0.22));
 
   function paintBulbs(level = 0) {
     // level 0 = 常态（暗金呼吸）；>0 = 中奖灯效强度
@@ -87,9 +89,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         const chaseOn = fx.chase > 0 && ((i + Math.floor(st.win.t * fx.chase)) % 3 === 0);
         const flashOn = fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 2;
         const on = chaseOn || flashOn;
-        b.material.color.copy(on ? bulbOn : bulbWarm);
+        b.material.color.copy(on ? bulbOn : bulbWarm(b));
       } else {
-        const base = bulbDim.clone().lerp(bulbWarm, 0.35 + 0.45 * breathe + 0.35 * st.hover);
+        // 常态：呼吸（整体偏亮——彩灯是"亮着的"，暗一档就变成没通电的塑料球）
+        const base = bulbDim(b).lerp(bulbWarm(b), 0.5 + 0.35 * breathe + 0.35 * st.hover);
         b.material.color.copy(base);
       }
     });
@@ -119,13 +122,17 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   function update(dt) {
     st.t += dt;
     const busy = !!st.spin;
+    // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
+    // 此时机器只该有极轻微的呼吸感（用户定 2026-09-11）。
+    st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
+    const calm = 1 - 0.68 * st.focus;
 
     // ---- 常驻抖动：机体微微抖（幅度小但持续；中奖时叠加"激动"抖动）----
-    const idleAmp = st.hover > 0.5 ? 0.03 : 0.018;
+    const idleAmp = (st.hover > 0.5 ? 0.02 : 0.012) * calm;
     let shakeX = 0, shakeY = 0, shakeZ = 0;
     if (st.shake > 0) {
       st.shake = Math.max(0, st.shake - dt);
-      const k = st.shakeAmp * (st.shake > 0 ? 1 : 0);
+      const k = st.shakeAmp * (st.shake > 0 ? 1 : 0) * calm;
       shakeX = Math.sin(st.t * 46) * k;
       shakeY = Math.abs(Math.sin(st.t * 38)) * k * 0.7;
       shakeZ = Math.cos(st.t * 52) * k * 0.5;
@@ -135,7 +142,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       basePos.y + Math.abs(Math.sin(st.t * 9.7 + st.phase)) * idleAmp * 0.6 + shakeY,
       basePos.z + Math.cos(st.t * 11.1 + st.phase) * idleAmp * 0.5 + shakeZ,
     );
-    body.rotation.z = Math.sin(st.t * 7.3 + st.phase) * 0.004 + shakeZ * 0.02;
+    body.rotation.z = (Math.sin(st.t * 7.3 + st.phase) * 0.004 + shakeZ * 0.02) * calm;
     // hover：轻微上浮放大（配合灯提亮）
     st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
     const hoverBoost = 1 + 0.025 * st.hover;
@@ -214,6 +221,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     pull,
     update,
     setHover: (on) => { st.hoverTarget = on ? 1 : 0; },
+    /** 追光（相机怼脸）开关：抑制抖动幅度——近景里同样的位移看起来会剧烈得多。 */
+    setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
     isBusy: () => !!st.spin,
     state: st,
   };

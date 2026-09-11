@@ -74,9 +74,10 @@ export const LIGHTING_PRESETS = {
       color: 0xffb45a, base: 4200, dist: 140, cap: 8,
       colors: [0xffb45a, 0xffab52, 0xff8a6a, 0x9ad89a, 0x9ab4e8, 0xffd06a],
     },
-    // 焦点布光（zoomin 时）：外围统一压暗 dim + 观众侧补光把机器打亮（setFocus）。
-    // base/offset 经 restGallery 实拍 A/B 定：光心离屏幕 ~16（贴太近=整面洗白，太远=照到整间屋子）
-    focus: { color: 0xffdcae, base: 450, dist: 90, offset: 16, dim: 0.72, rise: 3.2 },
+    // 焦点布光（zoomin 时）：外围统一压暗 dim + **正面补光**把机器中央屏幕区打亮（setFocus）。
+    // base/offset/dist 经 restGallery 实拍 A/B 定：光心在屏幕正前方 ~14（贴太近=整面洗白、
+    // 太远=照到整间屋子）；dist 收到 70 让光池只罩机器，别把大厅重新点亮。
+    focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
     tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
   },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
@@ -181,7 +182,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   //   · 另开一盏观众侧补光落在 target↔相机连线上（相机方向 offset 处）——机器朝向观众的那面
   //     被照亮，读作舞台追光。屏幕/灯珠是 unlit 族（不吃光），所以它们的自发光不受影响。
   const focusCfg = preset.focus ?? {
-    color: 0xffdcae, base: 3600, dist: 130, offset: 18, dim: 0.72, rise: 3.2,
+    color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08,
   };
   const focusLight = new THREE.PointLight(focusCfg.color, 0, focusCfg.dist, 2.0);
   focusLight.visible = false;
@@ -228,11 +229,11 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
       focusLight.position.copy(focusTarget);
       if (camPos) {
         focusDir.copy(camPos).sub(focusTarget);
-        if (focusDir.lengthSq() > 1e-4) focusLight.position.addScaledVector(focusDir.normalize(), focusCfg.offset ?? 18);
+        if (focusDir.lengthSq() > 1e-4) focusLight.position.addScaledVector(focusDir.normalize(), focusCfg.offset ?? 14);
       } else {
-        focusLight.position.z += focusCfg.offset ?? 18;
+        focusLight.position.z += focusCfg.offset ?? 14;
       }
-      focusLight.position.y += (focusCfg.offset ?? 18) * 0.22;
+      focusLight.position.y += (focusCfg.offset ?? 14) * (focusCfg.lift ?? 0.08);
     } else {
       focusLight.visible = false;
       focusLight.intensity = 0;

@@ -33,6 +33,7 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
     t: 0,
     phase: Math.random() * 10,
     hover: 0,
+    focus: 0,       // 0..1 追光权重（相机怼脸时抑制常驻浮动）
     action: null,   // { kind, t, seconds }
   };
 
@@ -44,9 +45,10 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
 
   function update(dt) {
     st.t += dt;
-    // 常驻：机体极轻微浮动 + 灯呼吸
+    // 常驻：机体极轻微浮动 + 灯呼吸（追光怼脸时再压一档：近景里同样的位移看起来更大）
     st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
-    const idle = 0.008;
+    st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
+    const idle = 0.008 * (1 - 0.6 * st.focus);
     body.position.set(
       basePos.x + Math.sin(st.t * 6.1 + st.phase) * idle,
       basePos.y + Math.abs(Math.sin(st.t * 4.3 + st.phase)) * idle * 0.5,
@@ -93,6 +95,7 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
     act,
     update,
     setHover: (on) => { st.hoverTarget = on ? 1 : 0; },
+    setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
     isBusy: () => !!st.action,
     state: st,
   };

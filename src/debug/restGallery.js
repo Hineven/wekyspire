@@ -168,9 +168,10 @@ function focusMachine(name) {
   const dist = Math.max(distV, distH, 9);
   const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
   startCamTween(sp.clone().addScaledVector(fwd, dist), sp.clone());
-  // 焦点布光（用户定 2026-09-11）：zoomin 时外围压暗、机器屏幕被观众侧补光打亮
-  // （目标是屏幕中心正上方一点——屏幕是视觉主体，光心落在它上更"怼脸聚光"）
-  room.lighting?.setFocus(sp.clone().setY(sp.y + Math.max(1.5, screenH * 0.25)), { strength: 1 });
+  // 焦点布光（用户定 2026-09-11）：zoomin 时外围压暗、**正面补光**把机器中央屏幕区打亮。
+  // 光心就落在屏幕中心（不许抬高——抬高会变顶光，正面屏幕反而照不亮，用户报障）。
+  room.lighting?.setFocus(sp.clone(), { strength: 1 });
+  rig?.setFocus(true);                    // 怼脸时抑制机体抖动（近景里同样位移看起来更剧烈）
 
   barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
   barBody.innerHTML = name === 'slot'
@@ -205,6 +206,7 @@ function unfocusMachine() {
   focused = null;
   barEl.classList.remove('open');
   room?.lighting?.setFocus(null);          // 退出追光：外围光缓动回常规布光
+  for (const r of rigs.values()) r.setFocus?.(false);
   if (savedOrbit) { startCamTween(null, null, savedOrbit); savedOrbit = null; }
 }
 

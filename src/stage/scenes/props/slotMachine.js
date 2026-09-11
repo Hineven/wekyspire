@@ -15,6 +15,7 @@
 // 聚焦追光要能把它照亮（见 interactive/slotMachineRig.js 与 rooms/lighting.js 的 setFocus）。
 //
 // 布光职责：自带 unlit 发光面（彩灯/顶灯牌/按钮） + `lamp` 标签（配方层出无火焰点光池）。
+// ⚠ 网格数已到 `interactive` 预算上限（60，见 test/sceneProps.test.js）：再加件必须同时删件。
 
 import * as THREE from 'three';
 import { P, K, shade, M } from '../kit/index.js';
@@ -119,8 +120,7 @@ export default {
         sx * (winW / 2 + postW / 2), winY, 0));                          // 左右立柱
     }
     // 背板（开口后方的暗底：腔体自成一个暗箱，鼓在前、背板在最后）
-    g.add(K.put(K.box({ color: shade(iron, -0.22), size: [W - 0.4, bodyH - 0.5, 0.18], family: 'metal' }),
-      0, y0 + bodyH / 2, -D / 2 - 0.06));
+    // ⚠ 原另有一层"机身后侧的侧影背板"，怼脸/正面都看不到（网格数已到 interactive 预算上限），已删。
     // 柜体金饰：两侧立柱 + 上横箍（各 1 件）
     for (const sx of [-1, 1]) {
       g.add(K.put(K.box({ color: gold, size: [T * 0.8, bodyH, T * 0.8], family: 'metal' }),
@@ -133,7 +133,7 @@ export default {
     g.add(K.put(K.box({ color: P.night, size: [winW + 1.0, winH + 1.6, 0.3], family: 'metal' }),
       0, winY, -0.62));
     // 四边金属压边（bezel）：上下各一条 + 左右各一条（内侧亮一档，读作倒角）
-    const bzT = 0.2, bzD = 0.42;
+    const bzT = 0.26, bzD = 0.42;
     g.add(K.put(K.box({ color: shade(gold, 0.06), size: [winW + 0.9, bzT, bzD], family: 'metal' }),
       0, openTop + bzT / 2, D / 2 + 0.06));
     g.add(K.put(K.box({ color: shade(gold, -0.08), size: [winW + 0.9, bzT, bzD], family: 'metal' }),
@@ -165,26 +165,43 @@ export default {
       );
       drum.add(mesh);
       drum.userData.symbols = SLOT_SYMBOLS;
-      drum.userData.index = 0;
+      // 初始就**停在图案面上**（三根各停一个不同图案，读作"待机的真机"）。
+      // 不设的话 rotation=0 会把两带接缝摆在正前（付款线上是半红半金的拼色），很假。
+      const initIdx = i % SLOT_SYMBOLS.length;
+      drum.userData.index = initIdx;
+      drum.rotation.x = -(((initIdx + 0.5) / SLOT_SYMBOLS.length) * Math.PI * 2);
       g.add(drum);
       reels.push(drum);
     }
 
     // ================= 屏幕彩灯（rig 换独立材质后逐灯驱动）=================
+    // **必须挂在压边框上**：沿压边中心线矩形排布、球心嵌进框体一点。早期版本把它们悬在窗口
+    // 前方 0.42 处（无依托），怼脸看就是一圈浮空的球（用户报障）。
     const bulbs = [];
-    const bx0 = -winW / 2 - 0.72, bx1 = winW / 2 + 0.72;
-    const by0 = -winH / 2 - 0.72, by1 = winH / 2 + 0.72;
-    const ring = [
-      [bx0, by1], [bx1, by1], [bx0, by0], [bx1, by0],
-      [0, by1], [0, by0], [bx0, (by0 + by1) / 2], [bx1, (by0 + by1) / 2],
-    ];
-    for (const [bx, by] of ring) {
-      const mesh = K.sphereLo({ color: shade(gold, -0.3), r: 0.155, family: 'unlit' });
-      mesh.position.set(bx, winY + by, D / 2 + 0.42);
+    const ringZ = D / 2 + 0.06 + bzD / 2 - 0.05;     // 压边前表面稍内，读作"嵌在框上"
+    const rTopY = openTop + bzT / 2, rBotY = openBot - bzT / 2;
+    const rSideX = winW / 2 + 0.42;
+    const spanX = winW / 2 + 0.24;
+    const ring = [];
+    for (let i = 0; i < 5; i++) {                     // 上下边各 5 颗（间距均匀）
+      const x = -spanX + (i / 4) * spanX * 2;
+      ring.push([x, rTopY], [x, rBotY]);
+    }
+    for (const sx of [-1, 1]) {                       // 左右边各 2 颗
+      ring.push([sx * rSideX, winY + 0.42], [sx * rSideX, winY - 0.42]);
+    }
+    // 彩灯**逐颗不同色**（用户定："多加几个彩灯"）：色序写在 userData.tint 上，
+    // rig 的常亮呼吸/中奖灯效都按这颗的底色走（rig 会换掉材质，这里只负责登记色相）。
+    const RING_TINTS = [P.gold, P.potionRed, P.flameCore, P.potionGreen, P.gold, P.potionBlue];
+    ring.forEach(([bx, by], i) => {
+      const tint = RING_TINTS[i % RING_TINTS.length];
+      const mesh = K.sphereLo({ color: tint, r: 0.15, family: 'unlit' });
+      mesh.position.set(bx, by, ringZ);
       mesh.userData.animRole = 'bulb';
+      mesh.userData.tint = tint;
       g.add(mesh);
       bulbs.push(mesh);
-    }
+    });
 
     // ================= 顶灯牌 =================
     const my = y0 + bodyH + 0.5;
@@ -192,6 +209,28 @@ export default {
       0, my, D / 2 - 0.3));
     g.add(K.put(K.box({ color: P.ember, size: [marqueeW - 0.5, 0.34, 0.1], family: 'unlit' }),
       0, my + 0.1, D / 2 + 0.02));
+
+    // ================= 正面图案装饰（怼脸细节，用户定 2026-09-11："多加彩灯、条纹"）=================
+    // 立柱上的双色细条（红 pinstripe + 金边）：立柱是窗口两侧最显近景的平面，纯色太空
+    for (const sx of [-1, 1]) {
+      g.add(K.put(K.box({ color: shade(P.potionRed, -0.12), size: [0.09, winH + 0.6, 0.05], family: 'metal' }),
+        sx * (winW / 2 + 0.25), winY, D / 2 + 0.035));
+      g.add(K.put(K.box({ color: gold, size: [0.045, winH + 0.6, 0.05], family: 'metal' }),
+        sx * (winW / 2 + 0.40), winY, D / 2 + 0.035));
+    }
+    // 窗口与操作台之间的双横线（金粗 + 红细）：把正面切成"窗 / 腰线 / 台面"三段
+    g.add(K.put(K.box({ color: gold, size: [W - 0.5, 0.08, 0.05], family: 'metal' }),
+      0, openBot - 0.34, D / 2 + 0.03));
+    g.add(K.put(K.box({ color: shade(P.potionRed, -0.1), size: [W - 1.3, 0.05, 0.05], family: 'metal' }),
+      0, openBot - 0.6, D / 2 + 0.03));
+    // 顶灯牌两侧的小彩灯（unlit 常亮，与屏幕圈灯同族语汇）→ 见下方"额头"装饰
+    // 额头（窗顶横梁正面）：怼脸时**最大的一片留白**——一条金带 + 红菱形徽记把它收住
+    g.add(K.put(K.box({ color: gold, size: [W - 0.7, 0.09, 0.05], family: 'metal' }),
+      0, cabTop - 0.62, D / 2 + 0.03));
+    g.add(K.put(
+      K.tilt(K.box({ color: shade(P.potionRed, -0.05), size: [0.32, 0.32, 0.05], family: 'metal' }), 0, 0, Math.PI / 4),
+      0, cabTop - 1.25, D / 2 + 0.03,
+    ));
 
     // ================= 操作台（怼脸下部）=================
     const py = y0 + bodyH * 0.2;
