@@ -28,7 +28,7 @@ export default {
   place: 'prop',
   mount: 'floor',
   tags: ['machine', 'metal', 'container', 'lamp', 'casino', 'interactive'],
-  footprint: { x: 4.4, z: 3.6 },
+  footprint: { x: 5.6, z: 3.6 },
   behaviors: [],
   build({ bodyH = 6.4, reelCount = 3, marqueeW = 3.2, rng } = {}) {
     const g = new THREE.Group();
@@ -115,13 +115,19 @@ export default {
     g.add(K.put(K.box({ color: P.gold, size: [1.3, 0.12, 0.3], family: 'metal' }), 0, y0 - 0.06, D / 2 + 0.08));
 
     // ---- 侧拉杆（枢轴在座：绕 Z 旋转 = 拉下/弹起）----
-    g.add(K.put(K.box({ color: shade(P.iron, -0.2), size: [0.3, 0.5, 0.5], family: 'metal' }),
-      W / 2 - 0.05, winY - 0.8, 0));
+    // 拉杆座与枢轴**整体外移**到柜体外（原先枢轴在柜内、杆只探出 0.4 —— 从正面几乎看不见，
+    // 用户要求"放大到能看见侧面拉杆的极限位置"，前提是拉杆本身要读得出来）
+    g.add(K.put(K.box({ color: shade(P.iron, -0.2), size: [0.34, 0.56, 0.56], family: 'metal' }),
+      W / 2 + 0.16, winY - 0.8, 0));
     const leverPivot = new THREE.Group();
-    leverPivot.position.set(W / 2 - 0.05, winY - 0.8, 0);   // 枢轴 = 座心
-    leverPivot.add(K.put(K.cyl({ color: P.silver, r: 0.1, h: 1.9, seg: 5, family: 'metal' }), 0.24, 0.85, 0));
-    leverPivot.add(K.put(K.sphereLo({ color: P.copper, r: 0.28, jitter: 0.03, rng: r, family: 'metal' }),
-      0.44, 1.72, 0));
+    leverPivot.position.set(W / 2 + 0.16, winY - 0.8, 0);   // 枢轴 = 座心（柜体外）
+    // 拉杆刻意提亮一档：它是"能不能再靠近"的极限部件，且常在机器阴影里（读不出来就白做）
+    const rodMesh = K.cyl({ color: shade(P.silver, 0.16), r: 0.11, h: 1.9, seg: 5, family: 'metal' });
+    rodMesh.userData.animRole = 'leverRod';
+    leverPivot.add(K.put(rodMesh, 0.3, 0.85, 0));
+    const knobMesh = K.sphereLo({ color: shade(P.copper, 0.18), r: 0.32, jitter: 0.03, rng: r, family: 'metal' });
+    knobMesh.userData.animRole = 'leverKnob';
+    leverPivot.add(K.put(knobMesh, 0.56, 1.72, 0));
     g.add(leverPivot);
 
     g.userData.parts = { body: g, leverPivot, reels, bulbs };

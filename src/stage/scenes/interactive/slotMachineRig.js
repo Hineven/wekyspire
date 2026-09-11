@@ -38,6 +38,16 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   // 彩灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
   const SYM = reels[0]?.userData?.symbols?.length ?? 5;
   for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: P.gold });
+  // 拉杆：材质独立化（悬停/拉下时能闪光提示——它是"这台能点"的关键部件）
+  const leverParts = [];
+  lever?.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();
+    const base = o.material.color.clone();
+    o.material.emissive = new THREE.Color(0x000000);
+    leverParts.push({ mesh: o, base });
+  });
+  let leverFlash = 0;
   const basePos = body.position.clone();   // 机器由 composeRoom 定位——抖动只能在基准位附近
   const baseScale = body.scale.x || 1;
 
@@ -123,8 +133,11 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     const hoverBoost = 1 + 0.025 * st.hover;
     body.scale.setScalar(baseScale * hoverBoost);
 
-    // ---- 拉杆：快速拉下 → 缓慢弹起（弹性回位）----
+    // ---- 拉杆：快速拉下 → 缓慢弹起（弹性回位）；悬停/拉下时闪光提示 ----
+    leverFlash = Math.max(0, leverFlash - dt * 2.2);
     if (lever) {
+      const wantFlash = st.pulling || st.hover > 0.5 ? 1 : 0;
+      leverFlash = Math.max(leverFlash, wantFlash * Math.min(1, dt * 6 + leverFlash));
       if (st.pulling) {
         st.leverAngle += (-1.05 - st.leverAngle) * Math.min(1, dt * 16);
         if (st.leverAngle < -1.0) { st.pulling = false; st.leverRelease = 0; }
@@ -135,6 +148,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         st.leverAngle = -1.05 * (1 - e) + overshoot * (1 - e);
       }
       lever.rotation.z = st.leverAngle;
+      // 闪光：朝冷白插值（拉下瞬间最亮）
+      for (const lp of leverParts) {
+        lp.mesh.material.color.copy(lp.base).lerp(new THREE.Color(P.flameCore), leverFlash * 0.75);
+      }
     }
 
     // ---- 转轮：起转 → 匀速 → 减速 → 离散落槽 ----

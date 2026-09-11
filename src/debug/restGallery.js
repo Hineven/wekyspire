@@ -127,19 +127,44 @@ function focusMachine(name) {
   focused = name;
   savedOrbit = { az: orbit.az, el: orbit.el, dist: orbit.dist, target: orbit.target.clone() };
   // 屏幕件世界坐标（老虎机取中间转轮、银行机取屏幕）——比按锚点猜高度稳
-  // 按**整机包围盒**取景（机器放大后按固定距离会怼太近）：机位 = 中心 + 朝向 × 最大边 × 1.5
-  const box = new THREE.Box3().setFromObject(m.entry.object);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
-  // 按相机 fov 反算「装得下整机」的距离（垂直/水平取更远者；留 1.35 倍余量）
+  // 取景口径（用户定 2026-09-11）：**贴到屏幕前**（接近怼脸），但**必须留住侧面拉杆**——
+  // 于是按「屏幕自身尺寸 + 拉杆尖端外扩」算所需半宽/半高，再按相机 fov 反算距离。
+  const parts = m.entry.parts ?? {};
+  const reels = parts.reels ?? [];
+  const screenLike = reels[Math.floor(reels.length / 2)] ?? parts.screen ?? m.entry.object;
+  const sp = new THREE.Vector3();
+  screenLike.getWorldPosition(sp);
+
+  // 屏幕尺寸近似：转轮中心距 + 一格 = 窗宽；窗高按格宽估
+  let screenW = 4.5, screenH = 3.4;
+  if (reels.length >= 2) {
+    const a = new THREE.Vector3(); const b = new THREE.Vector3();
+    reels[0].getWorldPosition(a);
+    reels[reels.length - 1].getWorldPosition(b);
+    const cell = Math.abs(a.x - b.x) / (reels.length - 1);
+    screenW = Math.abs(a.x - b.x) + cell * 1.35;
+    screenH = cell * 1.05;
+  } else if (parts.screen) {
+    const sb = new THREE.Box3().setFromObject(parts.screen);
+    const sz = sb.getSize(new THREE.Vector3());
+    screenW = sz.x; screenH = sz.y;
+  }
+
+  // 需要装进画面的半宽/半高：屏幕本身，以及**拉杆整套**（它在侧面，是"能不能再近"的极限）
+  let halfW = screenW * 0.5;
+  let halfH = screenH * 0.5;
+  if (parts.leverPivot) {
+    const lb = new THREE.Box3().setFromObject(parts.leverPivot);
+    halfW = Math.max(halfW, Math.abs(lb.max.x - sp.x), Math.abs(sp.x - lb.min.x));
+    halfH = Math.max(halfH, Math.abs(lb.max.y - sp.y), Math.abs(sp.y - lb.min.y));
+  }
+  const margin = 1.32;                      // 贴脸余量：越小越近（拉杆刚不出框；1.3 左右是极限）
   const vFov = (camera.fov * Math.PI) / 180;
-  const distV = (size.y * 1.35 / 2) / Math.tan(vFov / 2);
-  const distH = (Math.max(size.x, size.z) * 1.35 / 2) / Math.tan(vFov / 2) / Math.max(0.5, camera.aspect);
-  const dist = Math.max(distV, distH, 16);
-  const desired = center.clone().addScaledVector(fwd, dist).add(new THREE.Vector3(0, size.y * 0.12, 0));
-  const target = center.clone().add(new THREE.Vector3(0, size.y * 0.06, 0));
-  startCamTween(desired, target);
+  const distV = (halfH * margin) / Math.tan(vFov / 2);
+  const distH = (halfW * margin) / (Math.tan(vFov / 2) * Math.max(0.5, camera.aspect));
+  const dist = Math.max(distV, distH, 9);
+  const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
+  startCamTween(sp.clone().addScaledVector(fwd, dist), sp.clone());
 
   barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
   barBody.innerHTML = name === 'slot'
