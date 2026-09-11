@@ -3,9 +3,13 @@
 //   · 常驻：机体微微抖动（"活着"）+ 彩灯缓慢呼吸
 //   · hover：机体轻微上浮放大 + 彩灯提亮（由交互层调用 setHover）
 //   · 拉杆：拉杆快速拉下 → 缓慢弹起（弹性回位）；三点亮起同步起转
-//   · 转轮：起转 → 匀速 → 减速 → **离散落槽**（左/右先锁，中间最后；锁定瞬间有"咔"式
-//     小弹跳）。落槽目标由后端结果决定（后端在拉杆瞬间就算好了）：rig 只负责把轮盘
-//     转到对应图案的那一面。
+//   · 转轮：**四段时序，全程 C1 连续**（用户定 2026-09-11："转久一点、减速曲线细一点、
+//     锁定前要有卡入位的回滚/滑入"）：
+//       ① 起转加速 → ② 长匀速（中间轮最久） → ③ 指数减速（尾段"将停未停"地缓缓蹭过去，
+//       即真机那种"自然停下会卡在两格之间"的悬念） → ④ **卡入位**：阻尼弹簧把已经冲过
+//       槽位 OVERSHOOT 的鼓拉回来，带一点回滚+过冲，读作机械卡销咬合。
+//     左右两侧先锁、中间最后（`CRUISE_T`），落槽瞬间有"咔"式小弹跳。
+//     落槽目标由后端结果决定（后端在拉杆瞬间就算好了）：rig 只负责把轮盘转到那一面。
 //   · 中奖：屏幕彩灯按档位分级的灯效（小奖=跑马灯，大奖=跑马+全亮爆闪+机体激动抖动），
 //     并让机体抖动幅度随档位提升。
 // 纯 Stage 层：不读 Core、不读 Bridge；输入只有「拉杆时给定的结果」（调用方从 Core 拿）。
@@ -22,9 +26,17 @@ const TIER_FX = {
   major: { chase: 16, flash: 1.0, shake: 0.16, seconds: 2.6, dim: 0.0 },
 };
 
-// 各转轮锁定耗时（秒）：**左右两侧最快、中间稍慢**（用户定）——右侧略晚于左侧，
-// 读作"两侧先定、中间最后咬合"的层次。
-const LOCK_AT = [1.05, 1.55, 1.25];
+// ---- 转轮时序参数（秒 / rad·s⁻¹）----
+const ACCEL = 0.34;          // ① 起转加速时长（末速 = CRUISE_V，接上匀速 → 速度连续）
+const CRUISE_V = 26;         // ② 匀速角速度
+const BRAKE_SPAN = 1.35;     // ③ 减速段时长（≈3.2τ，末速收到 V·e⁻³·² ≈ 4%，即"还在缓缓蹭"）
+const TAU = BRAKE_SPAN / 3.2; // 指数时间常数（由 BRAKE_SPAN 反推，两者必须一致）
+const SETTLE = 0.42;         // ④ 卡入位时长
+const OVERSHOOT = 0.2;       // 自然停下时"冲过槽位"的角度（rad）——卡入位要把它拉回来
+const ZETA = 0.42;           // 卡入位阻尼比（<1：有一点回弹过冲）
+const OMEGA = 15;            // 卡入位弹簧角频率
+// 各轮匀速段时长：**左右两侧快、中间最久**（中间最后咬合；轮与轮的锁定间隔也由它拉开）
+const CRUISE_T = [0.7, 1.3, 1.0];
 
 /**
  * 让轮盘停在某个图案面 —— **推导（别再凭感觉改）**：
@@ -36,6 +48,48 @@ const LOCK_AT = [1.05, 1.55, 1.25];
  * 常见错法：用 `−a_k` 或 `−k/N·2π` —— 那会把**两带接缝**摆到正前（怼脸一眼可见）。
  */
 const angleFor = (k, n) => (((k % n) + 0.5) / n) * Z - Z;
+
+/** 单个转轮的整段动画计划（解析式求值：不累积误差、段间 C1 连续）。 */
+function planReel(a0, k, n, cruiseT) {
+  const base = angleFor(k, n);
+  const aAccel = 0.5 * CRUISE_V * ACCEL;                 // 加速段走过角
+  const aBrake = CRUISE_V * TAU * (1 - Math.exp(-BRAKE_SPAN / TAU));
+  // 想要的自然停车位（匀速段用时 = cruiseT）
+  const stopWanted = a0 - (aAccel + CRUISE_V * cruiseT + aBrake);
+  // 选圈数：让"冲过槽位 OVERSHOOT 的自然停车位"尽量贴近 stopWanted。
+  // **符号**：轮盘往 −角 方向转，故目标角在起点下方 → turns 取正（写反会让轮盘倒转，
+  // 位移算成负的、匀速段被夹到下限，三根轮的锁定时长也会被压平）。
+  const turns = Math.round((base - stopWanted - OVERSHOOT) / Z);
+  const target = base - Z * turns;                       // 最终锁定角
+  const stopAngle = target - OVERSHOOT;                  // 减速段终点（略过槽位）
+  // 反解匀速时长，使三段位移精确落在 stopAngle 上（圈数取整带来的不足由它补）
+  const cruise = Math.max(0.3, ((a0 - stopAngle) - aAccel - aBrake) / CRUISE_V);
+  const tBrake = ACCEL + cruise;
+  const v0 = -CRUISE_V * Math.exp(-BRAKE_SPAN / TAU);    // 减速段末速（仍在往负向蹭）
+  const wd = OMEGA * Math.sqrt(1 - ZETA * ZETA);
+  return {
+    target, targetIndex: k % n, a0, aAccel, aBrake, cruise, tBrake, stopAngle, v0,
+    tLock: tBrake + BRAKE_SPAN + SETTLE,
+    x0: -OVERSHOOT, c1: (v0 + ZETA * OMEGA * (-OVERSHOOT)) / wd, wd,
+  };
+}
+
+/** 计划 → 任意时刻的转角（四段解析式拼接；段间位置与速度都连续）。 */
+function angleAt(p, t) {
+  if (t <= 0) return p.a0;
+  if (t < ACCEL) return p.a0 - (0.5 * CRUISE_V * t * t) / ACCEL;
+  if (t < p.tBrake) return p.a0 - p.aAccel - CRUISE_V * (t - ACCEL);
+  const sB = t - p.tBrake;
+  if (sB < BRAKE_SPAN) {
+    const aBrakeStart = p.a0 - p.aAccel - CRUISE_V * p.cruise;
+    return aBrakeStart - CRUISE_V * TAU * (1 - Math.exp(-sB / TAU));
+  }
+  // 卡入位：阻尼弹簧（初位移 -OVERSHOOT + 初速 = 减速段末速 → 与上一段速度也连续）
+  const s = sB - BRAKE_SPAN;
+  if (s >= SETTLE) return p.target;
+  const x = Math.exp(-ZETA * OMEGA * s) * (p.x0 * Math.cos(p.wd * s) + p.c1 * Math.sin(p.wd * s));
+  return p.target + x;
+}
 
 export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const body = parts?.body ?? object;
@@ -67,7 +121,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     pulling: false,
     leverAngle: 0,       // 0 = 静止，负 = 拉下
     leverRelease: 0,     // 弹起进度（0..1）
-    spin: null,          // { elapsed, targets: [k,k,k], locked: [bool], angle: [..], speed: [..] }
+    spin: null,          // { elapsed, tier, locked: [bool], plans: [planReel…] }（见文件头时序）
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
     shakeAmp: 0,
@@ -103,29 +157,27 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     st.pulling = true;
     st.leverRelease = 0;
     st.win = null;
-    const targets = reels.map((_, i) => {
-      const s = symbols?.[i];
-      return Number.isInteger(s) ? s % SYM : Math.floor(Math.random() * SYM);
-    });
     st.spin = {
       elapsed: 0,
-      targets,
-      locked: reels.map(() => false),
-      angle: reels.map((r) => r.rotation.x),
-      speed: reels.map(() => 0),
-      final: reels.map(() => 0),
       tier,
+      locked: reels.map(() => false),
+      // 每轮的整段动画计划在拉杆瞬间一次算定（后端此时已给结果）——解析式求值，
+      // 圈数让"自然停车位"落在槽位稍前方，末段卡入位把它拉回槽位。
+      plans: reels.map((r, i) => {
+        const s = symbols?.[i];
+        const k = Number.isInteger(s) ? s % SYM : Math.floor(Math.random() * SYM);
+        return planReel(r.rotation.x, k, SYM, CRUISE_T[i % CRUISE_T.length]);
+      }),
     };
     return true;
   }
 
   function update(dt) {
     st.t += dt;
-    const busy = !!st.spin;
     // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
-    // 此时机器只该有极轻微的呼吸感（用户定 2026-09-11）。
+    // 此时机器只该有极轻微的呼吸感（用户 2026-09-11：再缩一倍 → calm ≈ 0.16）。
     st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
-    const calm = 1 - 0.68 * st.focus;
+    const calm = 1 - 0.84 * st.focus;
 
     // ---- 常驻抖动：机体微微抖（幅度小但持续；中奖时叠加"激动"抖动）----
     const idleAmp = (st.hover > 0.5 ? 0.02 : 0.012) * calm;
@@ -169,37 +221,22 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       }
     }
 
-    // ---- 转轮：起转 → 匀速 → 减速 → 离散落槽 ----
+    // ---- 转轮：① 加速 → ② 长匀速 → ③ 指数减速（将停未停）→ ④ 卡入位（阻尼弹回槽位）----
     if (st.spin) {
       const s = st.spin;
       s.elapsed += dt;
       reels.forEach((r, i) => {
         if (s.locked[i]) return;
-        const lockAt = LOCK_AT[i % LOCK_AT.length];
-        const spinUp = Math.min(1, s.elapsed / 0.18);              // 起转加速
-        const remain = Math.max(0, lockAt - s.elapsed);
-        if (remain > 0.45) {
-          s.speed[i] = 26 * spinUp * (busy ? 1 : 0);               // 匀速段
-          s.angle[i] -= s.speed[i] * dt;                           // 负向转（视觉上是向上跑）
+        const p = s.plans[i];
+        if (s.elapsed >= p.tLock) {
+          r.rotation.x = p.target;                                 // 硬落槽（离散、无累积误差）
+          r.userData.index = p.targetIndex ?? r.userData.index;
+          s.locked[i] = true;
+          st.shake = Math.max(st.shake, 0.09);                     // 落槽小弹跳
+          st.shakeAmp = Math.max(st.shakeAmp, 0.02);
         } else {
-          // 末段：算出落点并缓入（离散停面 = 图案面角度）
-          const targetAngle = angleFor(s.targets[i], SYM);
-          // 从当前角继续（保持同向）补足到目标角
-          const cur = s.angle[i];
-          let goal = targetAngle;
-          while (goal > cur - Z * 0.75) goal -= Z;                 // 至少再转 3/4 圈，方向一致
-          const k = Math.max(0, Math.min(1, 1 - remain / 0.45));   // 0→1
-          const e = 1 - Math.pow(1 - k, 3);
-          s.angle[i] = cur + (goal - cur) * e;
-          if (remain <= 0.001) {
-            s.angle[i] = targetAngle;                              // 硬落槽（离散）
-            r.userData.index = s.targets[i];
-            s.locked[i] = true;
-            st.shake = Math.max(st.shake, 0.09);                   // 落槽小弹跳
-            st.shakeAmp = Math.max(st.shakeAmp, 0.02);
-          }
+          r.rotation.x = angleAt(p, s.elapsed);
         }
-        r.rotation.x = s.angle[i];
       });
       if (s.locked.every(Boolean)) {
         const tier = s.tier;
