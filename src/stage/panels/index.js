@@ -207,6 +207,7 @@ export function buildAscensionPanel(snap, { selected = new Set() } = {}) {
 const ROOM_META = {
   training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——每层训练记录在案，达标即可进阶' },
   camp: { name: '营地', glyph: '⛺', hint: '暂作休整，选择一件好事发生' },
+  campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
   slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
@@ -280,8 +281,8 @@ export function buildRoomPanel(snap) {
     return w;
   }
 
-  if (snap.room === 'camp') {
-    const c = snap.camp ?? { options: [] };
+  // 营地组（单房 'camp' 与合并房 'campTraining' 共用同一份）
+  const pushCampGroup = (c = { options: [] }) => {
     const tiles = [];
     if (c.options.includes('recoverRemi')) {
       tiles.push({ id: 'recoverRemi', name: '🐾 找回瑞米', desc: '那位老朋友回到了身边', action: { action: 'campChoose', option: 'recoverRemi' } });
@@ -293,6 +294,50 @@ export function buildRoomPanel(snap) {
     if (c.options.includes('upgrade')) {
       w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '或免费升级一张卡：' });
       w.push(upgradeButton('camp'));
+    }
+  };
+
+  if (snap.room === 'camp') {
+    pushCampGroup(snap.camp);
+    return w;
+  }
+
+  // 合并房（营地 · 训练场）：两个部分各一次；训练抉择中优先占屏，营地组在下方仍然可用
+  if (snap.room === 'campTraining') {
+    const t = snap.training ?? {};
+    const c = snap.camp ?? { options: [] };
+    if (t.choices?.length) {
+      w.push({
+        kind: 'sub', align: 'center', tint: '#9aa3b8',
+        text: t.forced ? '升级完成！必须择一张加入牌组：' : '择一张加入牌组：',
+      });
+      w.push({
+        kind: 'cards', idPrefix: 'train', cols: 3, scale: 0.8,
+        items: t.choicesCards.map(x => ({
+          defId: x.defId, view: withLabels(x.view),
+          action: { action: 'trainingDraw', defId: x.defId },
+        })),
+      });
+      if (!t.forced) {
+        w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingDraw', defId: null } });
+      }
+    } else if (!t.done && t.mode === 'upgrade') {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：免费升级一张卡（完成后须再择一张加入牌组）：' });
+      w.push(upgradeButton('training'));
+      w.push({ kind: 'button', id: 'train:skip', label: '跳过训练', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
+    } else if (!t.done) {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：暂无可升级的卡牌，改为抓一张（可跳过）。' });
+      w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌', action: { action: 'trainingDrawRoll' } });
+      w.push({ kind: 'button', id: 'train:skip', label: '跳过训练', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
+    } else {
+      w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练部分：本房已完成' });
+    }
+    w.push({ kind: 'sub', align: 'center', tint: c.used ? '#6f7a92' : '#9aa3b8', text: '营地部分（本房一次）：' });
+    if (c.used) w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '本房营地动作已用过' });
+    else pushCampGroup(c);
+    // 离房（强绑抓牌未领时不允许——completeRoom 也会拦，这里不给按钮以免误导）
+    if (!t.forced) {
+      w.push({ kind: 'button', id: 'room:leave', label: '离开', width: 240, size: 'sub', action: { action: 'leaveRoom' } });
     }
     return w;
   }

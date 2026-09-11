@@ -613,7 +613,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'prayerSystem', name: '祈祷制度', rarity: 'A', cost: 1,
+  id: 'prayerSystem', name: '祈祷制度', rarity: 'B', cost: 1,
   description: '战斗开始时，将 1 张/card{suppressionFire}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'suppressionFire', index: 'random' }));
@@ -621,7 +621,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'S', cost: 1,
+  id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'A', cost: 1,
   description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));

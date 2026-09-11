@@ -1,6 +1,6 @@
 import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies } from '../state/battleState.js';
-import { attackDamage, addCard, drawCards, leaveHandAtTurnEnd } from './cardKit.js';
+import { attackDamage, addCard, drawCards } from './cardKit.js';
 
 // 遗物生成的衍生牌（RELICS.md 2026-09-11 第二批）。
 // 四张牌都 `canSpawnAsReward: false`——它们**不进任何卡包/训练抓牌/商店**，
@@ -16,10 +16,10 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 3);
+    attackDamage(sctx, 5);
     return true;
   },
-  describe: () => '3伤害',
+  describe: () => '5伤害',
 });
 
 // 〈点射〉：黑火 H-3 战斗开始时洗入牌库。
@@ -30,27 +30,26 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 5);
+    attackDamage(sctx, 10);
     drawCards(sctx, 1, { reason: 'pointShot' });
     return true;
   },
-  describe: () => '5伤害，抽1',
+  describe: () => '10伤害，抽1',
 });
 
 // 〈压制射击〉：祈祷制度战斗开始时洗入牌库。
 registerSkill({
   id: 'suppressionFire', name: '压制射击', type: 'normal', tier: 'D', series: 'relic',
-  keywords: ['transient'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   canSpawnAsReward: false,
-  subscriptions: (sctx) => [leaveHandAtTurnEnd(sctx)], // 【短暂】非消耗：不打出也不许过夜
   use(sctx) {
     for (const e of aliveEnemies(sctx.battleState)) attackDamage(sctx, 15, { target: e, tags: ['aoe'] });
+    drawCards(sctx, 1, { reason: 'suppressionFire' });
     return true;
   },
-  describe: () => '15伤害（所有敌人）',
+  describe: () => '15伤害（所有敌人），抽1',
 });
 
 // 〈贯穿射击〉：低语苍鹰 Z 战斗开始时洗入牌库。

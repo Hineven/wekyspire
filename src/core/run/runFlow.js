@@ -31,13 +31,14 @@ export function deriveBattleSeed(seed, floor) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-// 奖励房派发（§1/§4）：打完 floor 层后进入的房间。
-// 训练房/营地保底是固定规则，其余按 run rng 四选一（占位等权，权重细则见 §9）。
+// 奖励房派发（§1/§4；2026-09-11 用户定：**营地与训练场合并**）。
+// 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地·训练场合并房**（二者总是一起出现，
+// 固定不随机）；其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
+// 后果（有意为之）：回复来源集中在合并层（2/6/10/14/18/21/26/30/32/34/38/42/43）。
 export function roomOfFloor(floor, rng) {
   if (isBossFloor(floor)) return null;   // Boss 层无奖励房（Boss 奖励=删卡，另行处理）
-  if (isPreBossFloor(floor)) return 'camp'; // 保底营地优先（与训练层 21 碰撞时营地胜出，§9）
-  if (isTrainingFloor(floor)) return 'training';
-  return rng.pick(['slot', 'camp', 'event']);
+  if (isPreBossFloor(floor) || isTrainingFloor(floor)) return 'campTraining';
+  return rng.pick(['slot', 'event']);
 }
 
 // 遭遇生成：floorEnemyGenerator 按楼层分段池 + HP/攻击缩放产出可序列化描述符。
@@ -130,10 +131,12 @@ export function completeRewards(run) {
 // 离开训练房时训练次数达标 → 直接进入进阶事件（§4.1/§5.3，不再延后）。
 export function completeRoom(run) {
   expectStage(run, 'room');
+  // 训练「先升后抓」的强绑尾款：升级已发生、抓牌未领 → 不允许离房（GUI/headless 同一守卫）
+  if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取，不能离开房间');
   const room = run.currentRoom;
   run.currentRoom = null;
   run.roomData = null;
-  if (room === 'training' && ascensionReady(run)) {
+  if ((room === 'training' || room === 'campTraining') && ascensionReady(run)) {
     run.gameStage = 'ascension';
     return run;
   }

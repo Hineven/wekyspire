@@ -535,10 +535,15 @@ registerEnemy({
   difficulty: { base: 3, min: 2, max: 4, floorMin: 4, floorMax: 16 },
   id: 'stoneCocoon', name: '石茧',
   createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 26 }),
+  // 苏醒回合参数（用户 2026-09-11 定）：wakeDelay = 沉眠几拍才苏醒（缺省 1 = 只沉眠一拍），
+  // **苏醒越晚 = 难度越低**（少叠一层力量 wakeStrength，且由遭遇生成侧按更低难度配额生成）。
+  // 同层多只石茧时，第二只起延迟一回合苏醒——否则「两只同拍醒＝每回合 20+ 伤」是
+  // 第 1 章最容易低估的死局（第 3 轮试玩两个正常局皆死于此）。
   act(actx) {
-    if (actx.unit.actionIndex === 0) {
+    const wakeDelay = actx.unit.wakeDelay ?? 1;
+    if (actx.unit.actionIndex < wakeDelay) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'strength', stacks: 2,
+        target: actx.unit, effectId: 'strength', stacks: actx.unit.wakeStrength ?? 2,
       }));
       return; // 沉眠：本拍不攻击
     }
@@ -546,11 +551,15 @@ registerEnemy({
       source: actx.unit, target: actx.player, amount: 8 + actx.unit.getStat('attack'),
     }));
   },
-  getIntention: (unit) => (unit.actionIndex === 0
-    // 沉睡期把「何时苏醒、苏醒后打多少」说清——两只同回合苏醒＝每回合 20+ 伤，
-    // 是第 1 章最容易低估的死因（第 3 轮试玩两个正常局皆死于此）。纯展示，不影响 AI。
-    ? { kinds: ['unknown'], note: '沉眠：下回合苏醒并获得力量2，此后每回合都攻击' }
-    : { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') }),
+  getIntention: (unit) => {
+    const wakeDelay = unit.wakeDelay ?? 1;
+    // 沉睡期把「还有几拍醒、醒了打多少」说清（纯展示，不影响 AI 行为）
+    if (unit.actionIndex < wakeDelay) {
+      const left = wakeDelay - unit.actionIndex;
+      return { kinds: ['unknown'], note: `沉眠：${left} 回合后苏醒并获得力量${unit.wakeStrength ?? 2}，此后每回合都攻击` };
+    }
+    return { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') };
+  },
 });
 
 // ⑰ 岩螺（第一章「苦战」底盘，2026-09 用户定：给慢慢磨的牌组留位置）：攻 4+攻击 ↔

@@ -392,7 +392,7 @@ registerSkill({
       return false;
     }
     // 抽牌已落地：把抽到的牌插回两侧原位
-    const drawn = sctx.self._draw.result.drawn;
+    const drawn = sctx.self._draw?.result?.drawn ?? []; // 抽牌可能被否决（滞气等）→ 结果为空
     sctx.self._draw = null;
     const { left: hadLeft, right: hadRight } = sctx.self._hadSides;
     sctx.self._hadSides = null;
@@ -788,7 +788,7 @@ const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
       return false;
     }
     // 抽牌落地：把抽到的牌按原手位升序插回（精确复原换牌前的手牌次序）
-    const drawn = sctx.self._swapDraw.result.drawn;
+    const drawn = sctx.self._swapDraw?.result?.drawn ?? []; // 同上：被「滞气」否决时无结果
     const slots = sctx.self._swapSlots;
     sctx.self._swapDraw = null;
     sctx.self._swapSlots = null;

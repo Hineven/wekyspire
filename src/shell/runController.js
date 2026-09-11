@@ -313,34 +313,48 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 训练房「先升后抓」：升级动作只挂起强制三选一（roomData.forced）不离房，
   // 抓牌领取/跳过/阶段一跳过三种终端任一发生才 completeRoom。
   // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
+  // 合并房（campTraining）：营地与训练各自一次；roomData 同时承载两个部分的记账，
+  // 所以「训练是否可用」不能再用 roomData 的真假判断，改看 trained/drawChoices。
+  const trainingLocked = () => !!run.roomData?.trained || !!run.roomData?.drawChoices;
+  const campLocked = () => !!run.roomData?.campUsed;
+  // 合并房不自动离房（两部分都要给机会），单房保持原语义「做完即离房」
+  function maybeLeaveRoom() {
+    if (run.gameStage !== 'room') return;
+    if (run.currentRoom === 'campTraining') { notify(); return; }
+    completeRoom(run);
+    notify();
+  }
   function trainingUpgrade(uniqueID) {
-    if (run.gameStage !== 'room' || run.roomData) return;
+    if (run.gameStage !== 'room' || trainingLocked()) return;
     trainUpgrade(run, uniqueID); // 内部已 roll 强制抓牌候选
     notify();
   }
   function trainingSkip() {
-    if (run.gameStage !== 'room' || run.roomData) return; // 已在抉择中 → 必须走对应选择
+    if (run.gameStage !== 'room' || trainingLocked()) return; // 已在抉择中 → 必须走对应选择
     skipTraining(run);
-    completeRoom(run);
-    notify();
+    maybeLeaveRoom();
   }
   function trainingDrawRoll() {
-    if (run.gameStage !== 'room' || run.roomData) return;
+    if (run.gameStage !== 'room' || trainingLocked()) return;
     trainDrawChoices(run);
     notify();
   }
   function trainingDraw(defId = null) {
-    if (run.gameStage !== 'room') return;
+    if (run.gameStage !== 'room' || !run.roomData?.drawChoices) return;
     trainDraw(run, defId); // forced 状态下 null 由核心抛错拦截（UI 不渲染跳过入口）
-    completeRoom(run);
-    notify();
+    maybeLeaveRoom();
   }
   function campChoose(option, uniqueID = null) {
-    if (run.gameStage !== 'room') return;
+    if (run.gameStage !== 'room' || campLocked()) return;
     if (option === 'rest') campRest(run);
     else if (option === 'recoverRemi') campRecoverRemi(run);
     else if (option === 'upgrade') campUpgrade(run, uniqueID);
-    completeRoom(run);
+    maybeLeaveRoom();
+  }
+  // 合并房的主动离房（单房由动作自动离房，不需要这个）
+  function leaveRoom() {
+    if (run.gameStage !== 'room') return;
+    completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
     notify();
   }
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
@@ -475,6 +489,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'campChoose') campChoose(intent.option, intent.uniqueID ?? null);
     else if (action === 'spin') spin();
     else if (action === 'slotAnimDone') reportSlotAnimDone(intent.id); // 舞台演出回执（非玩家意图）
+    else if (action === 'leaveRoom') leaveRoom();
     else if (action === 'leaveSlot') leaveSlot();
     else if (action === 'slotTake') slotTake(intent.choice ?? null);
     else if (action === 'slotDecline') slotDecline();
@@ -520,7 +535,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getBattleStage: () => battleStage,
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
-    campChoose, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
+    campChoose, leaveRoom, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };

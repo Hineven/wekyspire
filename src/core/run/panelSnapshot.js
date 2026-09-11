@@ -202,11 +202,13 @@ export function roomSnapshot(run, extra = {}) {
   }
   const upgradeCards = deckUpgradeCards(run);
 
-  if (room === 'training') {
+  // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地·训练场合并房）共用
+  if (room === 'training' || room === 'campTraining') {
     const choices = run.roomData?.drawChoices ?? null;
     snap.training = {
       mode: trainingMode(run),            // 'upgrade'（免费升一）| 'draw'（退化抓牌）
       forced: !!run.roomData?.forced,     // 升级后的强制尾款 → 不给跳过
+      done: !!run.roomData?.trained,      // 本房训练已完成（合并房里两个部分各自一次）
       choices,                            // 候选 defId 列表；null = 还没开局
       choicesCards: (choices ?? []).map(id => ({
         defId: id,
@@ -214,11 +216,16 @@ export function roomSnapshot(run, extra = {}) {
       })),
       upgradeCards,
     };
-    return snap;
+    if (room === 'training') return snap;
   }
 
-  if (room === 'camp') {
-    snap.camp = { options: campOptions(run), upgradeCards };
+  // 营地部分：'camp'（旧单房，兼容保留）与合并房共用
+  if (room === 'camp' || room === 'campTraining') {
+    snap.camp = {
+      options: campOptions(run),
+      upgradeCards,
+      used: !!run.roomData?.campUsed,     // 本房营地动作已用过（合并房各自一次）
+    };
     return snap;
   }
 

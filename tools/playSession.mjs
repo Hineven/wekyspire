@@ -589,9 +589,17 @@ export function exec(S, raw) {
         }
         throw new Error('售货机动作：act shop buy <#> / act shop claim <#|defId> [卡名]（离开用 next）');
       }
-      if (S.roomDone) throw new Error('本房间动作已完成，用 next 离开');
       const room = run.currentRoom;
-      if (room === 'camp') {
+      const merged = room === 'campTraining';
+      // 合并房（营地·训练场）：两个部分各自一次、互不阻塞，随时可 next 离房
+      const campUsed = merged ? !!run.roomData?.campUsed : !!S.roomDone;
+      const trainDone = merged ? !!run.roomData?.trained : !!S.roomDone;
+      // 合并房按**动作名**分流（营地动作 / 训练动作各一套），避免落到对方的报错分支
+      const goCamp = room === 'camp' || (merged && ['rest', 'remi', 'upgrade'].includes(a));
+      const goTraining = room === 'training' || (merged && ['up', 'draw', 'take', 'skipdraw', 'skip'].includes(a));
+      if (S.roomDone && !merged) throw new Error('本房间动作已完成，用 next 离开');
+      if (goCamp) {
+        if (campUsed) throw new Error('本房的营地动作已经用过了（合并房里训练部分仍可用）');
         if (a === 'rest') {
           const before = run.player.hp;
           campRest(run);
@@ -612,7 +620,8 @@ export function exec(S, raw) {
         }
         throw new Error('营地动作：act rest | act remi | act upgrade <构筑#> <卡名>');
       }
-      if (room === 'training') {
+      if (goTraining) {
+        if (trainDone) throw new Error('本房的训练已经完成了（合并房里营地部分仍可用）');
         if (a === 'up') {
           const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
           const gateErr = upgradeGateError(run, card);
@@ -635,6 +644,11 @@ export function exec(S, raw) {
         if (a === 'skipdraw') { trainDraw(run, null); S.roomDone = true; S.lastOutcome = '跳过训练抓牌'; return; }
         if (a === 'skip') { skipTraining(run); S.roomDone = true; S.lastOutcome = '跳过训练（计一次训练）'; return; }
         throw new Error('训练动作：act up <构筑#> <卡名> | act draw | act take <#> <卡名> | act skipdraw | act skip');
+      }
+      if (merged) {
+        throw new Error('合并房动作（营地）：act rest | act remi | act upgrade <构筑#> <卡名>'
+          + '｜（训练）：act up <构筑#> <卡名> | act draw | act take <#> | act skipdraw | act skip'
+          + '｜离开：next');
       }
       if (room === 'slot') {
         // 拉一次杆：产出会挂起（文档：产出总是可以放弃）→ 需 claim/drop 处理
@@ -983,25 +997,43 @@ export function render(S) {
     }
     if (S.roomDone) {
       // 状态行已在段首统一给出（report-r1-A 缺陷#8：避免有的房间给提示、有的不给）
-    } else if (room === 'camp') {
-      const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
-      L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比，之后 next）`);
-    } else if (room === 'training') {
-      L.push(`训练场（累计训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
-      if (run.roomData?.drawChoices) {
-        L.push(`抓牌候选:`);
-        run.roomData.drawChoices.forEach((id, i) => {
-          const def = getSkillDefinition(id);
-          const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
-          L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
-        });
-        L.push(`→ act take <#> <卡名>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
-      } else if (trainingMode(run) === 'upgrade') {
-        const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
-        L.push(`可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
-        L.push(`→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）/ act skip`);
-      } else {
-        L.push(`→ act draw（看候选）/ act skip`);
+    } else if (room === 'camp' || room === 'training' || room === 'campTraining') {
+      // 营地部分与训练部分各自一段；合并房（campTraining）两段都渲染
+      const renderCamp = () => {
+        const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
+        L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}`
+          + `（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比）`);
+      };
+      const renderTraining = () => {
+        L.push(`训练场（累计训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
+        if (run.roomData?.drawChoices) {
+          L.push(`抓牌候选:`);
+          run.roomData.drawChoices.forEach((id, i) => {
+            const def = getSkillDefinition(id);
+            const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
+            L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
+          });
+          L.push(`→ act take <#> <卡名>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
+        } else if (trainingMode(run) === 'upgrade') {
+          const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
+          L.push(`可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
+          L.push(`→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）/ act skip`);
+        } else {
+          L.push(`→ act draw（看候选）/ act skip`);
+        }
+      };
+      if (room !== 'training') {
+        if (run.roomData?.campUsed) L.push('营地部分：已用过（每房一次）');
+        else renderCamp();
+      }
+      if (room !== 'camp') {
+        if (run.roomData?.trained) L.push('训练部分：已完成（每房一次）');
+        else renderTraining();
+      }
+      if (room === 'campTraining') {
+        L.push(run.roomData?.forced
+          ? '（升级强绑抓牌未领：必须 act take <#>）'
+          : '（营地与训练各自可做一次，随时 next 离开）');
       }
     } else if (room === 'slot') {
       const v = slotView(run);
