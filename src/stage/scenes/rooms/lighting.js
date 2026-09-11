@@ -57,6 +57,20 @@ export const LIGHTING_PRESETS = {
     fire: { base: FIRE_BASE * 0.56, dist: 145, cap: 14 },
     tint: { base: [0.5, 0.53, 0.72], fireGain: [0.18, 0.22, 0.5], radius: 64 },
   },
+  // 赌厅（休息房·老虎机/银行机）：无窗室内，月光几乎进不来——亮度全交给灯池。
+  // 冷幽底（沿用 dungeon 冷调）+ 机器灯池偏暖金（P.gold 系），读作"赌具在发光"。
+  casino: {
+    hemi: [0x3a4666, 0x1f2130, 0.78],   // 环境光再压低（赌厅要暗、要聚光）
+    moon: 0.2,                           // 无窗：月光只留一点点方向感
+    fill: 0.09,
+    bounce: [[105, 92], [80, 82]],
+    battleGlow: [0x93a5d8, 3600, 165],   // 中景补光再收（别把赌厅洗平）
+    centerFill: [0xa89ac8, 2500, 150],   // 中央虚拟光偏紫一档（赌桌上方）
+    fire: { base: FIRE_BASE * 0.42, dist: 135, cap: 6 },       // 火位少而集中（赌厅不靠火把）
+    // 机器灯池 = 本房主角：更大更亮（冷银蓝，机器是主要光源），无火焰
+    lamp: { color: 0x9ab0e8, base: 4600, dist: 150, cap: 6 },
+    tint: { base: [0.5, 0.52, 0.7], fireGain: [0.2, 0.18, 0.42], radius: 60 },
+  },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
   'boss-rim': {
     hemi: [0x463a4a, 0x281e28, 1.0],
@@ -75,7 +89,7 @@ export const LIGHTING_PRESETS = {
  * 按预设组装灯光。fireAnchors=[{x,y,z}]（composeRoom 从 lightSource 道具收集的火位）。
  * @returns {group, torches, moonlight, tint, update(dt, particles)}
  */
-export function createLighting(key, fireAnchors = []) {
+export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const preset = LIGHTING_PRESETS[key];
   if (!preset) throw new Error(`lighting: 未知布光预设 "${key}"`);
   const group = new THREE.Group();
@@ -119,6 +133,19 @@ export function createLighting(key, fireAnchors = []) {
   const centerFill = new THREE.PointLight(cfColor, cfBase, cfDist, 2.0);
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
   group.add(centerFill);
+
+  // 灯池（`lamp` 锚：机器/招牌这类自发光体）：**只出点光、不出火焰粒子**——
+  // 与火点光共用同一套处方字段风格（preset.lamp = { color, base, dist, cap }）。
+  // 无闪烁（机器灯是稳的），也不投影（避免机器自遮挡出现硬边）。
+  if (preset.lamp) {
+    for (const a of lampAnchors.slice(0, preset.lamp.cap ?? 6)) {
+      const light = new THREE.PointLight(
+        preset.lamp.color ?? P.glowCyan, preset.lamp.base ?? 900, preset.lamp.dist ?? 90, 1.8,
+      );
+      light.position.set(a.x, a.y, a.z);
+      group.add(light);
+    }
+  }
 
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
   const torches = [];

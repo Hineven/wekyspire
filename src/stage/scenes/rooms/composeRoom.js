@@ -379,6 +379,12 @@ export function composeRoom(recipeId, seed = 'dev') {
   };
   const fireAnchors = [];   // 构图定点火源（最高优先级，必发光）
   const fireExtra = [];   // 撒布/立面收集的火位（cap 富余时依次点亮）
+  // 灯锚（`lamp` 标签：机器/招牌这类**自发光但不该冒火**的体）：单独一条通道，
+  // lighting 只生成点光池、不生成火焰粒子（见 lighting.js 的 lamp 处方）。
+  const lampAnchorOf = (p) => (p.tags.includes('lamp')
+    ? { x: p.x, y: p.y + Math.min(p.height * 0.7, 6), z: p.z }
+    : null);
+  const lampAnchors = [];
 
   // 扶壁肋墙带避让：件背缘与墙面间隙小于肋深时，给出沿离墙方向的推距（不推=0）。
   // 墙裙恒定 1.6 深，由基础间隙 2.0 覆盖；肋体更深，逐个核算。
@@ -514,10 +520,13 @@ export function composeRoom(recipeId, seed = 'dev') {
   for (const g of recipe.guaranteed || []) {
     const def = getProp(g.id);
     const obj = def.build({ rng: createRng(`${seed}:${recipeId}:g:${g.id}`) });
-    track(def, obj, { x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true });
-    claim(g.x, g.z, (def.footprint?.x ?? 2) / 2, (def.footprint?.z ?? 2) / 2);
+    const gsc = g.scale ?? 1;
+    track(def, obj, { x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true, scale: gsc });
+    claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
+    const lamp = lampAnchorOf(placements[placements.length - 1]);
+    if (lamp) lampAnchors.push(lamp);
   }
 
   // ---- 墙根角簇：大件沿墙密堆积，塑造几何起伏（用户反馈"墙角没有大件堆积"）----
@@ -804,7 +813,7 @@ export function composeRoom(recipeId, seed = 'dev') {
   group.add(merged, floorMerged, decalMerged);
 
   // ---- 布光 / 夜空 / 月光浮尘 ----
-  const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra]);
+  const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra], lampAnchors);
   group.add(lighting.group);
   const skydome = buildSkydome({ moonDir: new THREE.Vector3(-0.55, 0.5, -0.45), flat: true });
   group.add(skydome);
