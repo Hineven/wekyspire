@@ -74,7 +74,7 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
         }
         this._ask = new AwaitPlayerInputInstruction({
           request: {
-            kind: 'selectHandCard', count: Math.min(this.count, hand.length),
+            kind: 'selectCards', source: 'hand', count: Math.min(this.count, hand.length),
             reason: this.reason, candidates: hand.map(c => c.uniqueID),
           },
         });

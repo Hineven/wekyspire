@@ -479,23 +479,39 @@ export function exec(S, raw) {
         respondInput(battle, true);
       } else {
         const cands = request.candidates ?? [];
-        const rest = t.slice(1);
-        if (rest.length === 0 || rest.length % 2 !== 0) {
-          throw new Error('候选需成对「编号 卡名」：in <候选#> <卡名>（候选名见上方待输入列表）');
+        const min = request.min ?? request.count ?? 1;
+        const max = request.max ?? request.count ?? 1;
+        // 卡牌集里的卡可能来自任何区（手牌/牌库/焚毁…）：建 uniqueID → runtime 表用于卡名双重确认
+        const byId = new Map();
+        for (const z of ['hand', 'deck', 'burnt', 'pending']) {
+          for (const c of battle.battleState.zones[z]) byId.set(c.uniqueID, c);
         }
-        const ids = [];
-        for (let k = 0; k < rest.length; k += 2) {
-          const i = idxOk(num(rest[k]), cands.length, '候选');
+        const rest = t.slice(1);
+        // 支持两种写法：重复的「编号 卡名」对（推荐）或纯编号列表（in 1 3 5）
+        const picks = [];
+        for (let k = 0; k < rest.length; k++) {
+          if (!isIdxArg(rest[k])) throw new Error('候选只能用编号：in <候选#> [卡名] ...（候选名见待输入列表）');
+          const next = rest[k + 1];
+          const hasName = next != null && !isIdxArg(next);
+          picks.push({ idxArg: rest[k], nameArg: hasName ? next : undefined });
+          if (hasName) k += 1;
+        }
+        if (picks.length < min || picks.length > max) {
+          throw new Error(`本次要选 ${min === max ? `${min}` : `${min}~${max}`} 张，你给了 ${picks.length} 张`);
+        }
+        const ids = picks.map(({ idxArg, nameArg }) => {
+          const i = idxOk(num(idxArg), cands.length, '候选');
           const id = cands[i];
-          const card = battle.battleState.zones.hand.find(h => h.uniqueID === id);
-          if (card) { // 手牌候选做双重确认；非手牌候选（如有）无从校验，放行
-            const actual = defOf(card).name;
-            if (!nameMatches(rest[k + 1], actual)) {
-              throw new Error(`候选第${rest[k]}个是「${actual}」，不是「${rest[k + 1]}」——请对照待输入列表重试`);
+          if (nameArg != null) {
+            const card = byId.get(id);
+            const actual = card ? defOf(card).name : id;
+            if (!nameMatches(nameArg, actual)) {
+              throw new Error(`候选第${idxArg}个是「${actual}」，不是「${nameArg}」——请对照待输入列表重试`);
             }
           }
-          ids.push(id);
-        }
+          return id;
+        });
+        if (new Set(ids).size !== ids.length) throw new Error('同一张候选不能选两次');
         respondInput(battle, ids);
       }
       S.lastOutcome = '已应答输入';
@@ -942,15 +958,19 @@ export function render(S) {
     L.push(`本回合累计: 打${bs.history.turn.played} 弃${bs.history.turn.discarded} 抽${bs.history.turn.drawn}`);
     const pi = bs.pendingInput?.request;
     if (pi) {
-      L.push(`▶ 待输入: ${pi.prompt ?? pi.kind}${pi.count ? `（选${pi.count}张）` : ''}`);
+      const lo = pi.min ?? pi.count ?? 1;
+      const hi = pi.max ?? pi.count ?? 1;
+      const need = lo === hi ? `选 ${lo} 张` : `选 ${lo}~${hi} 张`;
+      L.push(`▶ 待输入: ${pi.reason ?? pi.prompt ?? pi.kind}${pi.kind === 'confirm' ? '' : `（${need}）`}`);
       if (pi.candidates?.length) {
-        L.push('  候选: ' + pi.candidates.map((id, i) => {
-          const c = bs.zones.hand.find(h => h.uniqueID === id);
-          return `[${i + 1}] ${c ? defOf(c).name : id}`;
-        }).join(' '));
+        const byId = new Map();
+        for (const z of ['hand', 'deck', 'burnt', 'pending']) for (const c of bs.zones[z]) byId.set(c.uniqueID, c);
+        L.push(`  候选（来源 ${pi.source ?? '?'}，共 ${pi.candidates.length} 张）: `
+          + pi.candidates.map((id, i) => `[${i + 1}] ${byId.has(id) ? defOf(byId.get(id)).name : id}`).join(' '));
       }
     }
-    L.push(`→ play <手牌#> <卡名> [敌#] / swap <手牌#> <卡名>（弃1抽1，费${swapCostOf(bs)}AP） / end / in <候选#> <卡名> / lib 看牌库`);
+    L.push(`→ play <手牌#> <卡名> [敌#] / swap <手牌#> <卡名>（弃1抽1，费${swapCostOf(bs)}AP） / end`
+      + ` / in <候选#> [卡名] …（多选就重复写，如 in 1 拳 3 盾） / why <手牌#> / lib 看牌库`);
     const log = battleLogText(S);
     if (log.length) {
       L.push(`最近结算:`);

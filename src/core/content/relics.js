@@ -4,9 +4,9 @@ import {
   DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
 } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
-import { DrawCardsInstruction } from '../instructions/cards.js';
+import { DrawCardsInstruction, AddCardInstruction, MoveCardInstruction } from '../instructions/cards.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { AddCardInstruction } from '../instructions/cards.js';
+import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { getEffectDefinition } from '../effects/registry.js';
@@ -625,5 +625,78 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));
+  },
+});
+
+// ---- 选牌类（2026-09-11：需要「从指定卡牌集里选 M~N 张」的结算期输入）----
+// 订阅/onBattleStart 里没有技能分段可用，所以用输入指令子类挂后续动作
+// （范式：test/asyncInput.test.js 的 CounterInputInstruction）。
+
+/** 选牌输入 + 应答后落地：then(ctx, selection) 里提交后续指令。 */
+class PickCardsInstruction extends AwaitPlayerInputInstruction {
+  constructor({ request, then = null }, opts = {}) {
+    super({ request }, opts);
+    this.then = then;
+  }
+
+  execute(ctx) {
+    const done = super.execute(ctx);
+    if (done === true) this.then?.(ctx, this.result?.selection ?? [], this);
+    return done;
+  }
+}
+
+// 胚胎（S·1槽）：战斗开始时从牌库中寻找 1 张自选入手。
+// RELICS.md 标注「仅在古尔帕斯的店购买」——古尔帕斯之店尚未实装，故暂按可抽取处理
+// （与其他古尔帕斯货同口径：先让它能被拿到、能被试玩）。
+registerRelic({
+  id: 'embryo', name: '胚胎', rarity: 'S', cost: 1,
+  description: '战斗开始时，从牌库中寻找 1 张牌，自选加入手牌。',
+  onBattleStart(ctx) {
+    const pool = ctx.battleState.zones.deck;
+    if (!pool.length) return;   // 空集守卫：候选为空时不发起请求（否则界面无合法应答）
+    ctx.kernel.submitInstruction(new PickCardsInstruction({
+      request: {
+        kind: 'selectCards', source: 'deck', min: 1, max: 1, reason: '胚胎：寻找一张牌加入手牌',
+        candidates: pool.map(c => c.uniqueID),
+      },
+      then: (c, sel, self) => {
+        for (const id of sel) {
+          c.kernel.submitInstruction(new MoveCardInstruction({ uniqueID: id, toZone: 'hand' }), self);
+        }
+      },
+    }));
+  },
+});
+
+// 原初拟态基质（A·3槽）：每场战斗一次，复制手牌中的一张牌。
+// 手牌要等初始抽牌之后才满（onBattleStart 早于 initialDraw）→ 挂首次抽牌的 POST。
+registerRelic({
+  id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 3,
+  description: '每场战斗一次：复制你手牌中的一张牌。',
+  onBattleStart(ctx) {
+    ctx.kernel.addSubscription({
+      when: DrawCardsInstruction,
+      phase: 'post',
+      window: 'once',           // 首次抽牌（初始抽牌）后触发一次
+      react: (instr, c) => {
+        const pool = c.battleState.zones.hand;
+        if (!pool.length) return; // 空集守卫
+        c.kernel.submitInstruction(new PickCardsInstruction({
+          request: {
+            kind: 'selectCards', source: 'hand', min: 1, max: 1, reason: '原初拟态基质：复制手牌中的一张牌',
+            candidates: pool.map(x => x.uniqueID),
+          },
+          then: (cc, sel, self) => {
+            for (const id of sel) {
+              const src = cc.battleState.zones.hand.find(x => x.uniqueID === id);
+              if (!src) continue;
+              // 复制 = 按同一 defId 新建一张入手（不继承该张的充能/冷却等实例计数——「复制品」语义）
+              cc.kernel.submitInstruction(new AddCardInstruction({ defId: src.defId, toZone: 'hand' }), self);
+            }
+          },
+        }), instr);
+      },
+    });
   },
 });
