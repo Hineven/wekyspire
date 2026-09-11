@@ -51,6 +51,22 @@
         margin: -5px 0 0 -5px; border: 1px solid #ffe08a; border-radius: 50%;
       }
       .anchor-pin b { position: relative; }
+      /* 机器交互条：聚焦时从下方滑出（游戏内会换成正式面板） */
+      #machine-bar {
+        position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(140%);
+        display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+        background: rgba(12, 16, 26, 0.92); border: 1px solid #3a465c; border-radius: 10px;
+        font: 13px/1.6 monospace; color: #cfd8e3; transition: transform 0.28s ease;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      }
+      #machine-bar.open { transform: translateX(-50%) translateY(0); }
+      #machine-bar button {
+        background: #182035; color: #ffe08a; border: 1px solid #55658a; border-radius: 6px;
+        padding: 8px 16px; font: 600 13px monospace; cursor: pointer;
+      }
+      #machine-bar button:hover { background: #232f4d; }
+      #machine-bar button:disabled { opacity: 0.45; cursor: default; }
+      #machine-title { color: #ffe08a; font-weight: 700; }
     </style>
   </head>
   <body>
@@ -67,6 +83,12 @@
         ｜ 金圈 = 交互锚点（?anchors=0 关）</div>
     </div>
     <div id="ui-safe"><span>休息面板安全区（UI 将覆盖此带）</span></div>
+    <!-- 机器交互条（聚焦某台机器时出现；真实游戏里换成正式面板，这里先做交互原型） -->
+    <div id="machine-bar">
+      <span id="machine-title"></span>
+      <span id="machine-body"></span>
+      <button id="machine-back">返回房间</button>
+    </div>
     <script type="module" src="/src/debug/restGallery.js"></script>
   </body>
 </html>

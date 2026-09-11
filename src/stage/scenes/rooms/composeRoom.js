@@ -135,6 +135,11 @@ export function composeRoom(recipeId, seed = 'dev') {
   staticRoot.name = `room:${recipeId}`;
   // 地板与撒印独立合批：它们是贴地接收面，castShadow 必须关——
   // 水平薄板对低角度月光自投影 = 全场阴影痤疮（dungeon3D 地板只 receive 的口径）
+  // 可动组件（`live: true` 的构图定点件：老虎机/银行机这类带复杂动画的交互物）——
+  // **不进静态合批**（合批后无法逐帧驱动子件），单独一根 root 并登记进 `interactives`
+  const liveRoot = new THREE.Group();
+  liveRoot.name = 'room:live';
+  const interactives = new Map();   // name -> { object, def, placement, kind }
   const floorRoot = new THREE.Group();
   floorRoot.name = 'room:floor';
   const decalRoot = new THREE.Group();
@@ -521,8 +526,18 @@ export function composeRoom(recipeId, seed = 'dev') {
     const def = getProp(g.id);
     const obj = def.build({ rng: createRng(`${seed}:${recipeId}:g:${g.id}`) });
     const gsc = g.scale ?? 1;
-    track(def, obj, { x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true, scale: gsc });
+    const live = !!g.live;
+    track(def, obj, {
+      x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true, scale: gsc,
+      root: live ? liveRoot : staticRoot,
+    });
     claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
+    if (live) {
+      interactives.set(g.name ?? g.id, {
+        object: obj, def, kind: obj.userData.interactive ?? g.id,
+        x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
+      });
+    }
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
     const lamp = lampAnchorOf(placements[placements.length - 1]);
@@ -810,7 +825,7 @@ export function composeRoom(recipeId, seed = 'dev') {
   decalMerged.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
   const group = new THREE.Group();
   group.name = `roomScene:${recipeId}`;
-  group.add(merged, floorMerged, decalMerged);
+  group.add(merged, floorMerged, decalMerged, liveRoot);
 
   // ---- 布光 / 夜空 / 月光浮尘 ----
   const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra], lampAnchors);
@@ -870,6 +885,7 @@ export function composeRoom(recipeId, seed = 'dev') {
     group,
     torches: lighting.torches,
     placements,
+    interactives,   // 可动组件登记（休息房的机器等）：{ object, parts, kind, x/z/ry }
     openings: { windows: left.windowRects, door },
     recipe,
     // 特殊色调（用户定 2026-09）：配方 grading 随契约下发——exposure=渲染曝光倍率；

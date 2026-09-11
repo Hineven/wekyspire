@@ -59,6 +59,48 @@ anchors: {
 主流程接线阶段据此做三件事：① 3D 侧把机器高亮/脉冲与面板按钮对应（点击机器 = 触发同一 intent）；
 ② 面板布局避开 `uiSafe` 带；③ 相机/取景沿用战斗参数（必要时后续加 `cam` 覆盖）。
 
+
+### 3.4 可动组件与交互层（用户定 2026-09-11）
+
+老虎机/银行机不是静态陈设，而是**场景中有复杂动画的可动组件**（后续同类：售货机、
+古佩·诗菲商店、部分剧情房——数量少，逐个单独开发）。
+
+**可动件契约**
+- 道具 `build()` 在返回的 Group 上挂 `userData.parts`（`body` / `leverPivot` / `reels[]`
+  / `bulbs[]` / `screen`…）与 `userData.interactive = 'slot' | 'bank'`。
+- 配方 `guaranteed` 条目加 `live: true` → `composeRoom` **不把它并入静态合批**，
+  放进 `liveRoot` 并登记到 `room.interactives`（`Map<name, { object, parts, kind, x, z, ry, scale }>`）。
+  静态件仍整体合批（`live: true` 只给需要逐帧驱动的件）。
+- 动画驱动在 `stage/scenes/interactive/*Rig.js`：**纯 Stage 层**（不读 Core/Bridge），
+  输入只有「拉杆时给定的结果」（调用方从 Core 拿）：
+
+```js
+const rig = createSlotMachineRig({ object, parts });
+rig.setHover(true);
+rig.pull({ tier: 'major', symbols: [0, 2, 4] });   // 后端在拉杆瞬间已定结果
+rig.update(dt);                                    // 宿主逐帧驱动
+```
+
+**老虎机反馈分层**（用户定，细节见 rig 顶部注释）
+| 层 | 表现 |
+| --- | --- |
+| 常驻 | 机体微微抖动（"活着"）+ 彩灯缓慢呼吸 |
+| hover | 机体轻微上浮放大 + 彩灯提亮 |
+| 拉杆 | 拉杆快速拉下 → **缓慢弹起**（弹性回位）；三点亮起同步起转 |
+| 转轮 | 起转 → 匀速 → 减速 → **离散落槽**；锁定次序 **左右先、中间最后**（`LOCK_AT`），落槽有"咔"式小弹跳 |
+| 中奖 | 彩灯按档位分级：小奖=跑马灯，大奖=跑马+全亮爆闪；大奖另加**机体激动抖动**（幅度/时长按档位） |
+
+**银行机**（克制型，SLOT_MACHINE.md：老虎机慷慨、银行机吝啬）：常驻指示灯呼吸 + 屏幕微亮浮动；
+`act('deposit'|'withdraw'|'overdraft')` → 屏幕闪亮 + 扫描线扫一次 + 指示灯追逐（颜色区分存/取）。
+
+**交互层**（进入房间后）
+- 机器上方**跳动的三维浮标**（菱形 + 竖直光柱，远景可读）+ 地面光环（hover 提亮）。
+- hover → 命中机器/浮标即高亮（rig.setHover + 光环）。
+- 点击 → **相机推到该机器屏幕前**（按整机包围盒 + 相机 fov 反算距离取景）+ 下方出现交互条
+  （老虎机「拉杆」、银行机「存钱」「取钱」；`Esc`/「返回房间」复位）。
+- 游戏内这一层会换成正式面板（`PanelObject` + `ButtonObject`）与 `Picker` 拾取；
+  本轮先在 `restGallery.html` 用 DOM 做交互原型（`?tier=` / `?symbols=` 可强制结果做视觉验证）。
+
 ## 4. 赌厅 `casino` 配方（第一间房）
 
 - 房间：`room.scale 0.86`（空间收缩、背墙拉近）、地面平整（机器/桌椅要站得稳，地形特征全关）、

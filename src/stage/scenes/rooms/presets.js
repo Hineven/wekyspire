@@ -429,8 +429,10 @@ const CASINO = {
   // 休息房的构图读法是"背墙 + 柜台 + 两机"，悬在大厅中央会读成空旷走廊。
   // 机器 1.35 倍放大：它们是交互焦点，体量要压得住场（guaranteed 支持 scale 覆盖）。
   guaranteed: [
-    { id: 'slotMachine', x: -12.5, z: -44, ry: 0.14, scale: 1.35 },
-    { id: 'bankMachine', x: 12.5, z: -44, ry: -0.14, scale: 1.35 },
+    // live: true = **可动组件**（不进静态合批，登记进 room.interactives 由 rig 驱动动画）
+    // 体量（用户定 2026-09-11）：老虎机再放大 1.5×（1.35×1.5≈2.0）、银行机放大一倍（≈2.7）
+    { id: 'slotMachine', x: -12.5, z: -44, ry: 0.14, scale: 2.0, live: true, name: 'slot' },
+    { id: 'bankMachine', x: 12.5, z: -44, ry: -0.14, scale: 2.7, live: true, name: 'bank' },
     { id: 'tableLong', x: 0, z: -47, ry: 0, scale: 1.3 },      // 柜台（两机之间的中轴）
     { id: 'stoolSquare', x: -12.5, z: -37, ry: 0.2, scale: 1.2 }, // 机器前的凳子（暗示可交互）
     { id: 'stoolSquare', x: 12.5, z: -37, ry: -0.2, scale: 1.2 },

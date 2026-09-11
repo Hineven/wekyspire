@@ -13,6 +13,8 @@ import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
+import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig.js';
+import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';
 
 const params = new URLSearchParams(location.search);
 
@@ -59,8 +61,16 @@ const orbit = {
 let room = null;
 let composer = null;
 let time = 0;
+const rigs = new Map();      // name -> rig（老虎机/银行机的动画驱动）
+const markerRings = [];      // name -> 地面光环（hover 提亮）
+let focused = null;          // 当前聚焦的机器名
+const camTween = { active: false, t: 0, dur: 0.85, from: null, to: null };
 
 const info = document.getElementById('room-info');
+const barEl = document.getElementById('machine-bar');
+const barTitle = document.getElementById('machine-title');
+const barBody = document.getElementById('machine-body');
+const barBack = document.getElementById('machine-back');
 const selector = document.getElementById('recipe-select');
 const seedInput = document.getElementById('seed-input');
 const safeEl = document.getElementById('ui-safe');
@@ -75,6 +85,144 @@ for (const id of Object.keys(RECIPES)) {
 }
 selector.value = params.get('recipe') || 'casino';
 seedInput.value = params.get('seed') || 'demo';
+
+// ---- 交互层（悬停高亮 / 点击聚焦 / 机器交互条）----
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let hovered = null;
+
+/** 屏幕坐标 → 命中的机器名（先打浮标，再打机器本体）。 */
+function pickMachine(clientX, clientY) {
+  if (!room) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  for (const m of markerRings) {
+    if (m.marker && raycaster.intersectObject(m.marker, true).length) return m.name;
+  }
+  for (const m of markerRings) {
+    if (m.entry && raycaster.intersectObject(m.entry.object, true).length) return m.name;
+  }
+  return null;
+}
+
+const bobbingScale = (name) => (name === hovered ? 1.35 : 1) * (1 + 0.08 * Math.sin(time * 3.4));
+
+function setHovered(name) {
+  if (hovered === name) return;
+  hovered = name;
+  canvas.style.cursor = name ? 'pointer' : 'default';
+  for (const m of markerRings) {
+    m.hover = m.name === name;
+    rigs.get(m.name)?.setHover(m.name === name);
+  }
+}
+
+/** 聚焦某台机器：相机推到它屏幕前 + 弹出交互条（游戏内换成正式面板）。 */
+function focusMachine(name) {
+  const m = markerRings.find(x => x.name === name);
+  if (!m) return;
+  const rig = rigs.get(name);
+  focused = name;
+  savedOrbit = { az: orbit.az, el: orbit.el, dist: orbit.dist, target: orbit.target.clone() };
+  // 屏幕件世界坐标（老虎机取中间转轮、银行机取屏幕）——比按锚点猜高度稳
+  // 按**整机包围盒**取景（机器放大后按固定距离会怼太近）：机位 = 中心 + 朝向 × 最大边 × 1.5
+  const box = new THREE.Box3().setFromObject(m.entry.object);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
+  // 按相机 fov 反算「装得下整机」的距离（垂直/水平取更远者；留 1.35 倍余量）
+  const vFov = (camera.fov * Math.PI) / 180;
+  const distV = (size.y * 1.35 / 2) / Math.tan(vFov / 2);
+  const distH = (Math.max(size.x, size.z) * 1.35 / 2) / Math.tan(vFov / 2) / Math.max(0.5, camera.aspect);
+  const dist = Math.max(distV, distH, 16);
+  const desired = center.clone().addScaledVector(fwd, dist).add(new THREE.Vector3(0, size.y * 0.12, 0));
+  const target = center.clone().add(new THREE.Vector3(0, size.y * 0.06, 0));
+  startCamTween(desired, target);
+
+  barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
+  barBody.innerHTML = name === 'slot'
+    ? '<button id="bar-pull">拉杆！（' + tier + '）</button><span id="bar-result"></span>'
+    : '<button id="bar-deposit">存钱</button><button id="bar-withdraw">取钱</button>';
+  if (name === 'slot') {
+    document.getElementById('bar-pull').onclick = () => {
+      const btn = document.getElementById('bar-pull');
+      btn.disabled = true;
+      const out = devOutcome();
+      rig.pull(out);
+      const res = document.getElementById('bar-result');
+      if (res) res.textContent = '';
+      const timer = setInterval(() => {
+        if (!rig.isBusy()) {
+          clearInterval(timer);
+          btn.disabled = false;
+          const zh = { none: '未中奖', minor: '小奖', major: '大奖' }[out.tier] ?? out.tier;
+          if (res) res.textContent = `→ ${zh}`;
+        }
+      }, 120);
+    };
+  } else {
+    document.getElementById('bar-deposit').onclick = () => rig.act('deposit');
+    document.getElementById('bar-withdraw').onclick = () => rig.act('withdraw');
+  }
+  barEl.classList.add('open');
+}
+
+let savedOrbit = null;
+function unfocusMachine() {
+  focused = null;
+  barEl.classList.remove('open');
+  if (savedOrbit) { startCamTween(null, null, savedOrbit); savedOrbit = null; }
+}
+
+/** 开发用结果：?tier= 强制档位、?symbols=0,2,4 强制落面（默认随机）。 */
+const tier = params.get('tier') ?? 'random';
+function devOutcome() {
+  const t = tier === 'random'
+    ? (Math.random() < 0.18 ? 'major' : (Math.random() < 0.55 ? 'minor' : 'none'))
+    : tier;
+  const symParam = params.get('symbols');
+  const symbols = symParam
+    ? symParam.split(',').map(Number).filter(Number.isInteger)
+    : null;
+  return { tier: t, symbols };
+}
+
+// 相机补间：把「期望机位」反解成轨道参数（保持 orbit 模型不变）
+function startCamTween(desired, target, override = null) {
+  const from = { az: orbit.az, el: orbit.el, dist: orbit.dist, target: orbit.target.clone() };
+  let to;
+  if (override) {
+    to = { az: override.az, el: override.el, dist: override.dist, target: override.target.clone() };
+  } else {
+    const dir = desired.clone().sub(target);
+    to = {
+      az: Math.atan2(dir.x, dir.z),
+      el: Math.asin(Math.max(-0.99, Math.min(0.99, dir.y / dir.length()))),
+      dist: Math.max(12, dir.length()),
+      target: target.clone(),
+    };
+  }
+  camTween.from = from;
+  camTween.to = to;
+  camTween.t = 0;
+  camTween.active = true;
+}
+
+function stepCamTween(dt) {
+  if (!camTween.active) return;
+  camTween.t = Math.min(1, camTween.t + dt / camTween.dur);
+  const k = 1 - Math.pow(1 - camTween.t, 3);
+  orbit.az = camTween.from.az + (camTween.to.az - camTween.from.az) * k;
+  orbit.el = camTween.from.el + (camTween.to.el - camTween.from.el) * k;
+  orbit.dist = camTween.from.dist + (camTween.to.dist - camTween.from.dist) * k;
+  orbit.target.lerpVectors(camTween.from.target, camTween.to.target, k);
+  if (camTween.t >= 1) camTween.active = false;
+}
+
+barBack.addEventListener('click', unfocusMachine);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && focused) unfocusMachine(); });
 
 function clearAnchors() {
   for (const el of anchorLayer) el.remove();
@@ -103,6 +251,50 @@ function rebuild() {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
+
+  // ---- 可动组件：建 rig + 悬浮标记 ----
+  rigs.clear();
+  markerRings.length = 0;
+  for (const [name, entry] of room.interactives ?? new Map()) {
+    const rig = entry.kind === 'slot'
+      ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
+      : createBankMachineRig({ object: entry.object, parts: entry.parts });
+    rigs.set(name, rig);
+    // 地面光环（hover 提亮；点它也能聚焦）
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
+      new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(entry.x, 0.12, entry.z + 1.2 * entry.scale);
+    room.group.add(ring);
+    markerRings.push({ name, ring });
+    // 悬浮浮标（远景可读：跳动菱形 + 竖直光柱；hover 放大变亮）
+    const marker = new THREE.Group();
+    marker.position.set(entry.x, 0, entry.z);
+    const bobY = (entry.kind === 'slot' ? 19 : 16) * (entry.scale / 2);
+    const bob = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 2.2, 2.2),
+      new THREE.MeshBasicMaterial({ color: 0xffe08a }),
+    );
+    bob.position.y = bobY;
+    bob.rotation.set(Math.PI / 4, Math.PI / 4, 0);   // 菱形
+    marker.add(bob);
+    // 竖直光柱：把浮标和机器连起来（远景也看得出"这台能点"）
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.5, bobY, 6, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
+    );
+    beam.position.y = bobY / 2;
+    marker.add(beam);
+    marker.userData.bob = bob;
+    marker.userData.beam = beam;
+    room.group.add(marker);
+    markerRings[markerRings.length - 1].marker = marker;
+    markerRings[markerRings.length - 1].entry = entry;
+  }
+  focused = null;
+  barEl.classList.remove('open');
 
   const placements = room.placements || [];
   const fires = placements.filter(p => p.tags.some(t => t === 'lightSource' || t === 'fire'));
@@ -155,10 +347,27 @@ function syncAnchorPins() {
 const freeOrbit = params.get('orbit') === '1';
 let dragging = false;
 let last = { x: 0, y: 0 };
-canvas.addEventListener('pointerdown', (e) => { if (!freeOrbit) return; dragging = true; last = { x: e.clientX, y: e.clientY }; });
-window.addEventListener('pointerup', () => { dragging = false; });
+let downAt = null;
+canvas.addEventListener('pointerdown', (e) => {
+  downAt = { x: e.clientX, y: e.clientY };
+  if (!freeOrbit) return;
+  dragging = true; last = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('pointerup', (e) => {
+  dragging = false;
+  // 点击（无明显拖动）→ 命中机器就聚焦
+  if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 6) {
+    const hit = pickMachine(e.clientX, e.clientY);
+    if (hit) focusMachine(hit);
+    else if (focused && !e.target.closest('#machine-bar')) unfocusMachine();
+  }
+  downAt = null;
+});
 window.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
+  if (!dragging) {
+    if (!focused) setHovered(pickMachine(e.clientX, e.clientY));
+    return;
+  }
   orbit.az -= (e.clientX - last.x) * 0.005;
   orbit.el = Math.min(1.2, Math.max(-0.1, orbit.el - (e.clientY - last.y) * 0.004));
   last = { x: e.clientX, y: e.clientY };
@@ -192,6 +401,21 @@ renderer.setAnimationLoop(() => {
   );
   camera.lookAt(orbit.target);
   room?.update(dt, null, camera.position);
+  for (const rig of rigs.values()) rig.update(dt);
+  // 浮标跳动 / 光环呼吸
+  for (const m of markerRings) {
+    const bob = m.marker?.userData?.bob;
+    if (bob) {
+      bob.position.y += Math.sin(time * 3.1 + (m.entry?.x ?? 0)) * 0.006;
+      bob.rotation.y += dt * 1.1;
+      const target = bobbingScale(m.name);
+      bob.scale.setScalar(bob.scale.x + (target - bob.scale.x) * Math.min(1, dt * 6));
+    }
+    if (m.ring) m.ring.material.opacity = 0.22 + 0.25 * (0.5 + 0.5 * Math.sin(time * 1.7 + 1)) + (m.hover ? 0.45 : 0);
+    const beam = m.marker?.userData?.beam;
+    if (beam) beam.material.opacity = 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(time * 2.3)) + (m.hover ? 0.3 : 0);
+  }
+  stepCamTween(dt);
   syncAnchorPins();
   if (composer) composer.render(renderer, scene, camera);
   else renderer.render(scene, camera);
@@ -205,3 +429,8 @@ window.__THREE = THREE;
 window.__roomRef = () => room;
 window.__rebuild = rebuild;
 window.__gallery = { scene, renderer, camera };
+// 调试/迭代句柄：直接聚焦某台机器、直接驱动 rig（无需用鼠标点 canvas）
+window.__focus = (name) => focusMachine(name);
+window.__unfocus = unfocusMachine;
+window.__rigs = rigs;
+window.__pull = (outcome) => rigs.get('slot')?.pull(outcome ?? devOutcome());

@@ -12,8 +12,8 @@ export default {
   id: 'bankMachine',
   place: 'prop',
   mount: 'floor',
-  tags: ['machine', 'metal', 'container', 'lamp', 'casino'],
-  footprint: { x: 2.8, z: 2.2 },
+  tags: ['machine', 'metal', 'container', 'lamp', 'casino', 'interactive'],
+  footprint: { x: 3.6, z: 2.8 },
   behaviors: [],
   build({ bodyH = 4.6, rng } = {}) {
     const g = new THREE.Group();
@@ -36,10 +36,15 @@ export default {
     const sy = y0 + bodyH * 0.66;
     g.add(K.put(K.box({ color: shade(P.iron, -0.1), size: [1.7, 1.15, 0.24], family: 'metal' }),
       0, sy, D / 2 + 0.02));
-    g.add(K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.1], family: 'unlit' }),
-      0, sy, D / 2 + 0.16));
-    g.add(K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.1], family: 'unlit' }),
-      0, sy - 0.32, D / 2 + 0.17));
+    // 屏幕与扫描线：kit 图元（unlit 顶点色）；**材质由 rig 换成独立实例**后逐帧驱动
+    const screen = K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.1], family: 'unlit' }),
+      0, sy, D / 2 + 0.16);
+    screen.userData.animRole = 'screen';
+    g.add(screen);
+    const scanline = K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.1], family: 'unlit' }),
+      0, sy - 0.32, D / 2 + 0.17);
+    scanline.userData.animRole = 'scanline';
+    g.add(scanline);
 
     // 键盘块：三行小键（unlit 微光，读作指示灯）+ 斜台
     const ky = y0 + bodyH * 0.34;
@@ -66,9 +71,17 @@ export default {
       g.add(K.put(K.box({ color: shade(P.iron, -0.26), size: [0.1, 0.5, 0.9], family: 'metal' }),
         W / 2 + 0.02, y0 + 1.0 + i * 0.6, -0.2));
     }
-    // 顶部一盏小指示灯（暗红）
-    g.add(K.put(K.sphereLo({ color: P.potionRed, r: 0.14, rng: r, family: 'unlit' }),
-      W / 2 - 0.35, y0 + bodyH + 0.42, 0));
+    // 顶部指示灯带（三个独立材质小灯：处理中逐灯闪）
+    const bulbs = [];
+    for (let i = 0; i < 3; i++) {
+      const mesh = K.sphereLo({ color: shade(P.potionRed, -0.35), r: 0.13, family: 'unlit' });
+      mesh.position.set(W / 2 - 0.75 + i * 0.4, y0 + bodyH + 0.42, 0);
+      mesh.userData.animRole = 'bulb';
+      g.add(mesh);
+      bulbs.push(mesh);
+    }
+    g.userData.parts = { body: g, screen, scanline, bulbs };
+    g.userData.interactive = 'bank';
 
     return g;
   },
