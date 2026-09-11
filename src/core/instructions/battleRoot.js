@@ -6,6 +6,8 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
+import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
+import { AddEffectInstruction } from './effects.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
@@ -32,6 +34,13 @@ export class PreBattleInstruction extends BattleInstruction {
       // 传 battleState：把遗物声明的**本场**修正一起折入（battleState.modifiers 每场新建 = 0，
       // 所以本场动态修正在这里天然从零起算）。
       refreshRunModifiers(runState, battleState);
+
+      // 跨战斗恶魔词条（银行机超额取款）：写本场标量（失明/抽牌惩罚/不回魏启/回合末死亡/持续伤害）
+      // 并收集「战斗开始类效果」——它们作为本 stage 的子指令执行（在回合循环之前）
+      const debuffEffects = applyPendingDebuffsToBattle(runState, battleState);
+      for (const [effectId, stacks] of debuffEffects) {
+        ctx.kernel.submitInstruction(new AddEffectInstruction({ target: player, effectId, stacks }));
+      }
 
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
       // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1

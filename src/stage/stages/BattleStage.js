@@ -376,7 +376,8 @@ export class BattleStage {
       obj.position.set(tr.x, tr.y, tr.z);
       obj._baseScale = tr.scale;
       if (!unitProj.isDead) obj.scale.set(tr.scale, tr.scale, 1);
-      obj.setUnit(unitProj);
+      // 失明（银行机恶魔词条）：敌人意图不可见 → 清空意图条（玩家只能靠猜）
+      obj.setUnit(proj.blind && side === 'enemy' ? { ...unitProj, intention: null } : unitProj);
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));

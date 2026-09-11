@@ -102,6 +102,8 @@ export function projectBattle(battle) {
       maxActionPoints: ctx.player.maxActionPoints,
     },
     enemies: battleState.enemies.map(projectUnit),
+    // 失明（银行机恶魔词条）：玩家看不见敌人意图（Stage 据此隐藏意图条）
+    blind: !!battleState.debuffs?.blind,
     allies: battleState.allies.map(projectUnit),
     // 手牌额外带 usable：可用性判定本体在 core（canUseSkill），本地渲染直接调 core；
     // 但直播观战端没有 core，只能吃投影——故随投影下发，远端 bridge 据此回答

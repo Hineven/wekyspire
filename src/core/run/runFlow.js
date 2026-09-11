@@ -5,6 +5,7 @@ import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
 import { ensureShopStock } from './rooms/shop.js';
+import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
 import { activeRelics } from './prep.js';
 import { getRelicDefinition } from '../relics/registry.js';
 
@@ -108,7 +109,10 @@ export function finishBattle(run, verdict, battle = null) {
   } else {
     run.gameStage = 'end';
     run.result = 'defeat';
+    bankOnDeath(run);   // 死亡导致银行机存款清空（SLOT_MACHINE.md）
   }
+  // 跨战斗恶魔词条：本场已消耗一场
+  consumePendingDebuffs(run);
   return run;
 }
 
@@ -122,6 +126,8 @@ export function completeRewards(run) {
     run.gameStage = 'room';
     // 售货机与房间**并存**（不占房间名额）：商店层进房时把当层货架掷好（按楼层缓存）
     ensureShopStock(run);
+    // 银行机与老虎机成对出现：进老虎机房即算"见到银行机一次"（递减超额取款黑名单）
+    if (run.currentRoom === 'slot') bankOnVisit(run);
     return run;
   }
   return advanceFloor(run); // Boss 层无奖励房，直接推进
@@ -152,6 +158,8 @@ export function advanceFloor(run) {
     return run;
   }
   run.gameStage = 'prep';
+  // 银行机计息（SLOT_MACHINE.md：每过一层连击 +1 并按档位结算存款利息）
+  accrueBankInterest(run);
   run.encounter = generateEncounter(run);
   return run;
 }

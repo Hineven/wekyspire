@@ -34,6 +34,9 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     slotDevour: 0,               // 吞噬累积（跨遇到；满 SLOT.devourEvery 可吞噬，用掉清零）
     slotFreeRolls: 0,            // 免费 roll（诅咒卡吞噬奖励）
     slotApples: 0,               // 故事模式：老虎机给出的苹果数（第 5/11 次小奖）
+    // 银行机（SLOT_MACHINE.md §银行机）：跨遇到常驻（存款/连击/黑名单）；见 rooms/bank.js
+    bank: null,                  // { deposit, combo, visits, lockout, blackCleared, pendingRoll, offers }
+    pendingDebuffs: [],          // 跨战斗恶魔词条队列 [{ id, battlesLeft }]（PreBattle 折入、战后递减）
     shopPending: null,           // 买到即开的卡包待选 { packId, choices }（选完才回房）
     shopAppleBought: false,      // 售货机的苹果全流程仅一件（故事模式）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）

@@ -163,9 +163,16 @@ export class MapStage {
   _openUpgradePicker(source) {
     // 只展示**可升级**的卡：原来把整副牌组都渲染出来（不可升级的置灰可见），
     // 玩家要在一堆灰卡里找目标（用户 2026-09-11 报）。快照里 enabled 即"有晋升目标"。
+    const isBankUpgrade = source === 'bankUpgrade';
+    const isBankBurn = source === 'bankBurn';
     const cards = (source === 'camp'
       ? (this._snap?.camp?.upgradeCards ?? [])
-      : (this._snap?.training?.upgradeCards ?? [])).filter(c => c.enabled);
+      : source === 'training'
+        ? (this._snap?.training?.upgradeCards ?? [])
+        : isBankUpgrade
+          ? (this._snap?.bank?.upgradeCards ?? [])
+          : (this._snap?.bank?.burnCards ?? []))    // bankBurn：焚毁候选（含 S 级豁免过滤）
+      .filter(c => c.enabled !== false);
     if (!cards.length) return;
     if (!this._cardPicker) {
       this._cardPicker = new CardScrollPickerObject({
@@ -179,20 +186,26 @@ export class MapStage {
           // 升级意图：营地与训练场各有各的入口（语义在 runController 落地）
           this._onIntent?.(source === 'camp'
             ? { action: 'campChoose', option: 'upgrade', uniqueID }
-            : { action: 'trainingUpgrade', uniqueID });
+            : source === 'training'
+              ? { action: 'trainingUpgrade', uniqueID }
+              : isBankUpgrade
+                ? { action: 'bankUpgradeOffer', uniqueID }
+                : { action: 'bankBurnOffer', uniqueID });
         },
       });
       this.uiScene.add(this._cardPicker);
     }
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
-      title: '选择要升级的卡',
-      hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
+      title: isBankBurn ? '选择要焚毁的卡' : '选择要升级的卡',
+      hint: isBankBurn
+        ? '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页'
+        : '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
       cards: cards.map(c => ({
         uniqueID: c.uniqueID, defId: c.defId, view: c.view,
         enabled: c.enabled, tipDefId: c.tipDefId,
       })),
-      confirmLabel: '确认升级',
+      confirmLabel: isBankBurn ? '确认焚毁' : '确认升级',
     });
     this._pickerFocus = 'upgrade';
   }

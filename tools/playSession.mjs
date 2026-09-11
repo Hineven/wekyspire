@@ -56,6 +56,10 @@ import {
   devourSlot, devourableRelics, devourableCards,
 } from '../src/core/run/rooms/slotMachine.js';
 import { buyShopItem, takeShopCard } from '../src/core/run/rooms/shop.js';
+import {
+  bankView, bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
+  pendingDebuffViews,
+} from '../src/core/run/rooms/bank.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'tmp', 'playtests');
@@ -703,6 +707,49 @@ export function exec(S, raw) {
           S.lastOutcome = `吞噬${b}：+${res.gold}金币${res.freeRoll ? '（下次 roll 免费）' : ''}`;
           return;
         }
+        if (a === 'bank') {
+          // 银行机（与老虎机成对出现）：deposit [n] / withdraw / overdraft <档> / pick <词条id>
+          // / upgrade <构筑#> <卡名>（词条的立即升级）/ burn <构筑#> <卡名>（词条的自选焚毁）
+          const sub = b;
+          if (sub === 'deposit') {
+            const amt = t[3] != null ? num(t[3]) : null;
+            const v = bankDeposit(run, amt);
+            S.lastOutcome = `存款 ${amt ?? '（全部）'} → 存款 ${v.deposit} 金（连击 ${v.combo}）`;
+            return;
+          }
+          if (sub === 'withdraw') {
+            const { gold, view } = bankWithdraw(run);
+            S.lastOutcome = `取款 +${gold} 金 → 持有 ${view.money}（连击清零）`;
+            return;
+          }
+          if (sub === 'overdraft') {
+            const v = bankOverdraft(run, t[3]);
+            S.lastOutcome = `超额取款(${t[3]}) 到手 ${v.pendingRoll.gold} 金｜候选词条：`
+              + v.pendingRoll.options.map(o => `${o.name}[${o.id}]`).join(' / ') + '（用 act bank pick <id> 选一个）';
+            return;
+          }
+          if (sub === 'pick') {
+            const out = chooseDemonDebuff(run, t[3]);
+            S.lastOutcome = `承受恶魔词条「${out.name}」`
+              + (out.battle ? `（未来 ${out.battle.battles} 场战斗生效）` : '（立即生效）');
+            return;
+          }
+          if (sub === 'upgrade') {
+            const card = run.player.deck[resolveHandStrict(run.player.deck, t[3], t[4], '构筑卡')];
+            const before = defOf(card).name;
+            bankUpgrade(run, card.uniqueID);
+            S.lastOutcome = `词条附赠升级：${before} → ${defOf(card).name}`;
+            return;
+          }
+          if (sub === 'burn') {
+            const card = run.player.deck[resolveHandStrict(run.player.deck, t[3], t[4], '构筑卡')];
+            const name = bankBurn(run, card.uniqueID);
+            S.lastOutcome = `词条附赠焚毁：${name} 已移出牌库`;
+            return;
+          }
+          throw new Error('银行机动作：act bank deposit [金额] | withdraw | overdraft <yellow|red|black>'
+            + ' | pick <词条id> | upgrade <构筑#> <卡名> | burn <构筑#> <卡名>');
+        }
         if (a === 'skip') { // 不拉杆直接走：老虎机期望为负时这是最高频操作，不该逼玩家换用 next
           completeRoom(run); S.roomDone = false;
           S.lastOutcome = '跳过老虎机（未拉杆）离开房间';
@@ -1061,6 +1108,31 @@ export function render(S) {
         + (v.freeRolls ? `｜免费 ${v.freeRolls} 次` : '')
         + `｜小奖 ${Math.round(v.minorChance * 100)}% 大奖 ${Math.round(v.majorChance * 100)}%（未中累加）`);
       L.push(`吞噬进度 ${v.devourProgress}/${v.devourEvery}${v.devourReady ? '（可吞噬）：act devour relic <遗物id> / act devour card <构筑#>' : ''}`);
+      // 银行机（与老虎机成对出现）
+      {
+        const bk = bankView(run);
+        L.push(`🏦 银行机：存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`
+          + (bk.deposit > 0 ? `（再攒一层 +${bk.nextInterest}）` : ''));
+        const pend = pendingDebuffViews(run);
+        if (pend.length) L.push(`  身负恶魔词条：${pend.map(d => `${d.name}(剩${d.battlesLeft}场)`).join('、')}`);
+        if (bk.pendingRoll) {
+          L.push(`  恶魔 roll（${bk.pendingRoll.tier} 档，已入账 ${bk.pendingRoll.gold} 金）——必须选一个：`);
+          for (const o of bk.pendingRoll.options) L.push(`    ${o.name}[${o.id}]：${o.desc}`);
+          L.push('  → act bank pick <词条id>');
+        } else {
+          const acts = [];
+          if (bk.money > 0) acts.push('act bank deposit [金额]');
+          if (bk.deposit > 0) acts.push('act bank withdraw');
+          if (bk.canOverdraft) acts.push('act bank overdraft <yellow|red|black>');
+          else if (bk.lockout > 0) L.push(`  （通过黑色级后，银行机再过 ${bk.lockout} 次见面才允许超额取款）`);
+          if (acts.length) L.push(`  → ${acts.join(' | ')}`);
+        }
+        for (const offer of bk.offers) {
+          L.push(offer === 'upgrade'
+            ? '  → act bank upgrade <构筑#> <卡名>（词条附赠：立即免费升级一张）'
+            : '  → act bank burn <构筑#> <卡名>（词条附赠：自选焚毁一张）');
+        }
+      }
       if (run.slotPending) {
         L.push(`待处理产出：${slotResultText(run.slotPending)}`);
         const pd = run.slotPending;

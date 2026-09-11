@@ -20,6 +20,9 @@ import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import {
+  bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
+} from '../core/run/rooms/bank.js';
+import {
   SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
   devourSlot, devourableRelics, devourableCards, slotView,
 } from '../core/run/rooms/slotMachine.js';
@@ -356,6 +359,22 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     maybeLeaveRoom();
   }
   // 合并房的主动离房（单房由动作自动离房，不需要这个）
+  // ---- 银行机（与老虎机成对；SLOT_MACHINE.md §银行机）----
+  function bankDo(kind, arg) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
+    try {
+      if (kind === 'deposit') bankDeposit(run, arg ?? null);       // 缺省 = 全部存入
+      else if (kind === 'withdraw') bankWithdraw(run);
+      else if (kind === 'overdraft') bankOverdraft(run, arg);
+      else if (kind === 'pick') chooseDemonDebuff(run, arg);
+      else if (kind === 'upgradeOffer') bankUpgrade(run, arg);
+      else if (kind === 'burnOffer') bankBurn(run, arg);
+    } catch (err) {
+      console.warn('[bank]', err.message);
+    }
+    notify();
+  }
+
   function leaveRoom() {
     if (run.gameStage !== 'room') return;
     completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
@@ -493,6 +512,12 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'campChoose') campChoose(intent.option, intent.uniqueID ?? null);
     else if (action === 'spin') spin();
     else if (action === 'slotAnimDone') reportSlotAnimDone(intent.id); // 舞台演出回执（非玩家意图）
+    else if (action === 'bankDeposit') bankDo('deposit', intent.amount ?? null);
+    else if (action === 'bankWithdraw') bankDo('withdraw');
+    else if (action === 'bankOverdraft') bankDo('overdraft', intent.tier);
+    else if (action === 'bankPick') bankDo('pick', intent.id);
+    else if (action === 'bankUpgradeOffer') bankDo('upgradeOffer', intent.uniqueID);
+    else if (action === 'bankBurnOffer') bankDo('burnOffer', intent.uniqueID);
     else if (action === 'leaveRoom') leaveRoom();
     else if (action === 'leaveSlot') leaveSlot();
     else if (action === 'slotTake') slotTake(intent.choice ?? null);
@@ -539,7 +564,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getBattleStage: () => battleStage,
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
-    campChoose, leaveRoom, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
+    campChoose, leaveRoom, bankDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };

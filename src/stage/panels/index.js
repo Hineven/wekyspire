@@ -451,6 +451,81 @@ export function buildRoomPanel(snap) {
         });
       }
     }
+    // —— 银行机（与老虎机成对出现；SLOT_MACHINE.md §银行机）——
+    const bk = snap.bank;
+    if (bk) {
+      w.push({ kind: 'gap' });
+      w.push({ kind: 'sub', align: 'center', tint: '#9ccfff', text: '🏦 银行机' });
+      w.push({
+        kind: 'sub', align: 'center', tint: '#9aa3b8',
+        text: `存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`,
+      });
+      if (bk.deposit > 0) {
+        w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金` });
+      }
+      if (bk.pendingDebuffs?.length) {
+        w.push({
+          kind: 'sub', align: 'center', tint: '#ff8a80',
+          text: '身负恶魔词条：' + bk.pendingDebuffs.map(d => `${d.name}(剩${d.battlesLeft}场)`).join('、'),
+        });
+      }
+      if (bk.pendingRoll) {
+        w.push({
+          kind: 'text', align: 'center', tint: '#ff8a80',
+          text: `恶魔 roll（已入账 ${bk.pendingRoll.gold} 金）：必须选一个词条承受`,
+        });
+        for (const o of bk.pendingRoll.options) {
+          w.push({
+            kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
+            label: `${o.name}：${o.desc}`,
+            action: { action: 'bankPick', id: o.id },
+          });
+        }
+      } else {
+        if (bk.money > 0) {
+          w.push({
+            kind: 'button', id: 'bank:deposit', width: 300, size: 'sub',
+            label: `存入全部（${bk.money} 金）`,
+            action: { action: 'bankDeposit' },
+          });
+        }
+        if (bk.deposit > 0) {
+          w.push({
+            kind: 'button', id: 'bank:withdraw', width: 340, size: 'sub',
+            label: `取款（${bk.deposit} 金，会打断连击）`,
+            action: { action: 'bankWithdraw' },
+          });
+        }
+        if (bk.canOverdraft) {
+          w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '超额取款（立刻拿钱，代价是恶魔词条）：' });
+          for (const t of bk.tiers) {
+            w.push({
+              kind: 'button', id: `bank:overdraft:${t.id}`, width: 240, size: 'sub',
+              label: `${t.name} +${t.gold} 金`,
+              action: { action: 'bankOverdraft', tier: t.id },
+            });
+          }
+        } else if (bk.lockout > 0) {
+          w.push({
+            kind: 'sub', align: 'center', tint: '#77809a',
+            text: `银行机暂时不让你超额取款（再过 ${bk.lockout} 次见面）`,
+          });
+        }
+      }
+      for (const offer of bk.offers ?? []) {
+        w.push(offer === 'upgrade'
+          ? {
+            kind: 'button', id: 'bank:offerUpgrade', width: 320, size: 'sub',
+            label: '立即免费升级一张卡',
+            action: { action: 'openUpgradePicker', source: 'bankUpgrade', local: true },
+          }
+          : {
+            kind: 'button', id: 'bank:offerBurn', width: 320, size: 'sub',
+            label: '自选焚毁一张卡',
+            action: { action: 'openUpgradePicker', source: 'bankBurn', local: true },
+          });
+      }
+    }
     w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
     return w;
   }

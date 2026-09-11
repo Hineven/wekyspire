@@ -27,6 +27,7 @@ import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
 import { slotView, devourableRelics, devourableCards } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor } from './rooms/shop.js';
+import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
@@ -230,6 +231,15 @@ export function roomSnapshot(run, extra = {}) {
   }
 
   if (room === 'slot') {
+    // 银行机与老虎机成对出现：状态、利率、超额取款档位与待选词条一并下发；
+    // 词条附赠的「升级/焚毁一张」走同一份选卡快照（Stage 只认数据，不拉 run 状态）
+    snap.bank = {
+      ...bankView(run),
+      pendingDebuffs: pendingDebuffViews(run),
+      upgradeCards: deckUpgradeCards(run).filter(c => c.enabled),
+      // 焚毁候选：整副牌组去掉 S 级（词条口径「不会焚 S 级卡」）
+      burnCards: deckUpgradeCards(run).filter(c => getSkillDefinition(c.defId)?.tier !== 'S'),
+    };
     const anim = extra.slot?.anim ?? null;
     const lastSpin = extra.slot?.lastSpin ?? null;
     const view = slotView(run);
