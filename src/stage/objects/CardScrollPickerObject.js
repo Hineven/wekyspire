@@ -39,8 +39,8 @@ const LAYOUT = {
   cardScale: 0.62,
   gapX: 2,
   gapY: 2.4,
-  barX: HALF_UI_W - 2.4,   // 滚动条靠右
-  barW: 0.9,
+  barX: HALF_UI_W - 2.0,   // 滚动条靠右
+  barW: 0.42,              // 更细（用户 2026-09-11）；thumb 略宽于轨道便于抓握
 };
 const CARD_ID = (uniqueID) => `picker:card:${uniqueID}`;
 const BACK_ID = 'picker:back';
@@ -258,13 +258,14 @@ export class CardScrollPickerObject extends THREE.Group {
       bandTop: LAYOUT.bandTop, bandH,
       track: this._addNode(new THREE.Mesh(
         new THREE.PlaneGeometry(LAYOUT.barW, bandH),
-        new THREE.MeshBasicMaterial({ color: 0x2b3552, transparent: true, opacity: 0.9 }),
+        // 空闲态淡化（不再是不透明的粗条）：滚动时才由 _syncScrollbar 提亮
+        new THREE.MeshBasicMaterial({ color: 0x2b3552, transparent: true, opacity: 0.22 }),
       ), { x: LAYOUT.barX, y: (LAYOUT.bandTop + LAYOUT.bandBottom) / 2, z: Z.CONTENT }),
       thumb: null,
     };
     this._bar.thumb = this._addNode(new THREE.Mesh(
-      new THREE.PlaneGeometry(LAYOUT.barW + 0.6, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffd75e, transparent: true, opacity: 0.85 }),
+      new THREE.PlaneGeometry(LAYOUT.barW + 0.28, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffd75e, transparent: true, opacity: 0.45 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
   }
@@ -272,9 +273,13 @@ export class CardScrollPickerObject extends THREE.Group {
   _syncScrollbar() {
     const bar = this._bar;
     if (!bar?.thumb) return;
-    if (this._maxScroll <= 0) { bar.track.visible = false; bar.thumb.visible = false; return; }
+    // 无需滚动：整条淡化到几乎不可见（而非原先的"直接隐藏"——淡化的轨道仍提示这里可滚）
+    const idle = this._maxScroll <= 0;
     bar.track.visible = true;
-    bar.thumb.visible = true;
+    bar.thumb.visible = !idle;
+    bar.track.material.opacity = idle ? 0.08 : 0.22;
+    if (idle) return;
+    bar.thumb.material.opacity = 0.45;
     const ratio = bar.bandH / (bar.bandH + this._maxScroll);
     bar.thumbH = Math.max(4, bar.bandH * ratio);
     bar.thumb.scale.set(1, bar.thumbH / 6, 1);

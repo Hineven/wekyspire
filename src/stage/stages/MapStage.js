@@ -161,9 +161,11 @@ export class MapStage {
   // 按下升级按钮进入：界面渲染**牌组全部卡**（不可升级的置灰），hover 预览升级后的卡面，
   // 可返回/确认。选卡与开关都是舞台本地交互态（不惊动 core），确认时才上报意图。
   _openUpgradePicker(source) {
-    const cards = source === 'camp'
+    // 只展示**可升级**的卡：原来把整副牌组都渲染出来（不可升级的置灰可见），
+    // 玩家要在一堆灰卡里找目标（用户 2026-09-11 报）。快照里 enabled 即"有晋升目标"。
+    const cards = (source === 'camp'
       ? (this._snap?.camp?.upgradeCards ?? [])
-      : (this._snap?.training?.upgradeCards ?? []);
+      : (this._snap?.training?.upgradeCards ?? [])).filter(c => c.enabled);
     if (!cards.length) return;
     if (!this._cardPicker) {
       this._cardPicker = new CardScrollPickerObject({
@@ -185,7 +187,7 @@ export class MapStage {
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
       title: '选择要升级的卡',
-      hint: '悬停查看升级后的卡面 ｜ 只有可升级的卡能被选中，滚轮翻页',
+      hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
       cards: cards.map(c => ({
         uniqueID: c.uniqueID, defId: c.defId, view: c.view,
         enabled: c.enabled, tipDefId: c.tipDefId,

@@ -117,7 +117,15 @@ function onPointer(type) {
 
 // 预生成指针 handler：模板里直接写 onPointer('x') 只会调工厂丢弃闭包，$event 传不进去
 const onPointerMove = onPointer('handlePointerMove');
-const onPointerWheel = onPointer('handleWheel');
+// 滚轮专用：通用 onPointer 传的是指针坐标，而 handleWheel 要的是 **e.deltaY**
+// （原实现把 clientX 当 deltaY 传进去，导致只能向下滚、无法向上——交互 bug 已修）。
+// 方向保持浏览器原生语义（向下滚 deltaY > 0 = 内容上移/看后面的卡）。
+function onWheel(e) {
+  const stage = activeStage();
+  if (!stage?.handleWheel) return;
+  e.preventDefault();
+  stage.handleWheel(e.deltaY);
+}
 const onPointerDown = onPointer('handlePointerDown');
 const onPointerUp = onPointer('handlePointerUp');
 
@@ -156,7 +164,7 @@ onBeforeUnmount(() => {
       @pointermove="onPointerMove"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
-      @wheel.prevent="onPointerWheel"
+      @wheel="onWheel"
     ></canvas>
     <!-- 菜单层顶层加载门：全量美术预载完成前挡住一切（最高 z-index），完成才放行开始界面 -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />

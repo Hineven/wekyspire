@@ -515,12 +515,17 @@ export class BattleStage {
       const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
       if (entry.faceSig !== sig) {
         entry.faceSig = sig;
+        // defId 变化 = 转化/进阶（如斩→裂石斩）：走专属金色演出（手牌内的转化路径，
+        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）
+        const defChanged = entry.prevDefId != null && entry.prevDefId !== card.defId;
         view.setCard(card);
+        if (defChanged) this._transformFx(id);
         // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
-        if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
+        else if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
           this._pulseCard(id, 0xffd34c);
         }
       }
+      entry.prevDefId = card.defId;
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
@@ -979,6 +984,9 @@ export class BattleStage {
     // 入手抽牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍；
     // 造牌入库（toZone 'deck'）则走 _addCardBeat：卡面生成 → 飞入牌库 → 计数随其后 sync 跳增
     if (type === EventNames.ANIM_CARD_DRAWN) {
+      // 因手牌上限没抽到牌（core 在载荷里分开记了 blockedByHandLimit 与 deckEmpty）：
+      // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（用户 2026-09-11 报）
+      if (payload?.blockedByHandLimit) this._handPressureHint();
       return this._pulsePile('deck', finish);
     }
     if (type === EventNames.ANIM_CARD_ADDED) {
@@ -1120,19 +1128,28 @@ export class BattleStage {
 
   // 转化闪变（宾语变化生效反馈主体）：卡面换绑 cardView + 金色迸发 + 尺寸脉冲。
   // held/deck 来源卡不经 _syncCardContents（只扫手牌），换脸只能由本节拍承担。
-  _transformBeat(payload, finish) {
-    const id = payload?.card?.uniqueID ?? null;
-    const view = id != null ? this._views.get(id) : null;
-    if (!view) return finish();
-    if (payload?.cardView) view.setCard(payload.cardView);
+  /** 卡牌转化/进阶的共用演出（金色粒子迸发 + 尺寸脉冲）。
+   *  两个入口：结算树的 ANIM_CARD_TRANSFORMED 节拍（_transformBeat，卡在展示/持有位），
+   *  以及手牌内被转化的对账路径（_syncCardContents 发现 defId 变化）。 */
+  _transformFx(id, onDone = null) {
+    const view = this._views.get(id);
+    if (!view) { onDone?.(); return; }
     const p = view.position;
     this.particles.spawn(p.x, p.y, { count: 22, color: 0xffd76a, speed: 12, ttl: 0.7, size: 1.6, z: p.z ?? 0 });
     this.particles.spawn(p.x, p.y, { count: 10, color: 0xfff3c0, speed: 18, ttl: 0.5, size: 1.1, z: p.z ?? 0 });
     const s0 = view.scale.x || 1;
     this.animator.animate(id, { scale: s0 * 1.25 }, {
       durationMs: 150,
-      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: finish }),
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: onDone ?? undefined }),
     });
+  }
+
+  _transformBeat(payload, finish) {
+    const id = payload?.card?.uniqueID ?? null;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) return finish();
+    if (payload?.cardView) view.setCard(payload.cardView);
+    this._transformFx(id, finish);
   }
 
   // 单位世界坐标（含偏移）→ UI 世界坐标：伤害/治疗读数文本走 uiScene 前景层
@@ -1355,6 +1372,19 @@ export class BattleStage {
   }
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
+  /** 手牌压力提示（抽不下 / 咏唱发动被挡）：整手牌红脉冲 + 骑士头顶文字。 */
+  _handPressureHint(text = '我掌控不了更多手牌了！') {
+    for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03 });
+    const proj = this._snapshot;
+    const unit = proj ? this._units.get(proj.player.uniqueID) : null;
+    if (!unit) return;
+    const p = this._unitToUI(unit, 0, 12);
+    this.particles.spawnText(p.x, p.y, text, {
+      fontSize: 30, color: '#ff8a80', fontWeight: 'bold',
+      vx: (Math.random() - 0.5) * 3, vy: 10, gravity: 0, drag: 1.1, ttl: 1.4, scalePop: 0.35, space: 'ui',
+    });
+  }
+
   _pulseCard(id, color) {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
   }
@@ -1471,6 +1501,14 @@ export class BattleStage {
     this.uiScene.updateMatrixWorld(true);
     const hit = this.picker.pick(x, y);
     const proj = this._snapshot;
+    // 点了「因手牌压力发动不了」的咏唱卡：灰卡本身没说原因，这里补一次明确反馈
+    if (hit.kind === 'card') {
+      const clicked = proj?.hand.find(c => c.uniqueID === hit.id);
+      if (clicked?.blocked === 'chantPressure') {
+        this._handPressureHint('手牌太多，咏唱发动不了！');
+        return;
+      }
+    }
     // 换卡模式下点手牌是"点按换出"，不进入拖拽
     if (hit.kind === 'card' && !proj?.pendingInput && !this._swapMode) {
       // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后

@@ -277,6 +277,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       }
       battleStage?.dispose(); // 战斗舞台随退场释放（此前引用滞留至下一场被静默覆盖）
       battleStage = null;
+      // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
+      // 于是爬塔动画播完才看到战后的血量/金币。这里在黑幕中就先把状态推给地图舞台
+      // （只刷状态栏/资源行，不动面板、不触发存档与预载）。
+      syncMapStatus();
     };
     (async () => {
       if (stageManager) await cutscene.sceneTransition(doSwap);

@@ -29,6 +29,14 @@ export class DealDamageInstruction extends BattleInstruction {
 
   execute(ctx) {
     const target = this.target;
+    // 过期目标守卫（2026-09-11 用户报）：目标缺失或已死 → **静默落空**。
+    // 起因：多段伤害是一次性捕获目标后连打 N 段（各 content 自己写 for 循环），
+    // 目标在中间段被击杀时，剩余段仍会结算并播放"虚空伤害"演出，且重复触发死亡。
+    // 与「过期引用无害」的既有哲学一致（弃牌/换牌等指令的同款前置守卫）。
+    if (!target || target.isDead()) {
+      this.result = { damage: 0, defenseBlocked: 0, shieldAbsorbed: 0, dealt: 0, targetDead: true, skipped: true };
+      return true;
+    }
     const raw = this.fixed ? this.amount : this.payload.damage;
     const pierce = this.fixed ? false : this.payload.pierce;
     const defense = (pierce || this.fixed) ? 0 : target.getStat('defense');
